@@ -1,4 +1,4 @@
-"""Command-line interface for the Phase 0 project scaffold."""
+"""Command-line interface for the Phase 1 project scaffold."""
 
 from typing import Annotated
 
@@ -7,6 +7,9 @@ from rich.console import Console
 from rich.markup import escape
 
 from gqlsleuth import __version__
+from gqlsleuth.application.scan_configuration import map_scan_inputs
+from gqlsleuth.domain.exceptions import GQLSleuthError
+from gqlsleuth.domain.models import ScanMode
 
 app = typer.Typer(
     name="gqlsleuth",
@@ -18,6 +21,7 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+error_console = Console(stderr=True)
 
 
 @app.command()
@@ -35,12 +39,33 @@ def scan(
             help="Target URL reserved for a future scanning phase.",
         ),
     ],
+    mode: Annotated[
+        ScanMode,
+        typer.Option(
+            "--mode",
+            help="Configuration mode. ACTIVE performs no active behavior in Phase 1.",
+            case_sensitive=False,
+        ),
+    ] = ScanMode.SAFE,
 ) -> None:
-    """A Phase 0 placeholder that performs no scanning or network activity."""
+    """Validate Phase 1 inputs without performing scanning or network activity."""
+    try:
+        validated_target, settings = map_scan_inputs(
+            target,
+            mode=mode,
+        )
+    except GQLSleuthError as error:
+        error_console.print(f"[bold red]Error:[/bold red] {escape(str(error))}")
+        raise typer.Exit(code=2) from None
+
+    console.print("[bold yellow]Phase 0 placeholder:[/bold yellow] retained during Phase 1.")
     console.print(
-        "[bold yellow]Phase 0 placeholder:[/bold yellow] "
-        f"no scan or network request was performed for [cyan]{escape(target)}[/cyan]."
+        "no scan or network request was performed for "
+        f"[cyan]{escape(validated_target.original_url)}[/cyan]."
     )
+    console.print(f"Effective mode: [cyan]{settings.mode.value}[/cyan].")
+    if settings.mode is ScanMode.ACTIVE:
+        console.print("ACTIVE mode is configuration-only; no active behavior was performed.")
 
 
 def main() -> None:

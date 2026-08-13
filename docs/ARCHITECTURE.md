@@ -169,15 +169,20 @@ GQLSleuth accepts either:
 
 **Direct GraphQL endpoint** — e.g. `https://example.com/graphql`. When a direct endpoint is provided, the tool tests it directly before attempting additional discovery.
 
-The tool must normalize input URLs and preserve:
+Phase 1 parses and validates input URLs while preserving:
 
+- Original URL.
 - Scheme.
 - Host.
 - Port.
-- Base path.
-- Query parameters when relevant.
+- Path.
+- Query.
 
 Only HTTP and HTTPS URLs are initially supported.
+
+URL normalization is a separate Phase 3 responsibility. Phase 1 does not normalize trailing
+slashes, remove default ports, canonicalize hosts, resolve DNS, check reachability, generate
+endpoint candidates or deduplicate URLs.
 
 ## 8. High-level workflow
 
@@ -565,9 +570,12 @@ Example evidence types:
 - Mutation execution.
 - HTTP error.
 - Parser error.
-- AI observation.
 
 Evidence should be represented using typed Pydantic models.
+
+AI-generated interpretation is not evidence and must remain separately labeled. Observation
+and Finding models should be introduced only when deterministic analysis requires them; an
+AI-generated interpretation model belongs to the AI phase.
 
 ## 20. Findings and observations
 
@@ -643,7 +651,7 @@ AI output must be clearly labeled as model-generated interpretation. The determi
 
 ## 23. Configuration
 
-Configuration should be supported through:
+The long-term configuration design should support:
 
 - CLI arguments.
 - Environment variables.
@@ -662,7 +670,15 @@ Configuration file
 Default values
 ```
 
-Configuration models should use Pydantic and `pydantic-settings`.
+Configuration models should use Pydantic and `pydantic-settings` when multiple configuration
+sources are introduced.
+
+The initial Phase 1 implementation supports only the explicit `--mode` CLI option and the
+built-in safe default. Environment variables and configuration files are deferred until
+configuration needs grow; no configuration file is discovered or loaded in Phase 1.
+
+`active` is accepted as a configuration value during Phase 1, but it does not enable active
+behavior. The `--authorized` gate and active execution remain Phase 10 responsibilities.
 
 Possible settings include:
 
@@ -1045,8 +1061,12 @@ Deliverables:
 - Evidence model.
 - Result models.
 - Base exceptions.
-- Header redaction utilities.
-- Configuration tests.
+- Configuration and model tests.
+
+Phase 1 accepts SAFE and ACTIVE configuration values, but it performs no scanning, network
+requests, authorization gating or active behavior. SAFE remains the default. The initial
+implementation accepts configuration only from the CLI and built-in defaults; environment
+variables and configuration files are deferred until configuration needs grow.
 
 ### Phase 2 — HTTP layer
 
@@ -1060,6 +1080,8 @@ Deliverables:
 - Proxy settings.
 - Header support.
 - Response size limits.
+- Sensitive-header, cookie and credential redaction utilities.
+- Redaction tests.
 - Mocked tests.
 
 ### Phase 3 — Endpoint discovery
@@ -1141,7 +1163,7 @@ Deliverables:
 - Read-only operation validation.
 - Safe query execution.
 - Request and response evidence.
-- Redaction.
+- Redaction enforcement for execution evidence.
 - Execution limits.
 - CLI integration.
 - Tests.

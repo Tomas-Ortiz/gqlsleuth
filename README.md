@@ -12,13 +12,13 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 0 — Project scaffold**. It provides the Python
-package, Typer command structure, Rich terminal output, development tooling, tests, and CI
-foundation.
+The repository is currently at **Phase 1 — Configuration and core models**. It provides the
+Phase 0 project scaffold plus validated application settings, URL target parsing, typed domain
+models, project-specific exceptions, and CLI-to-configuration mapping.
 
 Scanning and network behavior are not implemented yet. The `scan` command is a placeholder
 that exits successfully after clearly reporting that it performed no scan and made no
-network request.
+network request. ACTIVE mode is configuration-only and does not enable active behavior.
 
 ## Requirements
 
@@ -47,11 +47,30 @@ Display the installed version:
 uv run gqlsleuth version
 ```
 
-Run the Phase 0 placeholder command:
+Run the retained placeholder command with the safe default mode:
 
 ```bash
 uv run gqlsleuth scan https://example.com
 ```
+
+Choose a configuration-only mode explicitly:
+
+```bash
+uv run gqlsleuth scan https://example.com --mode safe
+uv run gqlsleuth scan https://example.com --mode active
+```
+
+ACTIVE does not perform active scanning during Phase 1. The command still makes zero network
+requests.
+
+## Configuration
+
+Phase 1 has one application setting, `mode`, with supported values `safe` and `active`. SAFE
+is the built-in default. The initial implementation accepts configuration only through the
+explicit `--mode` CLI option and this safe default.
+
+Environment variables and configuration files are not supported yet. They remain deferred
+until the project has enough settings to justify multiple configuration sources.
 
 The module entry point exposes the same CLI:
 
