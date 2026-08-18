@@ -1,4 +1,4 @@
-"""Project-specific exceptions available during Phase 1."""
+"""Project-specific exceptions available through Phase 2."""
 
 
 class GQLSleuthError(Exception):
@@ -15,3 +15,27 @@ class InvalidUrlError(TargetError):
 
 class UnsupportedSchemeError(TargetError):
     """Raised when a target uses a scheme other than HTTP or HTTPS."""
+
+
+class HttpError(GQLSleuthError):
+    """Base class for normalized HTTP-layer failures."""
+
+
+class HttpTimeoutError(HttpError):
+    """Raised when an HTTP operation exceeds its configured timeout."""
+
+
+class HttpProxyError(HttpError):
+    """Raised when HTTPX reports a proxy-specific failure."""
+
+
+class HttpRedirectError(HttpError):
+    """Raised when HTTP redirect handling cannot complete."""
+
+
+class ResponseTooLargeError(HttpError):
+    """Raised when a streamed response exceeds the configured body limit."""
+
+
+class HttpTransportError(HttpError):
+    """Raised for other HTTPX request or transport failures."""

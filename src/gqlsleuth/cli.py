@@ -1,4 +1,4 @@
-"""Command-line interface for the Phase 1 project scaffold."""
+"""Command-line interface preserved through the Phase 2 HTTP layer."""
 
 from typing import Annotated
 
@@ -43,12 +43,12 @@ def scan(
         ScanMode,
         typer.Option(
             "--mode",
-            help="Configuration mode. ACTIVE performs no active behavior in Phase 1.",
+            help="Configuration mode. ACTIVE performs no active behavior in Phase 2.",
             case_sensitive=False,
         ),
     ] = ScanMode.SAFE,
 ) -> None:
-    """Validate Phase 1 inputs without performing scanning or network activity."""
+    """Validate inputs without performing scanning or network activity."""
     try:
         validated_target, settings = map_scan_inputs(
             target,
@@ -58,7 +58,7 @@ def scan(
         error_console.print(f"[bold red]Error:[/bold red] {escape(str(error))}")
         raise typer.Exit(code=2) from None
 
-    console.print("[bold yellow]Phase 0 placeholder:[/bold yellow] retained during Phase 1.")
+    console.print("[bold yellow]Phase 0 placeholder:[/bold yellow] retained through Phase 2.")
     console.print(
         "no scan or network request was performed for "
         f"[cyan]{escape(validated_target.original_url)}[/cyan]."

@@ -12,13 +12,15 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 1 — Configuration and core models**. It provides the
-Phase 0 project scaffold plus validated application settings, URL target parsing, typed domain
-models, project-specific exceptions, and CLI-to-configuration mapping.
+The repository is currently at **Phase 2 — HTTP layer**. It provides the Phase 0 and Phase 1
+foundation plus a centralized synchronous HTTPX client, GQLSleuth-owned request and response
+models, conservative transport settings, response-size enforcement, and normalized HTTP
+errors.
 
-Scanning and network behavior are not implemented yet. The `scan` command is a placeholder
-that exits successfully after clearly reporting that it performed no scan and made no
-network request. ACTIVE mode is configuration-only and does not enable active behavior.
+The internal HTTP layer is ready for use by future phases, but endpoint discovery and scanning
+network behavior are not implemented yet. The `scan` command remains a placeholder that exits
+successfully after clearly reporting that it performed no scan and made no network request.
+ACTIVE mode remains configuration-only and does not enable active behavior.
 
 ## Requirements
 
@@ -60,7 +62,7 @@ uv run gqlsleuth scan https://example.com --mode safe
 uv run gqlsleuth scan https://example.com --mode active
 ```
 
-ACTIVE does not perform active scanning during Phase 1. The command still makes zero network
+ACTIVE does not perform active scanning during Phase 2. The command still makes zero network
 requests.
 
 ## Configuration

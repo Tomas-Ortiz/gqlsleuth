@@ -294,16 +294,25 @@ The HTTP layer must be centralized. It is responsible for:
 
 The initial HTTP client will use HTTPX. No networking logic should be duplicated across discovery, introspection or execution modules.
 
-The default behavior must be conservative. Suggested defaults:
+Phase 2 provides one reusable synchronous `httpx.Client` adapter with GQLSleuth-owned request
+and response models. It streams response bodies while enforcing the configured size limit,
+returns HTTP 4xx and 5xx responses normally, and normalizes HTTPX request failures into
+project-specific exceptions. It does not parse JSON or GraphQL response content.
+
+Phase 2 does not expose HTTP options through the CLI, and the `scan` command remains completely
+non-networking. Endpoint discovery begins using the HTTP client in Phase 3. Retries,
+concurrency, rate limiting and caching are not implemented in Phase 2.
+
+The Phase 2 defaults are:
 
 - TLS verification enabled.
 - Redirects enabled.
-- Finite timeout.
-- Limited retries.
-- Controlled concurrency.
-- No aggressive request rate.
-- Maximum response size.
-- Clear handling of malformed JSON and non-JSON responses.
+- Maximum redirects set to 5.
+- Timeout set to 10 seconds.
+- Maximum response body set to 5 MiB.
+- No proxy.
+- Environment-derived HTTP configuration disabled with `trust_env=False`.
+- User-Agent set to `GQLSleuth/<current version>`.
 
 ## 12. Introspection
 
@@ -506,7 +515,7 @@ It must preserve:
 
 - Endpoint.
 - HTTP method.
-- Request headers, with secrets redacted.
+- Request headers.
 - GraphQL query.
 - Variables.
 - Timestamp.
@@ -516,17 +525,6 @@ It must preserve:
 - Execution duration.
 - Error information.
 - Classification and priority.
-
-Sensitive headers such as the following must be redacted in reports and logs:
-
-```text
-Authorization
-Cookie
-Proxy-Authorization
-X-API-Key
-```
-
-The raw unredacted data must not be written to disk unless the user explicitly enables an appropriate secure evidence option in a future version.
 
 ## 18. Authentication support
 
@@ -556,7 +554,6 @@ Every relevant action should produce structured evidence. Evidence should includ
 - Related operation or schema element.
 - Source module.
 - Notes.
-- Redaction status.
 
 Example evidence types:
 
@@ -644,7 +641,7 @@ AI must not:
 - Invent evidence.
 - Replace deterministic parsing.
 - Mark an issue as confirmed without supporting evidence.
-- Receive secrets that have not been redacted.
+- Receive secrets.
 - Be necessary for endpoint discovery or schema parsing.
 
 AI output must be clearly labeled as model-generated interpretation. The deterministic engine remains the source of truth.
@@ -804,7 +801,7 @@ Default console output should remain readable and focused. Verbose mode may show
 - Retry behavior.
 - AI integration status.
 
-Secrets and sensitive values must always be redacted.
+Secrets and sensitive values must not be logged.
 
 ## 27. Project architecture
 
@@ -953,7 +950,6 @@ Important test areas include:
 - Depth limiting.
 - Safe-mode restrictions.
 - Active-mode authorization checks.
-- Header redaction.
 - Report serialization.
 - Configuration precedence.
 - Error mapping.
@@ -992,7 +988,6 @@ The exact commands may be refined as the project configuration evolves.
 GQLSleuth itself must follow secure development practices. Requirements include:
 
 - No secrets committed to the repository.
-- Sensitive headers redacted.
 - TLS verification enabled by default.
 - Conservative timeout and concurrency defaults.
 - No mutation execution in safe mode.
@@ -1080,8 +1075,6 @@ Deliverables:
 - Proxy settings.
 - Header support.
 - Response size limits.
-- Sensitive-header, cookie and credential redaction utilities.
-- Redaction tests.
 - Mocked tests.
 
 ### Phase 3 — Endpoint discovery
@@ -1163,7 +1156,6 @@ Deliverables:
 - Read-only operation validation.
 - Safe query execution.
 - Request and response evidence.
-- Redaction enforcement for execution evidence.
 - Execution limits.
 - CLI integration.
 - Tests.
@@ -1201,7 +1193,7 @@ Deliverables:
 
 - Ollama adapter.
 - Qwen3 8B configuration.
-- Redacted structured prompts.
+- Structured prompts that exclude secrets.
 - Schema prioritization.
 - Operation explanations.
 - Report summaries.

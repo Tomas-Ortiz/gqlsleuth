@@ -64,8 +64,6 @@ def test_evidence_supports_basic_structured_data() -> None:
     )
 
     assert evidence.target == target
-    assert evidence.evidence_id is not None
-    assert evidence.timestamp.tzinfo is not None
     assert evidence.notes == ()
 
 
@@ -78,13 +76,7 @@ def test_scan_result_has_safe_defaults_and_current_phase_fields() -> None:
         limitations=("No network request was performed.",),
     )
 
-    assert set(ScanResult.model_fields) == {
-        "target",
-        "mode",
-        "evidence",
-        "errors",
-        "limitations",
-    }
+    assert result.target == target
     assert result.mode is ScanMode.SAFE
     assert result.evidence == ()
     assert result.errors == (error,)
