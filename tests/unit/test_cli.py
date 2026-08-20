@@ -1,15 +1,52 @@
-"""Tests for the Phase 0 CLI behavior and Phase 1 input mapping."""
+"""Tests for stable CLI behavior and Phase 3 discovery delegation."""
 
-from typing import Never
-
-import httpx
 import pytest
 from typer.testing import CliRunner
 
+import gqlsleuth.cli as cli_module
 from gqlsleuth import __version__
-from gqlsleuth.cli import app
+from gqlsleuth.application.endpoint_discovery import (
+    EndpointDiscoveryResult,
+    EndpointProbeResult,
+)
+from gqlsleuth.domain.models import ScanMode, Target
+from gqlsleuth.infrastructure.http import HttpResponse
 
 runner = CliRunner()
+app = cli_module.app
+
+
+@pytest.fixture(autouse=True)
+def discovery_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
+    """Keep CLI tests offline while recording application-service delegation."""
+    calls: list[tuple[str, ScanMode]] = []
+
+    def fake_discovery(
+        target_url: str,
+        *,
+        mode: ScanMode = ScanMode.SAFE,
+    ) -> EndpointDiscoveryResult:
+        target = Target.parse(target_url)
+        calls.append((target_url, mode))
+        candidate_url = f"{target.scheme}://{target.host}/graphql"
+        response = HttpResponse(
+            request_url=candidate_url,
+            final_url=candidate_url,
+            status_code=404,
+            headers={},
+            body=b"",
+            duration_seconds=0,
+            redirect_count=0,
+        )
+        return EndpointDiscoveryResult(
+            target=target,
+            mode=mode,
+            probes=(EndpointProbeResult(candidate_url=candidate_url, response=response),),
+            evidence=(),
+        )
+
+    monkeypatch.setattr(cli_module, "run_endpoint_discovery", fake_discovery)
+    return calls
 
 
 def test_root_help_describes_authorized_use() -> None:
@@ -29,14 +66,16 @@ def test_version_command_reports_package_version() -> None:
     assert result.stdout.strip() == f"GQLSleuth {__version__}"
 
 
-def test_scan_command_is_a_successful_non_networking_placeholder() -> None:
+def test_scan_command_runs_safe_endpoint_discovery() -> None:
     target = "https://example.com"
 
     result = runner.invoke(app, ["scan", target])
 
     assert result.exit_code == 0
-    assert "Phase 0 placeholder" in result.stdout
-    assert "no scan or network request was performed" in result.stdout
+    assert "Endpoint candidate discovery completed" in result.stdout
+    assert "HTTP 404" in result.stdout
+    assert "Probed 1 endpoint candidate(s)" in result.stdout
+    assert "No GraphQL confirmation was performed" in result.stdout
     assert target in result.stdout
     assert "Effective mode: safe" in result.stdout
 
@@ -48,7 +87,7 @@ def test_scan_command_requires_a_target() -> None:
     assert "Missing argument 'TARGET'" in result.stderr
 
 
-def test_scan_help_exposes_phase_one_configuration_options() -> None:
+def test_scan_help_exposes_current_discovery_options() -> None:
     result = runner.invoke(app, ["scan", "--help"])
 
     assert result.exit_code == 0
@@ -63,16 +102,16 @@ def test_scan_accepts_explicit_safe_mode() -> None:
 
     assert result.exit_code == 0
     assert "Effective mode: safe" in result.stdout
-    assert "no scan or network request was performed" in result.stdout
+    assert "No GraphQL confirmation was performed" in result.stdout
 
 
-def test_scan_accepts_active_as_configuration_only() -> None:
+def test_scan_accepts_active_with_the_same_safe_discovery_behavior() -> None:
     result = runner.invoke(app, ["scan", "https://example.com", "--mode", "active"])
 
     assert result.exit_code == 0
     assert "Effective mode: active" in result.stdout
-    assert "configuration-only" in result.stdout
-    assert "no scan or network request was performed" in result.stdout
+    assert "same safe discovery behavior" in result.stdout
+    assert "No GraphQL confirmation was performed" in result.stdout
 
 
 def test_scan_reports_invalid_target_without_a_traceback() -> None:
@@ -83,13 +122,10 @@ def test_scan_reports_invalid_target_without_a_traceback() -> None:
     assert "Traceback" not in result.stderr
 
 
-def test_scan_command_does_not_construct_an_http_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    def unexpected_http_client(*args: object, **kwargs: object) -> Never:
-        raise AssertionError("scan must remain non-networking during Phase 2")
-
-    monkeypatch.setattr(httpx, "Client", unexpected_http_client)
-
+def test_scan_delegates_target_and_mode_to_discovery(
+    discovery_calls: list[tuple[str, ScanMode]],
+) -> None:
     result = runner.invoke(app, ["scan", "https://example.com"])
 
     assert result.exit_code == 0
-    assert "no scan or network request was performed" in result.stdout
+    assert discovery_calls == [("https://example.com", ScanMode.SAFE)]

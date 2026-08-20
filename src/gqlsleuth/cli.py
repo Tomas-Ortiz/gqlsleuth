@@ -1,4 +1,4 @@
-"""Command-line interface preserved through the Phase 2 HTTP layer."""
+"""Command-line interface for safe endpoint candidate discovery."""
 
 from typing import Annotated
 
@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from gqlsleuth import __version__
-from gqlsleuth.application.scan_configuration import map_scan_inputs
+from gqlsleuth.application.endpoint_discovery import run_endpoint_discovery
 from gqlsleuth.domain.exceptions import GQLSleuthError
 from gqlsleuth.domain.models import ScanMode
 
@@ -36,21 +36,21 @@ def scan(
         str,
         typer.Argument(
             metavar="TARGET",
-            help="Target URL reserved for a future scanning phase.",
+            help="HTTP(S) target for safe endpoint candidate discovery.",
         ),
     ],
     mode: Annotated[
         ScanMode,
         typer.Option(
             "--mode",
-            help="Configuration mode. ACTIVE performs no active behavior in Phase 2.",
+            help="Discovery mode. ACTIVE performs the same safe GET probes in Phase 3.",
             case_sensitive=False,
         ),
     ] = ScanMode.SAFE,
 ) -> None:
-    """Validate inputs without performing scanning or network activity."""
+    """Discover possible GraphQL endpoint locations using safe GET requests."""
     try:
-        validated_target, settings = map_scan_inputs(
+        result = run_endpoint_discovery(
             target,
             mode=mode,
         )
@@ -58,14 +58,29 @@ def scan(
         error_console.print(f"[bold red]Error:[/bold red] {escape(str(error))}")
         raise typer.Exit(code=2) from None
 
-    console.print("[bold yellow]Phase 0 placeholder:[/bold yellow] retained through Phase 2.")
     console.print(
-        "no scan or network request was performed for "
-        f"[cyan]{escape(validated_target.original_url)}[/cyan]."
+        "Endpoint candidate discovery completed for "
+        f"[cyan]{escape(result.target.original_url)}[/cyan]."
     )
-    console.print(f"Effective mode: [cyan]{settings.mode.value}[/cyan].")
-    if settings.mode is ScanMode.ACTIVE:
-        console.print("ACTIVE mode is configuration-only; no active behavior was performed.")
+    for probe in result.probes:
+        if probe.response is not None:
+            console.print(
+                f"[cyan]{escape(probe.candidate_url)}[/cyan] -> "
+                f"HTTP [bold]{probe.response.status_code}[/bold]"
+            )
+        else:
+            error_type = escape(probe.error_type or "HttpError")
+            console.print(
+                f"[cyan]{escape(probe.candidate_url)}[/cyan] -> "
+                f"[yellow]transport failure ({error_type})[/yellow]"
+            )
+
+    console.print(
+        f"Probed {len(result.probes)} endpoint candidate(s). No GraphQL confirmation was performed."
+    )
+    console.print(f"Effective mode: [cyan]{result.mode.value}[/cyan].")
+    if result.mode is ScanMode.ACTIVE:
+        console.print("ACTIVE mode uses the same safe discovery behavior in Phase 3.")
 
 
 def main() -> None:

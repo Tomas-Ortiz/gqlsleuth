@@ -12,15 +12,14 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 2 — HTTP layer**. It provides the Phase 0 and Phase 1
-foundation plus a centralized synchronous HTTPX client, GQLSleuth-owned request and response
-models, conservative transport settings, response-size enforcement, and normalized HTTP
-errors.
+The repository is currently at **Phase 3 — endpoint discovery**. It provides the Phase 0 and
+Phase 1 foundation, the centralized Phase 2 HTTP layer, and deterministic discovery of endpoint
+candidates using a small bundled path list.
 
-The internal HTTP layer is ready for use by future phases, but endpoint discovery and scanning
-network behavior are not implemented yet. The `scan` command remains a placeholder that exits
-successfully after clearly reporting that it performed no scan and made no network request.
-ACTIVE mode remains configuration-only and does not enable active behavior.
+The `scan` command now makes conservative HTTP GET requests to the supplied endpoint path, when
+present, and common endpoint paths on the same origin. It records HTTP responses and individual
+transport failures as endpoint-candidate evidence. It does not submit GraphQL payloads or
+determine whether any candidate is actually GraphQL; confirmation remains a future phase.
 
 ## Requirements
 
@@ -49,21 +48,21 @@ Display the installed version:
 uv run gqlsleuth version
 ```
 
-Run the retained placeholder command with the safe default mode:
+Run safe endpoint candidate discovery with the default mode:
 
 ```bash
 uv run gqlsleuth scan https://example.com
 ```
 
-Choose a configuration-only mode explicitly:
+Choose a mode explicitly:
 
 ```bash
 uv run gqlsleuth scan https://example.com --mode safe
 uv run gqlsleuth scan https://example.com --mode active
 ```
 
-ACTIVE does not perform active scanning during Phase 2. The command still makes zero network
-requests.
+ACTIVE performs the same safe GET-only endpoint discovery as SAFE during Phase 3. It does not
+enable active-only behavior.
 
 ## Configuration
 

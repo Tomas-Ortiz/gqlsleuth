@@ -224,6 +224,9 @@ Each stage must be independently testable and should not depend directly on CLI 
 
 When the user supplies only an application base URL, GQLSleuth attempts to identify possible GraphQL endpoints.
 
+Phase 3 identifies endpoint candidates only. It does not submit GraphQL payloads or determine
+whether a response is GraphQL; that distinction belongs to Phase 4.
+
 The first version uses a bundled wordlist. Initial candidate paths include:
 
 ```text
@@ -238,6 +241,18 @@ The first version uses a bundled wordlist. Initial candidate paths include:
 /query
 /api/query
 ```
+
+Discovery normalizes scheme and host casing, removes default HTTP and HTTPS ports, preserves
+non-default ports, and removes trailing path slashes for stable deduplication. It does not
+resolve DNS or otherwise check reachability during normalization. If the supplied target has a
+meaningful path, that normalized URL is probed first. The bundled paths are then generated from
+the same origin without recursively combining them with the supplied path.
+
+Candidates are deduplicated in their stable generation order and probed with safe HTTP GET
+requests through the centralized HTTP client. All HTTP status responses are retained. A
+normalized transport failure is recorded for its candidate without preventing later candidates
+from being probed. Each outcome creates `ENDPOINT_CANDIDATE` evidence; no GraphQL confirmation,
+observation, finding, or confidence score is produced in this phase.
 
 Future versions may support:
 
@@ -299,9 +314,9 @@ and response models. It streams response bodies while enforcing the configured s
 returns HTTP 4xx and 5xx responses normally, and normalizes HTTPX request failures into
 project-specific exceptions. It does not parse JSON or GraphQL response content.
 
-Phase 2 does not expose HTTP options through the CLI, and the `scan` command remains completely
-non-networking. Endpoint discovery begins using the HTTP client in Phase 3. Retries,
-concurrency, rate limiting and caching are not implemented in Phase 2.
+Phase 2 does not expose HTTP options through the CLI. Beginning in Phase 3, the `scan` command
+uses this client for safe GET-only endpoint candidate probes. Retries, concurrency, rate
+limiting and caching remain unimplemented.
 
 The Phase 2 defaults are:
 
@@ -1088,6 +1103,9 @@ Deliverables:
 - Deduplication.
 - Discovery evidence.
 - Unit and integration tests.
+
+The initial implementation probes candidates sequentially with GET, retains all HTTP status
+responses, isolates transport failures per candidate, and stops before GraphQL confirmation.
 
 ### Phase 4 — GraphQL detection
 

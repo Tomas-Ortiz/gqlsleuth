@@ -1,4 +1,4 @@
-"""Typed models for Phase 1 configuration-independent domain data."""
+"""Typed configuration-independent domain data available through Phase 3."""
 
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -12,7 +12,7 @@ from gqlsleuth.domain.exceptions import InvalidUrlError, UnsupportedSchemeError
 
 
 class ScanMode(StrEnum):
-    """Configured scan mode; Phase 1 does not execute either mode."""
+    """Selected scan mode; ACTIVE has no distinct behavior through Phase 3."""
 
     SAFE = "safe"
     ACTIVE = "active"
@@ -76,6 +76,7 @@ class Evidence(BaseModel):
     evidence_id: UUID = Field(default_factory=uuid4)
     evidence_type: EvidenceType
     target: Target
+    endpoint: str | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     summary: str
     source: str
