@@ -1,4 +1,4 @@
-"""Tests for stable CLI behavior and Phase 3 discovery delegation."""
+"""Tests for stable CLI behavior and Phase 5 workflow delegation."""
 
 import pytest
 from typer.testing import CliRunner
@@ -9,7 +9,16 @@ from gqlsleuth.application.endpoint_discovery import (
     EndpointDiscoveryResult,
     EndpointProbeResult,
 )
-from gqlsleuth.domain.models import ScanMode, Target
+from gqlsleuth.application.graphql_detection import (
+    CandidateDetectionResult,
+    GraphQLDetectionResult,
+)
+from gqlsleuth.application.introspection import (
+    EndpointIntrospectionResult,
+    IntrospectionScanResult,
+)
+from gqlsleuth.domain.models import ConfidenceLevel, ScanMode, Target
+from gqlsleuth.graphql.introspection import IntrospectionStatus
 from gqlsleuth.infrastructure.http import HttpResponse
 
 runner = CliRunner()
@@ -17,15 +26,15 @@ app = cli_module.app
 
 
 @pytest.fixture(autouse=True)
-def discovery_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
+def scan_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
     """Keep CLI tests offline while recording application-service delegation."""
     calls: list[tuple[str, ScanMode]] = []
 
-    def fake_discovery(
+    def fake_scan(
         target_url: str,
         *,
         mode: ScanMode = ScanMode.SAFE,
-    ) -> EndpointDiscoveryResult:
+    ) -> IntrospectionScanResult:
         target = Target.parse(target_url)
         calls.append((target_url, mode))
         candidate_url = f"{target.scheme}://{target.host}/graphql"
@@ -38,14 +47,47 @@ def discovery_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode
             duration_seconds=0,
             redirect_count=0,
         )
-        return EndpointDiscoveryResult(
+        discovery = EndpointDiscoveryResult(
             target=target,
             mode=mode,
             probes=(EndpointProbeResult(candidate_url=candidate_url, response=response),),
             evidence=(),
         )
+        detection = CandidateDetectionResult(
+            candidate_url=candidate_url,
+            get_signals=(),
+            post_probe_required=True,
+            post_response=response,
+            post_signals=(),
+            post_error_type=None,
+            post_error_message=None,
+            confidence=ConfidenceLevel.CONFIRMED,
+            reason="Valid data.__typename string.",
+        )
+        detection_result = GraphQLDetectionResult(
+            discovery=discovery,
+            detections=(detection,),
+            confirmation_evidence=(),
+        )
+        introspection = EndpointIntrospectionResult(
+            endpoint=candidate_url,
+            status=IntrospectionStatus.ENABLED,
+            minimal_response=response,
+            minimal_error_type=None,
+            minimal_error_message=None,
+            full_retrieval_attempted=True,
+            full_response=response,
+            full_error_type=None,
+            full_error_message=None,
+            reason="Full introspection response was retrieved.",
+        )
+        return IntrospectionScanResult(
+            detection=detection_result,
+            introspections=(introspection,),
+            introspection_evidence=(),
+        )
 
-    monkeypatch.setattr(cli_module, "run_endpoint_discovery", fake_discovery)
+    monkeypatch.setattr(cli_module, "run_introspection_scan", fake_scan)
     return calls
 
 
@@ -66,18 +108,20 @@ def test_version_command_reports_package_version() -> None:
     assert result.stdout.strip() == f"GQLSleuth {__version__}"
 
 
-def test_scan_command_runs_safe_endpoint_discovery() -> None:
+def test_scan_command_runs_safe_introspection_workflow() -> None:
     target = "https://example.com"
 
     result = runner.invoke(app, ["scan", target])
+    output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
-    assert "Endpoint candidate discovery completed" in result.stdout
-    assert "HTTP 404" in result.stdout
-    assert "Probed 1 endpoint candidate(s)" in result.stdout
-    assert "No GraphQL confirmation was performed" in result.stdout
-    assert target in result.stdout
-    assert "Effective mode: safe" in result.stdout
+    assert "GraphQL discovery and introspection completed" in output
+    assert "GraphQL: CONFIRMED" in output
+    assert "Introspection: ENABLED" in output
+    assert "tested introspection on 1 endpoint(s)" in output
+    assert "not vulnerability confirmation" in output.lower()
+    assert target in output
+    assert "Effective mode: safe" in output
 
 
 def test_scan_command_requires_a_target() -> None:
@@ -87,7 +131,7 @@ def test_scan_command_requires_a_target() -> None:
     assert "Missing argument 'TARGET'" in result.stderr
 
 
-def test_scan_help_exposes_current_discovery_options() -> None:
+def test_scan_help_exposes_current_scan_options() -> None:
     result = runner.invoke(app, ["scan", "--help"])
 
     assert result.exit_code == 0
@@ -99,19 +143,21 @@ def test_scan_help_exposes_current_discovery_options() -> None:
 
 def test_scan_accepts_explicit_safe_mode() -> None:
     result = runner.invoke(app, ["scan", "https://example.com", "--mode", "safe"])
+    output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
-    assert "Effective mode: safe" in result.stdout
-    assert "No GraphQL confirmation was performed" in result.stdout
+    assert "Effective mode: safe" in output
+    assert "not vulnerability confirmation" in output
 
 
-def test_scan_accepts_active_with_the_same_safe_discovery_behavior() -> None:
+def test_scan_accepts_active_with_the_same_safe_introspection_behavior() -> None:
     result = runner.invoke(app, ["scan", "https://example.com", "--mode", "active"])
+    output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
-    assert "Effective mode: active" in result.stdout
-    assert "same safe discovery behavior" in result.stdout
-    assert "No GraphQL confirmation was performed" in result.stdout
+    assert "Effective mode: active" in output
+    assert "same safe introspection behavior" in output
+    assert "not vulnerability confirmation" in output
 
 
 def test_scan_reports_invalid_target_without_a_traceback() -> None:
@@ -122,10 +168,10 @@ def test_scan_reports_invalid_target_without_a_traceback() -> None:
     assert "Traceback" not in result.stderr
 
 
-def test_scan_delegates_target_and_mode_to_discovery(
-    discovery_calls: list[tuple[str, ScanMode]],
+def test_scan_delegates_target_and_mode_to_phase_five_workflow(
+    scan_calls: list[tuple[str, ScanMode]],
 ) -> None:
     result = runner.invoke(app, ["scan", "https://example.com"])
 
     assert result.exit_code == 0
-    assert discovery_calls == [("https://example.com", ScanMode.SAFE)]
+    assert scan_calls == [("https://example.com", ScanMode.SAFE)]

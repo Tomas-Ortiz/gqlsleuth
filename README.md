@@ -12,14 +12,16 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 3 — endpoint discovery**. It provides the Phase 0 and
-Phase 1 foundation, the centralized Phase 2 HTTP layer, and deterministic discovery of endpoint
-candidates using a small bundled path list.
+The repository is currently at **Phase 5 — introspection**. It provides the Phase 0 and Phase 1
+foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4 GraphQL
+behavior detection, and deterministic introspection availability testing.
 
-The `scan` command now makes conservative HTTP GET requests to the supplied endpoint path, when
-present, and common endpoint paths on the same origin. It records HTTP responses and individual
-transport failures as endpoint-candidate evidence. It does not submit GraphQL payloads or
-determine whether any candidate is actually GraphQL; confirmation remains a future phase.
+The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
+those responses for signal analysis. An inconclusive candidate receives at most one static POST
+probe containing `query { __typename }`. Confirmed and probable GraphQL endpoints then receive a
+minimal introspection probe. When introspection is enabled, one complete static introspection
+query retrieves and preserves the raw HTTP response for later phases. GQLSleuth does not parse
+that schema, extract operations, or claim that enabled introspection is a vulnerability.
 
 ## Requirements
 
@@ -48,7 +50,7 @@ Display the installed version:
 uv run gqlsleuth version
 ```
 
-Run safe endpoint candidate discovery with the default mode:
+Run safe endpoint discovery, GraphQL detection, and introspection with the default mode:
 
 ```bash
 uv run gqlsleuth scan https://example.com
@@ -61,8 +63,8 @@ uv run gqlsleuth scan https://example.com --mode safe
 uv run gqlsleuth scan https://example.com --mode active
 ```
 
-ACTIVE performs the same safe GET-only endpoint discovery as SAFE during Phase 3. It does not
-enable active-only behavior.
+ACTIVE performs the same safe discovery, detection, and read-only introspection behavior as SAFE
+during Phase 5. It does not enable active-only behavior.
 
 ## Configuration
 

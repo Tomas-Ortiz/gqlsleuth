@@ -290,6 +290,39 @@ The detector should assign a confidence level rather than relying on a single Bo
 
 The evidence used to reach the conclusion must be preserved.
 
+Phase 4 first analyzes each response already collected by Phase 3. HTTP status is never a
+GraphQL signal. Generic JSON, generic HTML, malformed bodies, and arbitrary uses of words such
+as `query`, `schema`, or `graphql` do not produce confidence by themselves.
+
+The initial deterministic signals are:
+
+- The exact GraphQL response media types `application/graphql-response+json`,
+  `application/graphql+json`, and `application/graphql`.
+- A JSON `data` object.
+- A valid GraphQL name string in `data.__typename`.
+- A non-empty `errors` array containing objects with string `message` values.
+- Clear parser or validation phrases inside that errors structure: `Must provide query string`,
+  `Syntax error`, `Cannot query field`, `Unknown operation named`, `Operation name is required`,
+  or the anonymous-operation exclusivity error.
+- The exact error extension codes `GRAPHQL_PARSE_FAILED` and `GRAPHQL_VALIDATION_FAILED`.
+
+The exact confidence rules are:
+
+- `CONFIRMED`: `data.__typename` contains a valid GraphQL name string.
+- `PROBABLE`: a GraphQL-shaped errors array contains one of the clear parser or validation
+  phrases or exact error codes above, or a GraphQL-specific media type accompanies a JSON
+  `data` object or GraphQL-shaped errors array.
+- `POSSIBLE`: only a GraphQL-specific media type, JSON `data` object, or GraphQL-shaped errors
+  array is present.
+- `NOT_DETECTED`: none of the signals above are present.
+
+`CONFIRMED` and `PROBABLE` GET results require no duplicate request. `POSSIBLE` and
+`NOT_DETECTED` GET results receive one fallback POST to the same candidate with the static JSON
+body `{"query": "query { __typename }"}`. The final confidence is the stronger explicit
+classification from the GET and POST analyses. A normalized POST failure is retained for that
+candidate and does not stop later candidates. No introspection fields or arbitrary operations
+are sent during Phase 4.
+
 ## 11. HTTP behavior
 
 The HTTP layer must be centralized. It is responsible for:
@@ -348,6 +381,46 @@ The tool must distinguish between:
 The raw introspection response should be optionally preserved as evidence.
 
 Failure to retrieve the schema must not terminate the entire scan abruptly. The tool should still report the endpoint and available evidence.
+
+Phase 5 attempts introspection only for Phase 4 `CONFIRMED` and `PROBABLE` candidates. Requests
+remain sequential, and a failure for one endpoint does not stop other eligible endpoints. The
+minimal availability query is:
+
+```graphql
+query IntrospectionAvailability {
+  __schema {
+    queryType {
+      name
+    }
+  }
+}
+```
+
+The initial deterministic status rules, applied in this order, are:
+
+- `AUTHENTICATION_REQUIRED`: HTTP 401.
+- `AUTHORIZATION_DENIED`: HTTP 403.
+- `ENABLED`: a JSON response contains a `data.__schema` object.
+- `DISABLED`: a GraphQL `errors` message clearly states that introspection or `__schema` access
+  is disabled, forbidden, or not allowed, including the common `Cannot query field "__schema"`
+  response.
+- `ENDPOINT_ERROR`: another GraphQL error prevents the operation, or another HTTP status of 400
+  or greater prevents introspection.
+- `INVALID_RESPONSE`: a non-error HTTP response is malformed or lacks both a `data.__schema`
+  object and an interpretable GraphQL error.
+- `NETWORK_FAILURE`: the centralized HTTP client raises a normalized transport failure.
+
+Only an `ENABLED` minimal result triggers one full static introspection query. That query asks
+for schema roots, types, fields, field arguments, interfaces, enum values, possible types, input
+fields, nested list/non-null type references, directives, descriptions, and deprecation metadata.
+The full response is classified using the same rules. A full-retrieval transport or response
+failure becomes the endpoint's final status while the successful minimal response remains
+preserved.
+
+Phase 5 retains the existing `HttpResponse` objects for both requests, including the raw full
+introspection JSON body. It does not convert that JSON into schema models, extract operations,
+or add `graphql-core`; those responsibilities begin in Phase 6. Each processed endpoint creates
+`INTROSPECTION_RESULT` evidence, and enabled introspection is not labeled as a vulnerability.
 
 ## 13. Schema parsing
 
@@ -1119,6 +1192,9 @@ Deliverables:
 - False-positive handling.
 - Tests using mocked responses.
 
+The initial implementation reuses Phase 3 GET responses, sends at most one static `__typename`
+POST for an inconclusive candidate, and preserves both discovery and confirmation evidence.
+
 ### Phase 5 — Introspection
 
 Deliverables:
@@ -1129,6 +1205,10 @@ Deliverables:
 - Authentication and denial handling.
 - Raw response evidence options.
 - Tests.
+
+The initial implementation introspects only confirmed or probable GraphQL endpoints, uses a
+minimal `__schema` availability query before full retrieval, preserves raw HTTP responses, and
+classifies denials, invalid responses, endpoint errors, and network failures independently.
 
 ### Phase 6 — Schema parsing
 

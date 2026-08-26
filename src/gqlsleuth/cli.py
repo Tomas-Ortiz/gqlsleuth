@@ -1,4 +1,4 @@
-"""Command-line interface for safe endpoint candidate discovery."""
+"""Command-line interface for safe GraphQL discovery and introspection."""
 
 from typing import Annotated
 
@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from gqlsleuth import __version__
-from gqlsleuth.application.endpoint_discovery import run_endpoint_discovery
+from gqlsleuth.application.introspection import run_introspection_scan
 from gqlsleuth.domain.exceptions import GQLSleuthError
 from gqlsleuth.domain.models import ScanMode
 
@@ -36,21 +36,21 @@ def scan(
         str,
         typer.Argument(
             metavar="TARGET",
-            help="HTTP(S) target for safe endpoint candidate discovery.",
+            help="HTTP(S) target for safe GraphQL discovery and introspection.",
         ),
     ],
     mode: Annotated[
         ScanMode,
         typer.Option(
             "--mode",
-            help="Discovery mode. ACTIVE performs the same safe GET probes in Phase 3.",
+            help="Scan mode. ACTIVE performs the same safe behavior in Phase 5.",
             case_sensitive=False,
         ),
     ] = ScanMode.SAFE,
 ) -> None:
-    """Discover possible GraphQL endpoint locations using safe GET requests."""
+    """Discover GraphQL endpoints and test introspection availability."""
     try:
-        result = run_endpoint_discovery(
+        result = run_introspection_scan(
             target,
             mode=mode,
         )
@@ -59,28 +59,31 @@ def scan(
         raise typer.Exit(code=2) from None
 
     console.print(
-        "Endpoint candidate discovery completed for "
-        f"[cyan]{escape(result.target.original_url)}[/cyan]."
+        "GraphQL discovery and introspection completed for "
+        f"[cyan]{escape(result.detection.discovery.target.original_url)}[/cyan]."
     )
-    for probe in result.probes:
-        if probe.response is not None:
+    introspections = {item.endpoint: item for item in result.introspections}
+    for detection in result.detection.detections:
+        confidence = detection.confidence.value.upper()
+        console.print(
+            f"[cyan]{escape(detection.candidate_url)}[/cyan] -> "
+            f"GraphQL: [bold]{confidence}[/bold] — {escape(detection.reason)}"
+        )
+        introspection = introspections.get(detection.candidate_url)
+        if introspection is not None:
+            status = introspection.status.value.upper()
             console.print(
-                f"[cyan]{escape(probe.candidate_url)}[/cyan] -> "
-                f"HTTP [bold]{probe.response.status_code}[/bold]"
-            )
-        else:
-            error_type = escape(probe.error_type or "HttpError")
-            console.print(
-                f"[cyan]{escape(probe.candidate_url)}[/cyan] -> "
-                f"[yellow]transport failure ({error_type})[/yellow]"
+                f"  Introspection: [bold]{status}[/bold] — {escape(introspection.reason)}"
             )
 
     console.print(
-        f"Probed {len(result.probes)} endpoint candidate(s). No GraphQL confirmation was performed."
+        f"Analyzed {len(result.detection.detections)} candidate(s) and tested introspection "
+        f"on {len(result.introspections)} endpoint(s). Results are not vulnerability confirmation."
     )
-    console.print(f"Effective mode: [cyan]{result.mode.value}[/cyan].")
-    if result.mode is ScanMode.ACTIVE:
-        console.print("ACTIVE mode uses the same safe discovery behavior in Phase 3.")
+    mode = result.detection.discovery.mode
+    console.print(f"Effective mode: [cyan]{mode.value}[/cyan].")
+    if mode is ScanMode.ACTIVE:
+        console.print("ACTIVE mode uses the same safe introspection behavior in Phase 5.")
 
 
 def main() -> None:
