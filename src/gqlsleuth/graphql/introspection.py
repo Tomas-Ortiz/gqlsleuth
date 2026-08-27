@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import cast
 
-MINIMAL_INTROSPECTION_QUERY = """query IntrospectionAvailability {
+MINIMAL_INTROSPECTION_QUERY = """{
   __schema {
     queryType {
       name
@@ -13,7 +13,7 @@ MINIMAL_INTROSPECTION_QUERY = """query IntrospectionAvailability {
   }
 }"""
 
-FULL_INTROSPECTION_QUERY = """query FullIntrospection {
+FULL_INTROSPECTION_QUERY = """query {
   __schema {
     queryType { name }
     mutationType { name }

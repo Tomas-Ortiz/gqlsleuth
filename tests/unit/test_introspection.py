@@ -1,11 +1,25 @@
 """Focused tests for deterministic introspection response classification."""
 
+import re
+
 import pytest
 
 from gqlsleuth.graphql.introspection import (
+    FULL_INTROSPECTION_QUERY,
+    MINIMAL_INTROSPECTION_QUERY,
     IntrospectionStatus,
     classify_introspection_response,
 )
+
+NAMED_OPERATION = re.compile(r"(?m)^\s*(?:query|mutation|subscription)\s+[_A-Za-z][_0-9A-Za-z]*\b")
+
+
+def test_minimal_introspection_query_is_anonymous() -> None:
+    assert NAMED_OPERATION.search(MINIMAL_INTROSPECTION_QUERY) is None
+
+
+def test_full_introspection_query_is_anonymous() -> None:
+    assert NAMED_OPERATION.search(FULL_INTROSPECTION_QUERY) is None
 
 
 def test_schema_object_enables_introspection() -> None:

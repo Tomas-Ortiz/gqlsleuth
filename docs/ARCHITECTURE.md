@@ -387,7 +387,7 @@ remain sequential, and a failure for one endpoint does not stop other eligible e
 minimal availability query is:
 
 ```graphql
-query IntrospectionAvailability {
+{
   __schema {
     queryType {
       name
@@ -395,6 +395,9 @@ query IntrospectionAvailability {
   }
 }
 ```
+
+Both the minimal request and the full static introspection query use anonymous operations for
+compatibility with endpoints that reject named operations.
 
 The initial deterministic status rules, applied in this order, are:
 
