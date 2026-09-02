@@ -451,6 +451,30 @@ The parser should model:
 
 The internal representation must be independent from the raw introspection JSON so it can later support additional schema sources.
 
+The initial Phase 6 implementation consumes only `ENABLED` Phase 5 results that retain a full
+introspection response. It sends no HTTP requests. The response JSON `data` object is passed to
+`graphql-core` for client-schema construction and schema validation, then mapped into immutable
+GQLSleuth-owned models. Neither raw introspection dictionaries nor `graphql-core` objects are
+exposed as the project representation.
+
+The Phase 6 representation includes named object, input-object, scalar, enum, interface, and
+union types; fields; arguments; input fields; enum values; directives; descriptions;
+deprecation metadata; implemented interfaces; possible types; and references between types by
+name. Recursive type references preserve named, list, and non-null nodes independently, allowing
+structures such as `[User!]!` to retain outer nullability and list-item nullability while still
+exposing the base named type.
+
+Application-facing types are ordered deterministically and exclude introspection system types
+whose names begin with `__`. Referenced built-in scalars remain available, and application-defined
+custom scalars are preserved. The summary records root names; total, object, input-object,
+scalar, custom-scalar, enum, interface, union, and directive counts; and field counts for the
+query, mutation, and subscription roots.
+
+An invalid or incomplete full response produces a controlled per-endpoint parsing failure and
+does not stop another eligible endpoint. Successful parsing creates `SCHEMA_ARTIFACT` evidence
+with roots and structural counts. Schema parsing itself does not classify, prioritize, or
+execute any operation; Phase 7 consumes its project-owned result locally.
+
 ## 14. Operation classification
 
 GQLSleuth should classify GraphQL operations based on their likely purpose. Example categories:
@@ -476,14 +500,16 @@ GQLSleuth should classify GraphQL operations based on their likely purpose. Exam
 - Read-only business data.
 - State-changing business operations.
 
-Classification should initially be deterministic and rule-based. It may use:
+The initial Phase 7 implementation is deterministic and rule-based. It analyzes Query and
+Mutation root fields according to their actual schema roots; subscriptions are not analyzed.
+Its shallow analysis surface uses:
 
 - Operation names.
 - Field names.
 - Argument names.
 - Return type names.
 - Descriptions.
-- Nested schema relationships.
+- One direct level of input-object fields and returned object/interface fields.
 - Known security-sensitive keywords.
 
 Examples of interesting terms include:
@@ -520,13 +546,24 @@ upload
 user
 ```
 
-This list is illustrative and should be stored in configurable rules rather than spread throughout the source code.
+This list is illustrative. Phase 7 groups a curated subset into an auditable bundled YAML rule
+file loaded with `importlib.resources`, so loading does not depend on the current working
+directory. The loader also accepts an explicit local path for programmatic use, but no custom
+rule CLI option exists yet.
+
+Identifiers and descriptions are tokenized case-insensitively across camelCase, PascalCase,
+snake_case, kebab-case, and normal text. Keywords match complete normalized tokens, not arbitrary
+substrings. A rule contributes its weight at most once per operation while retaining every
+matched keyword and surface location for explanation. Different rules contribute independently.
+When no semantic rule matches, Query fields receive the `READ_ONLY_BUSINESS_DATA` fallback and
+Mutation fields receive `STATE_CHANGING_BUSINESS_OPERATION`; both remain informational unless a
+configured rule contributes a score.
 
 ## 15. Security prioritization
 
 The tool should assign a priority or score to operations and fields. The purpose of the score is to help the tester decide what to review first. The score must not be presented as a vulnerability severity.
 
-Possible priority levels:
+Phase 7 uses these project-owned priority levels:
 
 - Critical interest.
 - High interest.
@@ -549,7 +586,17 @@ Factors may include:
 - Identity provider integrations.
 - Connections to external services.
 
-The report must clearly state that prioritization identifies areas for manual review and does not prove exploitability.
+The bundled YAML defines the initial score thresholds: critical at 8, high at 5, medium at 3,
+and low at 1; score zero is informational. Results are sorted by explicit priority rank, score
+descending, then stable operation kind and name ordering. The numeric interest score and review
+priority are not CVSS, vulnerability severity, exploitability, or proof of impact.
+
+Only non-zero rule matches create `INTERESTING_OPERATION` evidence. The evidence records the
+endpoint, actual Query or Mutation kind, operation name, categories, interest score, review
+priority, matched rule IDs, and deterministic reasons. Phase 7 sends no HTTP request, generates
+no GraphQL query, and executes no schema operation.
+
+Reports must clearly state that prioritization identifies areas for manual review and does not prove exploitability.
 
 ## 16. Query generation
 
@@ -1225,6 +1272,11 @@ Deliverables:
 - Schema summary.
 - Tests using schema fixtures.
 
+The initial implementation validates retained Phase 5 responses with `graphql-core`, maps them
+to project-owned immutable models, excludes `__*` system types from application summaries, and
+isolates malformed-schema failures per endpoint. The parser performs no additional network
+requests; its project-owned schema result is the input to Phase 7.
+
 ### Phase 7 — Rules and prioritization
 
 Deliverables:
@@ -1236,6 +1288,15 @@ Deliverables:
 - Explanations for scores.
 - Configurable YAML rules.
 - Tests.
+
+The initial implementation loads a bundled validated YAML rule set with package-safe resources,
+normalizes schema identifiers and descriptions into exact tokens, and inspects each Query and
+Mutation root field plus one direct level of input/output relationships. Rules contribute once
+per operation, retain all match locations, and accumulate into YAML-defined interest thresholds.
+It produces ordered project-owned analysis models and `INTERESTING_OPERATION` evidence only for
+non-zero review candidates. The CLI shows the top ten candidates with explanations while the
+structured result retains every analyzed root operation. This phase performs no additional HTTP
+requests, query generation, operation execution, or vulnerability confirmation.
 
 ### Phase 8 — Query generation
 

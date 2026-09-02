@@ -1,4 +1,4 @@
-"""Project-specific exceptions available through Phase 2."""
+"""Project-specific exceptions available through Phase 7."""
 
 
 class GQLSleuthError(Exception):
@@ -39,3 +39,15 @@ class ResponseTooLargeError(HttpError):
 
 class HttpTransportError(HttpError):
     """Raised for other HTTPX request or transport failures."""
+
+
+class SchemaParsingError(GQLSleuthError):
+    """Raised when a full introspection response cannot produce a valid schema."""
+
+
+class RuleConfigurationError(GQLSleuthError):
+    """Raised when Phase 7 YAML rules cannot be loaded or validated."""
+
+
+class OperationAnalysisError(GQLSleuthError):
+    """Raised when a parsed schema cannot be analyzed deterministically."""

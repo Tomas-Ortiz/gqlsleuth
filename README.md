@@ -12,16 +12,23 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 5 — introspection**. It provides the Phase 0 and Phase 1
-foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4 GraphQL
-behavior detection, and deterministic introspection availability testing.
+The repository is currently at **Phase 7 — rules and prioritization**. It provides the Phase 0
+and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
+GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
+parsing, and Phase 7 operation analysis.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
 probe containing `query { __typename }`. Confirmed and probable GraphQL endpoints then receive a
 minimal introspection probe. When introspection is enabled, one complete static introspection
-query retrieves and preserves the raw HTTP response for later phases. GQLSleuth does not parse
-that schema, extract operations, or claim that enabled introspection is a vulnerability.
+query retrieves and preserves the raw HTTP response. Phase 6 validates that response with
+`graphql-core` and maps it into GQLSleuth-owned immutable schema models. Phase 7 then classifies
+Query and Mutation root fields with bundled, validated YAML rules and gives matching operations
+a deterministic interest score and review priority. It considers operation metadata plus one
+direct level of related input and output fields; it does not recursively inspect the schema.
+
+These priorities are manual-review aids, not vulnerability severities or proof of a
+vulnerability. Phase 7 generates no GraphQL query and executes no Query or Mutation operation.
 
 ## Requirements
 
@@ -50,7 +57,8 @@ Display the installed version:
 uv run gqlsleuth version
 ```
 
-Run safe endpoint discovery, GraphQL detection, and introspection with the default mode:
+Run safe endpoint discovery, GraphQL detection, introspection, schema parsing, and operation
+prioritization with the default mode:
 
 ```bash
 uv run gqlsleuth scan https://example.com
@@ -63,8 +71,13 @@ uv run gqlsleuth scan https://example.com --mode safe
 uv run gqlsleuth scan https://example.com --mode active
 ```
 
-ACTIVE performs the same safe discovery, detection, and read-only introspection behavior as SAFE
-during Phase 5. It does not enable active-only behavior.
+ACTIVE performs the same safe discovery, detection, read-only introspection, local schema
+parsing, and local rule-based analysis as SAFE during Phase 7. It does not enable active-only
+behavior.
+
+The CLI displays at most the ten highest-priority review candidates while the structured
+application result retains every analyzed Query and Mutation root field. Each displayed
+candidate includes its interest score, categories, matched rules, and deterministic reason.
 
 ## Configuration
 

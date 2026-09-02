@@ -1,4 +1,4 @@
-"""Typed configuration-independent domain data available through Phase 5."""
+"""Typed configuration-independent domain data available through Phase 7."""
 
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -12,7 +12,7 @@ from gqlsleuth.domain.exceptions import InvalidUrlError, UnsupportedSchemeError
 
 
 class ScanMode(StrEnum):
-    """Selected scan mode; ACTIVE has no distinct behavior through Phase 5."""
+    """Selected scan mode; ACTIVE has no distinct behavior through Phase 7."""
 
     SAFE = "safe"
     ACTIVE = "active"

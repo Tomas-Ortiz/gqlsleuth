@@ -1,4 +1,4 @@
-"""Tests for stable CLI behavior and Phase 5 workflow delegation."""
+"""Tests for stable CLI behavior and Phase 7 workflow delegation."""
 
 import pytest
 from typer.testing import CliRunner
@@ -17,7 +17,20 @@ from gqlsleuth.application.introspection import (
     EndpointIntrospectionResult,
     IntrospectionScanResult,
 )
+from gqlsleuth.application.operation_analysis import (
+    EndpointOperationAnalysisResult,
+    OperationAnalysisScanResult,
+)
+from gqlsleuth.application.schema_parsing import EndpointSchemaResult, SchemaScanResult
+from gqlsleuth.domain.analysis import (
+    InterestPriority,
+    OperationAnalysis,
+    OperationCategory,
+    OperationKind,
+    RuleMatch,
+)
 from gqlsleuth.domain.models import ConfidenceLevel, ScanMode, Target
+from gqlsleuth.domain.schema import ParsedSchema, SchemaSummary, TypeReference
 from gqlsleuth.graphql.introspection import IntrospectionStatus
 from gqlsleuth.infrastructure.http import HttpResponse
 
@@ -34,7 +47,7 @@ def scan_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
         target_url: str,
         *,
         mode: ScanMode = ScanMode.SAFE,
-    ) -> IntrospectionScanResult:
+    ) -> OperationAnalysisScanResult:
         target = Target.parse(target_url)
         calls.append((target_url, mode))
         candidate_url = f"{target.scheme}://{target.host}/graphql"
@@ -81,14 +94,112 @@ def scan_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
             full_error_message=None,
             reason="Full introspection response was retrieved.",
         )
-        return IntrospectionScanResult(
+        introspection_result = IntrospectionScanResult(
             detection=detection_result,
             introspections=(introspection,),
             introspection_evidence=(),
         )
+        summary = SchemaSummary(
+            query_root="Query",
+            mutation_root="Mutation",
+            subscription_root=None,
+            total_type_count=4,
+            object_type_count=2,
+            input_object_type_count=0,
+            scalar_type_count=2,
+            custom_scalar_type_count=0,
+            enum_type_count=0,
+            interface_type_count=0,
+            union_type_count=0,
+            directive_count=0,
+            query_field_count=2,
+            mutation_field_count=1,
+            subscription_field_count=0,
+        )
+        schema = ParsedSchema(
+            query_root="Query",
+            mutation_root="Mutation",
+            subscription_root=None,
+            types=(),
+            directives=(),
+            summary=summary,
+        )
+        schema_scan = SchemaScanResult(
+            introspection=introspection_result,
+            schemas=(
+                EndpointSchemaResult(
+                    endpoint=candidate_url,
+                    success=True,
+                    schema=schema,
+                    error_type=None,
+                    error_message=None,
+                ),
+            ),
+            schema_evidence=(),
+        )
+        operations = (
+            _operation(
+                candidate_url,
+                "resetPassword",
+                OperationKind.MUTATION,
+                InterestPriority.HIGH_INTEREST,
+                6,
+                ("password", "reset"),
+            ),
+            _operation(
+                candidate_url,
+                "exportUsers",
+                OperationKind.QUERY,
+                InterestPriority.MEDIUM_INTEREST,
+                4,
+                ("export", "user"),
+            ),
+        )
+        return OperationAnalysisScanResult(
+            schema_scan=schema_scan,
+            endpoints=(
+                EndpointOperationAnalysisResult(
+                    endpoint=candidate_url,
+                    success=True,
+                    operations=operations,
+                    error_type=None,
+                    error_message=None,
+                ),
+            ),
+            operation_evidence=(),
+        )
 
-    monkeypatch.setattr(cli_module, "run_introspection_scan", fake_scan)
+    monkeypatch.setattr(cli_module, "run_operation_analysis_scan", fake_scan)
     return calls
+
+
+def _operation(
+    endpoint: str,
+    name: str,
+    kind: OperationKind,
+    priority: InterestPriority,
+    score: int,
+    keywords: tuple[str, ...],
+) -> OperationAnalysis:
+    match = RuleMatch(
+        rule_id=name.casefold(),
+        category=OperationCategory.USER_MANAGEMENT,
+        weight=score,
+        matched_keywords=keywords,
+        locations=("operation.name",),
+        reason="Deterministic test terminology.",
+    )
+    return OperationAnalysis(
+        endpoint=endpoint,
+        kind=kind,
+        name=name,
+        return_type=TypeReference.named("String"),
+        categories=(OperationCategory.USER_MANAGEMENT,),
+        interest_score=score,
+        priority=priority,
+        matched_rules=(match,),
+        reasons=(match.reason,),
+    )
 
 
 def test_root_help_describes_authorized_use() -> None:
@@ -108,18 +219,28 @@ def test_version_command_reports_package_version() -> None:
     assert result.stdout.strip() == f"GQLSleuth {__version__}"
 
 
-def test_scan_command_runs_safe_introspection_workflow() -> None:
+def test_scan_command_runs_safe_operation_analysis_workflow() -> None:
     target = "https://example.com"
 
     result = runner.invoke(app, ["scan", target])
     output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
-    assert "GraphQL discovery and introspection completed" in output
+    assert "operation analysis completed" in output
     assert "GraphQL: CONFIRMED" in output
     assert "Introspection: ENABLED" in output
-    assert "tested introspection on 1 endpoint(s)" in output
-    assert "not vulnerability confirmation" in output.lower()
+    assert "Schema: PARSED" in output
+    assert "Query root: Query" in output
+    assert "Mutation root: Mutation" in output
+    assert "Types: 4; Queries: 2; Mutations: 1; Subscriptions: 0" in output
+    assert "2 root operation(s); 2 security-review candidate(s)" in output
+    assert "HIGH INTEREST [mutation] resetPassword" in output
+    assert "interest score 6" in output
+    assert "MEDIUM INTEREST [query] exportUsers" in output
+    assert "interest score 4" in output
+    assert output.index("resetPassword") < output.index("exportUsers")
+    assert "processed 1 schema result(s)" in output
+    assert "not vulnerability severities or vulnerability confirmation" in output.lower()
     assert target in output
     assert "Effective mode: safe" in output
 
@@ -147,17 +268,17 @@ def test_scan_accepts_explicit_safe_mode() -> None:
 
     assert result.exit_code == 0
     assert "Effective mode: safe" in output
-    assert "not vulnerability confirmation" in output
+    assert "not vulnerability severities or vulnerability confirmation" in output
 
 
-def test_scan_accepts_active_with_the_same_safe_introspection_behavior() -> None:
+def test_scan_accepts_active_with_the_same_safe_operation_analysis_behavior() -> None:
     result = runner.invoke(app, ["scan", "https://example.com", "--mode", "active"])
     output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
     assert "Effective mode: active" in output
-    assert "same safe introspection behavior" in output
-    assert "not vulnerability confirmation" in output
+    assert "same safe operation-analysis behavior" in output
+    assert "not vulnerability severities or vulnerability confirmation" in output
 
 
 def test_scan_reports_invalid_target_without_a_traceback() -> None:
@@ -168,7 +289,7 @@ def test_scan_reports_invalid_target_without_a_traceback() -> None:
     assert "Traceback" not in result.stderr
 
 
-def test_scan_delegates_target_and_mode_to_phase_five_workflow(
+def test_scan_delegates_target_and_mode_to_phase_seven_workflow(
     scan_calls: list[tuple[str, ScanMode]],
 ) -> None:
     result = runner.invoke(app, ["scan", "https://example.com"])
