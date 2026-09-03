@@ -51,6 +51,14 @@ class InterestPriority(StrEnum):
     INFORMATIONAL = "informational"
 
 
+class RuleSurface(StrEnum):
+    """Semantic schema surfaces on which an operation rule may apply."""
+
+    PRIMARY = "primary"
+    INPUT = "input"
+    OUTPUT = "output"
+
+
 PRIORITY_RANK: dict[InterestPriority, int] = {
     InterestPriority.CRITICAL_INTEREST: 0,
     InterestPriority.HIGH_INTEREST: 1,
@@ -101,6 +109,7 @@ class OperationRule(BaseModel):
     id: str
     category: OperationCategory
     keywords: tuple[str, ...] = Field(min_length=1)
+    surfaces: tuple[RuleSurface, ...] = Field(min_length=1)
     weight: int = Field(gt=0)
     reason: str
 

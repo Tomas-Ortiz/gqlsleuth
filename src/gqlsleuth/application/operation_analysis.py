@@ -105,7 +105,11 @@ def _operation_evidence(
 ) -> Evidence:
     categories = ", ".join(category.value for category in operation.categories)
     rule_ids = ", ".join(match.rule_id for match in operation.matched_rules)
-    reasons = tuple(match.reason for match in operation.matched_rules)
+    match_notes = tuple(
+        f"{match.rule_id}: {match.reason} Matched {', '.join(match.matched_keywords)} at "
+        f"{', '.join(match.locations)}."
+        for match in operation.matched_rules
+    )
     return Evidence(
         evidence_type=EvidenceType.INTERESTING_OPERATION,
         target=schema_scan.introspection.detection.discovery.target,
@@ -116,5 +120,5 @@ def _operation_evidence(
             f"{operation.interest_score}) from rules: {rule_ids}."
         ),
         source=ANALYSIS_SOURCE,
-        notes=(f"Categories: {categories}", *reasons),
+        notes=(f"Categories: {categories}", *match_notes),
     )

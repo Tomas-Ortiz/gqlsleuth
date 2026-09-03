@@ -13,6 +13,7 @@ from gqlsleuth.domain.analysis import (
     OperationRule,
     PriorityThresholds,
     RuleSet,
+    RuleSurface,
 )
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode, Target
 from gqlsleuth.domain.schema import (
@@ -59,6 +60,7 @@ def test_analysis_preserves_phase_six_result_and_emits_only_candidate_evidence()
     assert "searchUsers" in evidence.summary
     assert "interest score" in evidence.summary
     assert "vulnerab" not in evidence.summary.casefold()
+    assert any("operation.name" in note for note in evidence.notes)
 
 
 def test_one_analysis_failure_does_not_discard_other_endpoint_or_previous_results() -> None:
@@ -104,6 +106,7 @@ def _rules() -> RuleSet:
                 id="search",
                 category=OperationCategory.SEARCH,
                 keywords=("search",),
+                surfaces=(RuleSurface.PRIMARY, RuleSurface.INPUT),
                 weight=1,
                 reason="Search terminology.",
             ),
@@ -111,6 +114,7 @@ def _rules() -> RuleSet:
                 id="users",
                 category=OperationCategory.USER_MANAGEMENT,
                 keywords=("user",),
+                surfaces=(RuleSurface.PRIMARY, RuleSurface.INPUT),
                 weight=2,
                 reason="User terminology.",
             ),

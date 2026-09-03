@@ -8,95 +8,108 @@ rules:
   - id: authentication
     category: authentication
     keywords: [auth, authenticate, login, logout, signin, signup]
+    surfaces: [primary, input]
     weight: 3
     reason: Authentication-related terminology.
   - id: authorization
     category: authorization
     keywords: [authorization, authorize, permission, permissions, privilege, access, role, roles, impersonate]
+    surfaces: [primary, input]
     weight: 3
     reason: Authorization or privilege-related terminology.
   - id: user_management
     category: user_management
     keywords: [user, users, account, accounts, invite, member, members, profile, profiles]
+    surfaces: [primary, input]
     weight: 2
     reason: User or account-management terminology.
   - id: administrative_functionality
     category: administrative_functionality
     keywords: [admin, administrator, superuser]
+    surfaces: [primary, input]
     weight: 3
     reason: Administrative-functionality terminology.
   - id: tokens_and_sessions
     category: tokens_and_sessions
     keywords: [token, tokens, session, sessions, jwt, refresh]
+    surfaces: [primary, input, output]
     weight: 3
     reason: Token or session terminology.
   - id: password_management
     category: password_management
     keywords: [password, passcode]
+    surfaces: [primary, input]
     weight: 3
     reason: Password-management terminology.
   - id: account_recovery
     category: account_recovery
     keywords: [recover, recovery, reset, forgot]
+    surfaces: [primary, input]
     weight: 3
     reason: Account-recovery terminology.
   - id: identity_providers
     category: identity_providers
     keywords: [oauth, saml, oidc, identity, provider, sso, sharepoint]
+    surfaces: [primary, input]
     weight: 2
     reason: Identity-provider terminology.
   - id: files_and_uploads
     category: files_and_uploads
     keywords: [file, files, upload, download, export, attachment, attachments]
+    surfaces: [primary, input, output]
     weight: 2
     reason: File-transfer or upload terminology.
   - id: integrations
     category: integrations
     keywords: [integration, webhook, connector, sharepoint, external]
+    surfaces: [primary, input]
     weight: 2
     reason: External-integration terminology.
   - id: billing_and_payments
     category: billing_and_payments
     keywords: [billing, payment, invoice, card, transaction]
+    surfaces: [primary, input, output]
     weight: 3
     reason: Billing or payment terminology.
   - id: personal_information
     category: personal_information
     keywords: [email, address, phone, pii, personal, profile]
+    surfaces: [primary, input, output]
     weight: 2
     reason: Personal-information terminology.
   - id: secrets_and_credentials
     category: secrets_and_credentials
     keywords: [secret, credential]
+    surfaces: [primary, input, output]
     weight: 3
     reason: Secret or credential terminology.
   - id: configuration
     category: configuration
     keywords: [config, configuration, setting, settings, feature, flag]
+    surfaces: [primary, input, output]
     weight: 2
     reason: Configuration-related terminology.
   - id: debugging
     category: debugging
-    keywords: [debug, diagnostic, trace, log]
+    keywords: [debug, diagnostic, diagnostics, trace, log]
+    surfaces: [primary, input, output]
     weight: 3
     reason: Debugging or diagnostic terminology.
   - id: internal_functionality
     category: internal_functionality
     keywords: [internal, private, hidden]
+    surfaces: [primary, input, output]
     weight: 2
     reason: Internal-functionality terminology.
   - id: search
     category: search
     keywords: [search, find, lookup, filter]
+    surfaces: [primary, input]
     weight: 1
     reason: Search-related terminology.
   - id: reporting
     category: reporting
     keywords: [report, analytics, audit, export]
+    surfaces: [primary, input, output]
     weight: 2
     reason: Reporting or export terminology.
-  - id: state_changing_business_operation
-    category: state_changing_business_operation
-    keywords: [create, update, delete, remove]
-    weight: 2
-    reason: State-changing operation terminology.

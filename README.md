@@ -26,6 +26,15 @@ query retrieves and preserves the raw HTTP response. Phase 6 validates that resp
 Query and Mutation root fields with bundled, validated YAML rules and gives matching operations
 a deterministic interest score and review priority. It considers operation metadata plus one
 direct level of related input and output fields; it does not recursively inspect the schema.
+Rules explicitly declare whether they apply to primary, input, or output context, preventing an
+arbitrary returned field from being treated as evidence of the operation's purpose.
+
+Discovery gives the preferred candidate a five-second GET timeout and immediately applies the
+existing GraphQL detection logic. A confirmed or probable preferred candidate stops discovery;
+otherwise, the remaining candidates use at most four synchronous workers while retaining their
+stable candidate order. GraphQL POST probes and introspection continue using the normal ten-second
+HTTP timeout. A fallback POST is sent only when discovery received an inconclusive HTTP response;
+transport failures without a response proceed directly to the next candidate.
 
 These priorities are manual-review aids, not vulnerability severities or proof of a
 vulnerability. Phase 7 generates no GraphQL query and executes no Query or Mutation operation.

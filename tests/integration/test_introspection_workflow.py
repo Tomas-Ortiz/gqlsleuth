@@ -25,7 +25,7 @@ from gqlsleuth.graphql.introspection import (
     MINIMAL_INTROSPECTION_QUERY,
     IntrospectionStatus,
 )
-from gqlsleuth.infrastructure.http import HttpClient, HttpResponse
+from gqlsleuth.infrastructure.http import DEFAULT_TIMEOUT_SECONDS, HttpClient, HttpResponse
 
 
 def test_enabled_introspection_retrieves_one_full_response_and_evidence() -> None:
@@ -53,6 +53,9 @@ def test_enabled_introspection_retrieves_one_full_response_and_evidence() -> Non
         MINIMAL_INTROSPECTION_QUERY,
         FULL_INTROSPECTION_QUERY,
     ]
+    assert {request.extensions["timeout"]["read"] for request in requests} == {
+        DEFAULT_TIMEOUT_SECONDS
+    }
     assert introspection.status is IntrospectionStatus.ENABLED
     assert introspection.full_retrieval_attempted is True
     assert introspection.minimal_response is not None

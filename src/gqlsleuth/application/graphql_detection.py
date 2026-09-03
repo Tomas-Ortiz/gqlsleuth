@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from gqlsleuth.application.endpoint_discovery import (
     EndpointDiscoveryResult,
     EndpointProbeResult,
-    discover_endpoints,
+    combine_discovery_results,
+    probe_endpoint_candidates,
 )
 from gqlsleuth.application.scan_configuration import map_scan_inputs
+from gqlsleuth.discovery.endpoint_candidates import generate_endpoint_candidates
 from gqlsleuth.domain.exceptions import HttpError
-from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType, ScanMode
+from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType, ScanMode, Target
 from gqlsleuth.graphql.detection import (
     GraphQLResponseAnalysis,
     GraphQLSignal,
@@ -60,8 +62,48 @@ def run_graphql_detection(
     """Run discovery and GraphQL detection through one shared HTTP client."""
     target, settings = map_scan_inputs(target_url, mode=mode)
     with HttpClient() as client:
-        discovery = discover_endpoints(target, mode=settings.mode, client=client)
-        return detect_graphql(discovery, client=client)
+        return discover_and_detect_graphql(target, mode=settings.mode, client=client)
+
+
+def discover_and_detect_graphql(
+    target: Target,
+    *,
+    mode: ScanMode,
+    client: HttpClient,
+) -> GraphQLDetectionResult:
+    """Detect the preferred candidate before concurrently discovering the remainder."""
+    candidates = generate_endpoint_candidates(target)
+    preferred_discovery = probe_endpoint_candidates(
+        target,
+        mode=mode,
+        client=client,
+        candidate_urls=candidates[:1],
+    )
+    preferred_detection = detect_graphql(preferred_discovery, client=client)
+    if _contains_graphql_endpoint(preferred_detection):
+        return preferred_detection
+
+    remaining_discovery = probe_endpoint_candidates(
+        target,
+        mode=mode,
+        client=client,
+        candidate_urls=candidates[1:],
+    )
+    remaining_detection = detect_graphql(remaining_discovery, client=client)
+    return GraphQLDetectionResult(
+        discovery=combine_discovery_results(preferred_discovery, remaining_discovery),
+        detections=preferred_detection.detections + remaining_detection.detections,
+        confirmation_evidence=(
+            preferred_detection.confirmation_evidence + remaining_detection.confirmation_evidence
+        ),
+    )
+
+
+def _contains_graphql_endpoint(result: GraphQLDetectionResult) -> bool:
+    return any(
+        detection.confidence in {ConfidenceLevel.CONFIRMED, ConfidenceLevel.PROBABLE}
+        for detection in result.detections
+    )
 
 
 def detect_graphql(
@@ -75,7 +117,7 @@ def detect_graphql(
 
     for probe in discovery.probes:
         get_analysis = _analyze_get(probe)
-        if get_analysis.confidence in {
+        if probe.response is None or get_analysis.confidence in {
             ConfidenceLevel.CONFIRMED,
             ConfidenceLevel.PROBABLE,
         }:
@@ -95,7 +137,10 @@ def detect_graphql(
 
 def _analyze_get(probe: EndpointProbeResult) -> GraphQLResponseAnalysis:
     if probe.response is None:
-        return no_response_analysis("No GET response was available for analysis.")
+        failure = f" Discovery GET failed with {probe.error_type}." if probe.error_type else ""
+        return no_response_analysis(
+            f"No GET response was available for analysis.{failure} Fallback POST was not sent."
+        )
     return analyze_graphql_response(probe.response.body, probe.response.headers)
 
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from gqlsleuth.domain.analysis import OperationCategory
+from gqlsleuth.domain.analysis import OperationCategory, RuleSurface
 from gqlsleuth.domain.exceptions import RuleConfigurationError
 from gqlsleuth.rules.loader import load_bundled_rules, load_rules
 
@@ -14,6 +14,7 @@ def test_bundled_rules_load_with_expected_thresholds() -> None:
 
     assert rules.thresholds.model_dump() == {"critical": 8, "high": 5, "medium": 3, "low": 1}
     assert rules.rules[0].category is OperationCategory.AUTHENTICATION
+    assert rules.rules[0].surfaces == (RuleSurface.PRIMARY, RuleSurface.INPUT)
     assert len(rules.rules) >= 10
 
 
@@ -26,6 +27,7 @@ rules:
   - id: test_rule
     category: debugging
     keywords: [debug]
+    surfaces: [primary, input]
     weight: 3
     reason: Debug terminology.
 """.strip(),
@@ -62,8 +64,18 @@ def test_duplicate_rule_ids_are_rejected(tmp_path: Path) -> None:
         """
 thresholds: {critical: 8, high: 5, medium: 3, low: 1}
 rules:
-  - {id: duplicate, category: search, keywords: [search], weight: 1, reason: Search.}
-  - {id: duplicate, category: reporting, keywords: [report], weight: 2, reason: Report.}
+  - id: duplicate
+    category: search
+    keywords: [search]
+    surfaces: [primary]
+    weight: 1
+    reason: Search.
+  - id: duplicate
+    category: reporting
+    keywords: [report]
+    surfaces: [primary]
+    weight: 2
+    reason: Report.
 """.strip(),
         encoding="utf-8",
     )

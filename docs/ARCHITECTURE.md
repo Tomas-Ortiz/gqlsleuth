@@ -254,6 +254,13 @@ normalized transport failure is recorded for its candidate without preventing la
 from being probed. Each outcome creates `ENDPOINT_CANDIDATE` evidence; no GraphQL confirmation,
 observation, finding, or confidence score is produced in this phase.
 
+Discovery GET probes use a five-second per-request timeout. The preferred candidate is requested
+alone first. In the complete scan workflow, Phase 4 immediately analyzes and, when needed, probes
+that result before additional discovery begins. If it reaches `CONFIRMED` or `PROBABLE`, remaining
+candidates are never requested or represented in results. Otherwise, the remaining candidates are
+probed with a synchronous pool of at most four workers. Completion order does not affect the
+stable candidate, result, or evidence order, and one candidate failure does not stop the others.
+
 Future versions may support:
 
 - Custom wordlists.
@@ -316,12 +323,20 @@ The exact confidence rules are:
   array is present.
 - `NOT_DETECTED`: none of the signals above are present.
 
-`CONFIRMED` and `PROBABLE` GET results require no duplicate request. `POSSIBLE` and
-`NOT_DETECTED` GET results receive one fallback POST to the same candidate with the static JSON
-body `{"query": "query { __typename }"}`. The final confidence is the stronger explicit
-classification from the GET and POST analyses. A normalized POST failure is retained for that
-candidate and does not stop later candidates. No introspection fields or arbitrary operations
-are sent during Phase 4.
+`CONFIRMED` and `PROBABLE` GET results require no duplicate request. When Phase 3 retained an
+HTTP response, `POSSIBLE` and `NOT_DETECTED` results receive one fallback POST to the same
+candidate with the static JSON body `{"query": "query { __typename }"}`. When the discovery GET
+failed with a normalized transport error and produced no HTTP response, Phase 4 does not repeat
+the unavailable request as a POST. The failure remains represented and processing continues with
+other candidates. The final confidence is the stronger explicit classification from the GET and
+POST analyses. A normalized POST failure is retained for that candidate and does not stop later
+candidates. No introspection fields or arbitrary operations are sent during Phase 4.
+
+The preferred candidate is fully classified before concurrent GET discovery begins for remaining
+paths. A final preferred-candidate classification of `CONFIRMED` or `PROBABLE`, whether obtained
+from its retained GET or single fallback POST, ends discovery early. `POSSIBLE`, `NOT_DETECTED`,
+or an unavailable preferred GET continues with the remaining candidates. An unavailable GET does
+not itself trigger a fallback POST.
 
 ## 11. HTTP behavior
 
@@ -348,8 +363,8 @@ returns HTTP 4xx and 5xx responses normally, and normalizes HTTPX request failur
 project-specific exceptions. It does not parse JSON or GraphQL response content.
 
 Phase 2 does not expose HTTP options through the CLI. Beginning in Phase 3, the `scan` command
-uses this client for safe GET-only endpoint candidate probes. Retries, concurrency, rate
-limiting and caching remain unimplemented.
+uses this client for safe GET-only endpoint candidate probes. Discovery uses bounded synchronous
+concurrency; retries, rate limiting, and caching remain unimplemented.
 
 The Phase 2 defaults are:
 
@@ -361,6 +376,10 @@ The Phase 2 defaults are:
 - No proxy.
 - Environment-derived HTTP configuration disabled with `trust_env=False`.
 - User-Agent set to `GQLSleuth/<current version>`.
+
+The normal ten-second client timeout remains in effect for Phase 4 fallback POST requests and all
+Phase 5 minimal/full introspection requests. Only Phase 3 discovery GET requests override it with
+the shorter five-second timeout.
 
 ## 12. Introspection
 
@@ -553,7 +572,13 @@ rule CLI option exists yet.
 
 Identifiers and descriptions are tokenized case-insensitively across camelCase, PascalCase,
 snake_case, kebab-case, and normal text. Keywords match complete normalized tokens, not arbitrary
-substrings. A rule contributes its weight at most once per operation while retaining every
+substrings. Each bundled rule explicitly declares whether it applies to primary operation
+surfaces, input surfaces, output/context surfaces, or a combination. Functional-purpose rules,
+including authentication, authorization, password management, account recovery, administrative
+functionality, and user management, require primary or input evidence. Output context may support
+data-oriented categories such as tokens and sessions, personal information, secrets and
+credentials, files and downloads, billing, configuration, debugging, internal functionality,
+and reporting. A rule contributes its weight at most once per operation while retaining every
 matched keyword and surface location for explanation. Different rules contribute independently.
 When no semantic rule matches, Query fields receive the `READ_ONLY_BUSINESS_DATA` fallback and
 Mutation fields receive `STATE_CHANGING_BUSINESS_OPERATION`; both remain informational unless a
@@ -1227,8 +1252,11 @@ Deliverables:
 - Discovery evidence.
 - Unit and integration tests.
 
-The initial implementation probes candidates sequentially with GET, retains all HTTP status
-responses, isolates transport failures per candidate, and stops before GraphQL confirmation.
+The refined implementation probes the preferred candidate first with a five-second GET timeout,
+then uses at most four synchronous workers for remaining candidates. It retains all returned HTTP
+statuses, isolates transport failures per candidate, and preserves stable result/evidence order.
+The complete scan coordinates immediate Phase 4 classification of the preferred result so a
+confirmed or probable endpoint stops further discovery.
 
 ### Phase 4 — GraphQL detection
 
@@ -1243,7 +1271,10 @@ Deliverables:
 - Tests using mocked responses.
 
 The initial implementation reuses Phase 3 GET responses, sends at most one static `__typename`
-POST for an inconclusive candidate, and preserves both discovery and confirmation evidence.
+POST for an inconclusive HTTP response, and preserves both discovery and confirmation evidence.
+Transport failures without an HTTP response do not trigger a POST. The normal ten-second timeout
+remains on legitimate POST requests. Preferred-candidate confirmation is evaluated before
+remaining discovery candidates are scheduled.
 
 ### Phase 5 — Introspection
 
@@ -1292,7 +1323,10 @@ Deliverables:
 The initial implementation loads a bundled validated YAML rule set with package-safe resources,
 normalizes schema identifiers and descriptions into exact tokens, and inspects each Query and
 Mutation root field plus one direct level of input/output relationships. Rules contribute once
-per operation, retain all match locations, and accumulate into YAML-defined interest thresholds.
+per operation, declare their applicable primary/input/output surfaces, retain all match locations,
+and accumulate into YAML-defined interest thresholds. The bundled rule set does not score generic
+`create`, `update`, or `delete` terminology: actual root structure determines Query versus
+Mutation, and unmatched Mutations receive the informational state-changing fallback category.
 It produces ordered project-owned analysis models and `INTERESTING_OPERATION` evidence only for
 non-zero review candidates. The CLI shows the top ten candidates with explanations while the
 structured result retains every analyzed root operation. This phase performs no additional HTTP

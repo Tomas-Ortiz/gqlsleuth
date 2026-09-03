@@ -12,6 +12,7 @@ from gqlsleuth.domain.analysis import (
     OperationRule,
     RuleMatch,
     RuleSet,
+    RuleSurface,
 )
 from gqlsleuth.domain.exceptions import OperationAnalysisError
 from gqlsleuth.domain.schema import ParsedSchema, SchemaField, SchemaNamedType, SchemaTypeKind
@@ -24,6 +25,7 @@ _NON_ALPHANUMERIC = re.compile(r"[^A-Za-z0-9]+")
 @dataclass(frozen=True)
 class _AnalysisSurface:
     location: str
+    kind: RuleSurface
     tokens: frozenset[str]
 
 
@@ -121,31 +123,63 @@ def _analyze_field(
 
 def _build_surfaces(schema: ParsedSchema, field: SchemaField) -> tuple[_AnalysisSurface, ...]:
     surfaces: list[_AnalysisSurface] = []
-    _add_surface(surfaces, "operation.name", field.name)
-    _add_surface(surfaces, "description", field.description)
+    _add_surface(surfaces, RuleSurface.PRIMARY, "operation.name", field.name)
+    _add_surface(
+        surfaces,
+        RuleSurface.PRIMARY,
+        "operation.description",
+        field.description,
+    )
     for argument in field.arguments:
-        _add_surface(surfaces, f"argument.{argument.name}", argument.name)
-        _add_surface(surfaces, f"argument_description.{argument.name}", argument.description)
+        _add_surface(
+            surfaces,
+            RuleSurface.INPUT,
+            f"argument.{argument.name}",
+            argument.name,
+        )
+        _add_surface(
+            surfaces,
+            RuleSurface.INPUT,
+            f"argument_description.{argument.name}",
+            argument.description,
+        )
         argument_type_name = argument.type.named_type
-        _add_surface(surfaces, f"argument_type.{argument_type_name}", argument_type_name)
+        _add_surface(
+            surfaces,
+            RuleSurface.INPUT,
+            f"argument_type.{argument_type_name}",
+            argument_type_name,
+        )
         argument_type = schema.type_named(argument_type_name)
         if argument_type is not None and argument_type.kind is SchemaTypeKind.INPUT_OBJECT:
             for input_field in argument_type.input_fields:
-                _add_surface(surfaces, f"input_field.{input_field.name}", input_field.name)
                 _add_surface(
                     surfaces,
+                    RuleSurface.INPUT,
+                    f"input_field.{input_field.name}",
+                    input_field.name,
+                )
+                _add_surface(
+                    surfaces,
+                    RuleSurface.INPUT,
                     f"input_field_description.{input_field.name}",
                     input_field.description,
                 )
                 input_type_name = input_field.type.named_type
                 _add_surface(
                     surfaces,
+                    RuleSurface.INPUT,
                     f"input_field_type.{input_type_name}",
                     input_type_name,
                 )
 
     return_type_name = field.type.named_type
-    _add_surface(surfaces, f"return_type.{return_type_name}", return_type_name)
+    _add_surface(
+        surfaces,
+        RuleSurface.OUTPUT,
+        f"return_type.{return_type_name}",
+        return_type_name,
+    )
     return_type = schema.type_named(return_type_name)
     if return_type is not None and return_type.kind in {
         SchemaTypeKind.OBJECT,
@@ -160,15 +194,22 @@ def _add_output_fields(
     return_type: SchemaNamedType,
 ) -> None:
     for returned_field in return_type.fields:
-        _add_surface(surfaces, f"return_field.{returned_field.name}", returned_field.name)
         _add_surface(
             surfaces,
+            RuleSurface.OUTPUT,
+            f"return_field.{returned_field.name}",
+            returned_field.name,
+        )
+        _add_surface(
+            surfaces,
+            RuleSurface.OUTPUT,
             f"return_field_description.{returned_field.name}",
             returned_field.description,
         )
         returned_type_name = returned_field.type.named_type
         _add_surface(
             surfaces,
+            RuleSurface.OUTPUT,
             f"return_field_type.{returned_type_name}",
             returned_type_name,
         )
@@ -176,6 +217,7 @@ def _add_output_fields(
 
 def _add_surface(
     surfaces: list[_AnalysisSurface],
+    kind: RuleSurface,
     location: str,
     value: str | None,
 ) -> None:
@@ -183,7 +225,7 @@ def _add_surface(
         return
     tokens = frozenset(normalize_terms(value))
     if tokens:
-        surfaces.append(_AnalysisSurface(location=location, tokens=tokens))
+        surfaces.append(_AnalysisSurface(location=location, kind=kind, tokens=tokens))
 
 
 def _match_rule(
@@ -197,7 +239,7 @@ def _match_rule(
         if not keyword_tokens:
             continue
         for surface in surfaces:
-            if keyword_tokens.issubset(surface.tokens):
+            if surface.kind in rule.surfaces and keyword_tokens.issubset(surface.tokens):
                 matched_keywords.add(keyword.casefold())
                 matched_locations.add(surface.location)
     if not matched_keywords:

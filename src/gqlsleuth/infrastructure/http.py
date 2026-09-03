@@ -47,6 +47,7 @@ class HttpRequest(BaseModel):
     url: str
     headers: dict[str, str] = Field(default_factory=dict)
     json_body: JsonValue | None = None
+    timeout_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
 
 class HttpResponse(BaseModel):
@@ -87,12 +88,14 @@ class HttpClient:
     def send(self, request: HttpRequest) -> HttpResponse:
         """Send one request and stream its body up to the configured size limit."""
         started_at = perf_counter()
+        timeout = request.timeout_seconds or self.settings.timeout_seconds
         try:
             with self._client.stream(
                 request.method,
                 request.url,
                 headers=request.headers,
                 json=request.json_body,
+                timeout=timeout,
             ) as response:
                 body = self._read_limited_body(response)
                 return HttpResponse(

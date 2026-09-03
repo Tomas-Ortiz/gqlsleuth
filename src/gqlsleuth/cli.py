@@ -153,17 +153,16 @@ def _render_review_candidate(operation: OperationAnalysis) -> None:
     categories = "; ".join(
         category.value.replace("_", " ").title() for category in operation.categories
     )
-    keywords = sorted(
-        {keyword for match in operation.matched_rules for keyword in match.matched_keywords}
-    )
-    rules = ", ".join(match.rule_id for match in operation.matched_rules)
     console.print(
         f"    [bold]{priority}[/bold] {kind} {escape(operation.name)} "
         f"— interest score {operation.interest_score}"
     )
     console.print(f"      {escape(categories)}")
-    console.print(f"      Matched: {escape(', '.join(keywords))} (rules: {escape(rules)})")
-    console.print(f"      Why: {escape('; '.join(operation.reasons))}")
+    for match in operation.matched_rules:
+        keywords = ", ".join(match.matched_keywords)
+        locations = ", ".join(match.locations)
+        console.print(f"      {escape(match.rule_id)}: {escape(keywords)} at {escape(locations)}")
+        console.print(f"        Why: {escape(match.reason)}")
 
 
 def main() -> None:

@@ -2,10 +2,9 @@
 
 from dataclasses import dataclass
 
-from gqlsleuth.application.endpoint_discovery import discover_endpoints
 from gqlsleuth.application.graphql_detection import (
     GraphQLDetectionResult,
-    detect_graphql,
+    discover_and_detect_graphql,
 )
 from gqlsleuth.application.scan_configuration import map_scan_inputs
 from gqlsleuth.domain.exceptions import HttpError
@@ -59,8 +58,7 @@ def run_introspection_scan(
     """Run Phases 3–5 through one shared synchronous HTTP client."""
     target, settings = map_scan_inputs(target_url, mode=mode)
     with HttpClient() as client:
-        discovery = discover_endpoints(target, mode=settings.mode, client=client)
-        detection = detect_graphql(discovery, client=client)
+        detection = discover_and_detect_graphql(target, mode=settings.mode, client=client)
         return introspect_detected_endpoints(detection, client=client)
 
 
