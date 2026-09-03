@@ -674,6 +674,30 @@ Variables:
 
 Generated values are placeholders and must not be assumed to be valid for the target application.
 
+The initial Phase 8 implementation consumes only the project-owned Phase 6 schema and Phase 7
+operation-analysis results and sends no HTTP requests. It attempts generation for every actual
+Query-root field, omits optional arguments and non-null arguments with defaults, and creates
+variables only for outer-non-null arguments without defaults. Operations are anonymous and do not
+use `operationName`.
+
+Built-in placeholders are `"test"` for String, `"1"` for ID, `1` for Int, `1.0` for Float, and
+`false` for Boolean. Enum generation chooses the alphabetically first non-deprecated value, lists
+contain one recursively generated item, and input objects contain required fields only. Custom
+scalars receive the conservative string `"test"` plus a manual-adjustment note. Cyclic required
+input objects produce an isolated generation failure.
+
+For object results, generation prefers a direct non-deprecated scalar/enum `id` field, then the
+first deterministic eligible leaf, then one minimal nested child path. Nested fields requiring
+arguments are skipped. Interface and union results use `__typename`; output recursion or the
+internal default selection depth of three also falls back to `__typename`, keeping the document
+valid and finite. Final documents are syntax-checked with `graphql-core`. Successful artifacts
+create `GENERATED_QUERY` evidence containing the exact query and placeholder variables. Failed
+generation creates no successful evidence and does not stop other operations or endpoints.
+
+The CLI shows a generation count and at most five examples while structured results retain every
+Query outcome. Phase 8 does not generate Mutations or Subscriptions and never executes any
+generated operation; execution begins only in Phase 9.
+
 ## 17. Safe query execution
 
 Safe mode may execute generated read-only queries. The executor must verify that the selected operation belongs to the query root and is not a mutation.
@@ -1348,6 +1372,12 @@ Deliverables:
 - Recursive type protection.
 - Query rendering.
 - Tests.
+
+The initial implementation generates anonymous read-only documents only for Query-root fields,
+uses deterministic required-input placeholders, selects a minimal finite response path with an
+internal depth limit of three, validates syntax with `graphql-core`, and preserves exact query and
+variable artifacts as evidence. Per-operation failures are isolated. No generated operation is
+sent or executed, and no Mutation or Subscription document is generated.
 
 ### Phase 9 — Safe execution
 

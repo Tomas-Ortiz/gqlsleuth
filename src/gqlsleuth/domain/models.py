@@ -1,4 +1,4 @@
-"""Typed configuration-independent domain data available through Phase 7."""
+"""Typed configuration-independent domain data available through Phase 8."""
 
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -6,7 +6,7 @@ from typing import Self
 from urllib.parse import SplitResult, urlsplit
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from gqlsleuth.domain.exceptions import InvalidUrlError, UnsupportedSchemeError
 
@@ -82,6 +82,8 @@ class Evidence(BaseModel):
     source: str
     confidence: ConfidenceLevel | None = None
     notes: tuple[str, ...] = ()
+    query: str | None = None
+    variables: dict[str, JsonValue] | None = None
 
 
 class ResultError(BaseModel):

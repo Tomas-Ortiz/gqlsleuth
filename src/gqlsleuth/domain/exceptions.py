@@ -1,4 +1,4 @@
-"""Project-specific exceptions available through Phase 7."""
+"""Project-specific exceptions available through Phase 8."""
 
 
 class GQLSleuthError(Exception):
@@ -51,3 +51,7 @@ class RuleConfigurationError(GQLSleuthError):
 
 class OperationAnalysisError(GQLSleuthError):
     """Raised when a parsed schema cannot be analyzed deterministically."""
+
+
+class QueryGenerationError(GQLSleuthError):
+    """Raised when a finite valid query cannot be generated for one operation."""
