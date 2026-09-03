@@ -241,20 +241,25 @@ def test_login_uses_strong_input_semantics_and_allowed_token_output_context() ->
     assert result.categories == (
         OperationCategory.AUTHENTICATION,
         OperationCategory.TOKENS_AND_SESSIONS,
-        OperationCategory.PASSWORD_MANAGEMENT,
+        OperationCategory.SECRETS_AND_CREDENTIALS,
     )
     assert result.interest_score == 9
     assert result.priority is InterestPriority.CRITICAL_INTEREST
     assert matches["authentication"].locations == ("operation.name",)
-    assert matches["password_management"].locations == ("argument.password",)
+    assert matches["password_credentials"].locations == ("argument.password",)
     assert matches["tokens_and_sessions"].locations == ("return_field.accessToken",)
+    assert "password_management" not in matches
 
 
 def test_functional_rules_ignore_password_terms_found_only_in_output_context() -> None:
     schema = _schema(
         query_fields=(
             SchemaField(name="me", type=TypeReference.named("User")),
-            SchemaField(name="systemDiagnostics", type=TypeReference.named("Diagnostics")),
+            SchemaField(
+                name="systemDiagnostics",
+                arguments=(SchemaArgument(name="password", type=TypeReference.named("String")),),
+                type=TypeReference.named("Diagnostics"),
+            ),
         ),
         extra_types=(
             SchemaNamedType(
@@ -282,9 +287,17 @@ def test_functional_rules_ignore_password_terms_found_only_in_output_context() -
     assert me.interest_score == 0
     assert me.priority is InterestPriority.INFORMATIONAL
     assert OperationCategory.PASSWORD_MANAGEMENT not in diagnostics.categories
-    assert diagnostics.categories == (OperationCategory.DEBUGGING,)
-    assert diagnostics.interest_score == 3
-    assert "operation.name" in diagnostics.matched_rules[0].locations
+    assert diagnostics.categories == (
+        OperationCategory.SECRETS_AND_CREDENTIALS,
+        OperationCategory.DEBUGGING,
+    )
+    assert diagnostics.interest_score == 6
+    matches = {match.rule_id: match for match in diagnostics.matched_rules}
+    assert matches["debugging"].locations == (
+        "operation.name",
+        "return_type.Diagnostics",
+    )
+    assert matches["password_credentials"].locations == ("argument.password",)
     assert all(match.rule_id != "password_management" for match in diagnostics.matched_rules)
 
 
@@ -304,6 +317,7 @@ def test_reset_password_and_create_user_input_fields_remain_strong_matches() -> 
                 ),
                 type=TypeReference.named("Boolean"),
             ),
+            SchemaField(name="changePassword", type=TypeReference.named("Boolean")),
         ),
         extra_types=(
             SchemaNamedType(
@@ -311,6 +325,7 @@ def test_reset_password_and_create_user_input_fields_remain_strong_matches() -> 
                 kind=SchemaTypeKind.INPUT_OBJECT,
                 input_fields=(
                     SchemaInputField(name="password", type=TypeReference.named("String")),
+                    SchemaInputField(name="email", type=TypeReference.named("String")),
                 ),
             ),
             SchemaNamedType(name="Boolean", kind=SchemaTypeKind.SCALAR),
@@ -320,16 +335,45 @@ def test_reset_password_and_create_user_input_fields_remain_strong_matches() -> 
     reset_password = _analysis_named(schema, "resetPassword")
     create_user = _analysis_named(schema, "createUser")
 
-    assert reset_password.interest_score == 6
+    change_password = _analysis_named(schema, "changePassword")
+
+    assert reset_password.interest_score == 9
     assert reset_password.categories == (
         OperationCategory.PASSWORD_MANAGEMENT,
         OperationCategory.ACCOUNT_RECOVERY,
+        OperationCategory.SECRETS_AND_CREDENTIALS,
     )
-    password_match = next(
-        match for match in create_user.matched_rules if match.rule_id == "password_management"
+    credential_match = next(
+        match for match in create_user.matched_rules if match.rule_id == "password_credentials"
     )
-    assert password_match.locations == ("input_field.password",)
+    assert credential_match.locations == ("input_field.password",)
+    assert OperationCategory.USER_MANAGEMENT in create_user.categories
+    assert OperationCategory.PERSONAL_INFORMATION in create_user.categories
+    assert OperationCategory.SECRETS_AND_CREDENTIALS in create_user.categories
+    assert OperationCategory.PASSWORD_MANAGEMENT not in create_user.categories
     assert OperationCategory.STATE_CHANGING_BUSINESS_OPERATION not in create_user.categories
+    assert OperationCategory.PASSWORD_MANAGEMENT in change_password.categories
+    assert OperationCategory.ACCOUNT_RECOVERY not in change_password.categories
+
+
+def test_generic_country_flag_output_is_not_configuration() -> None:
+    schema = _schema(
+        query_fields=(SchemaField(name="country", type=TypeReference.named("Country")),),
+        extra_types=(
+            SchemaNamedType(
+                name="Country",
+                kind=SchemaTypeKind.OBJECT,
+                fields=(SchemaField(name="flag", type=TypeReference.named("String")),),
+            ),
+        ),
+    )
+
+    country = _analysis_named(schema, "country")
+
+    assert country.categories == (OperationCategory.READ_ONLY_BUSINESS_DATA,)
+    assert country.interest_score == 0
+    assert country.priority is InterestPriority.INFORMATIONAL
+    assert not country.matched_rules
 
 
 def _rule(

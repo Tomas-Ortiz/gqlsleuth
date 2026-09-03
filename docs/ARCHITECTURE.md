@@ -578,8 +578,12 @@ including authentication, authorization, password management, account recovery, 
 functionality, and user management, require primary or input evidence. Output context may support
 data-oriented categories such as tokens and sessions, personal information, secrets and
 credentials, files and downloads, billing, configuration, debugging, internal functionality,
-and reporting. A rule contributes its weight at most once per operation while retaining every
-matched keyword and surface location for explanation. Different rules contribute independently.
+and reporting. Accepting a password or passcode is classified as credential handling; password
+management requires an explicit action such as reset, change, update, forgot, or recover on a
+primary operation surface. Generic `flag` fields do not imply configuration, while explicit
+feature-flag terminology may still match. A rule contributes its weight at most once per operation
+while retaining every matched keyword and surface location for explanation. Different rules
+contribute independently.
 When no semantic rule matches, Query fields receive the `READ_ONLY_BUSINESS_DATA` fallback and
 Mutation fields receive `STATE_CHANGING_BUSINESS_OPERATION`; both remain informational unless a
 configured rule contributes a score.

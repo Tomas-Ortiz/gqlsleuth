@@ -37,10 +37,23 @@ rules:
     reason: Token or session terminology.
   - id: password_management
     category: password_management
-    keywords: [password, passcode]
-    surfaces: [primary, input]
+    keywords:
+      - reset password
+      - change password
+      - update password
+      - forgot password
+      - recover password
+      - password reset
+      - password change
+      - password recovery
+      - reset passcode
+      - change passcode
+      - update passcode
+      - forgot passcode
+      - recover passcode
+    surfaces: [primary]
     weight: 3
-    reason: Password-management terminology.
+    reason: Explicit password-management action terminology.
   - id: account_recovery
     category: account_recovery
     keywords: [recover, recovery, reset, forgot]
@@ -83,9 +96,23 @@ rules:
     surfaces: [primary, input, output]
     weight: 3
     reason: Secret or credential terminology.
+  - id: password_credentials
+    category: secrets_and_credentials
+    keywords: [password, passcode]
+    surfaces: [input]
+    weight: 3
+    reason: Password or passcode credential terminology.
   - id: configuration
     category: configuration
-    keywords: [config, configuration, setting, settings, feature, flag]
+    keywords:
+      - config
+      - configuration
+      - setting
+      - settings
+      - feature flag
+      - feature flags
+      - toggle
+      - toggles
     surfaces: [primary, input, output]
     weight: 2
     reason: Configuration-related terminology.
