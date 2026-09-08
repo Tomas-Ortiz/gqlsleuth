@@ -10,7 +10,7 @@ from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode, Target
 from gqlsleuth.infrastructure.http import HttpClient, HttpRequest, HttpResponse
 
 DISCOVERY_SOURCE = "gqlsleuth.application.endpoint_discovery"
-DISCOVERY_TIMEOUT_SECONDS = 5.0
+DISCOVERY_TIMEOUT_SECONDS = 8.0
 DISCOVERY_MAX_WORKERS = 4
 
 

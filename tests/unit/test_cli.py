@@ -1,4 +1,4 @@
-"""Tests for stable CLI behavior and Phase 8 workflow delegation."""
+"""Tests for stable CLI behavior and Phase 9 workflow delegation."""
 
 import pytest
 from typer.testing import CliRunner
@@ -22,6 +22,10 @@ from gqlsleuth.application.operation_analysis import (
     OperationAnalysisScanResult,
 )
 from gqlsleuth.application.query_generation import QueryGenerationScanResult
+from gqlsleuth.application.safe_execution import (
+    QueryExecutionResult,
+    SafeExecutionScanResult,
+)
 from gqlsleuth.application.schema_parsing import EndpointSchemaResult, SchemaScanResult
 from gqlsleuth.domain.analysis import (
     InterestPriority,
@@ -30,6 +34,7 @@ from gqlsleuth.domain.analysis import (
     OperationKind,
     RuleMatch,
 )
+from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.models import ConfidenceLevel, ScanMode, Target
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.domain.schema import ParsedSchema, SchemaSummary, TypeReference
@@ -49,7 +54,7 @@ def scan_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
         target_url: str,
         *,
         mode: ScanMode = ScanMode.SAFE,
-    ) -> QueryGenerationScanResult:
+    ) -> SafeExecutionScanResult:
         target = Target.parse(target_url)
         calls.append((target_url, mode))
         candidate_url = f"{target.scheme}://{target.host}/graphql"
@@ -170,7 +175,7 @@ def scan_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
             ),
             operation_evidence=(),
         )
-        return QueryGenerationScanResult(
+        generation_result = QueryGenerationScanResult(
             operation_analysis=analysis_result,
             queries=(
                 QueryGenerationResult(
@@ -183,8 +188,23 @@ def scan_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
             ),
             query_evidence=(),
         )
+        return SafeExecutionScanResult(
+            query_generation=generation_result,
+            executions=(
+                QueryExecutionResult(
+                    generated_query=generation_result.queries[0],
+                    status=QueryExecutionStatus.SUCCESS,
+                    attempted=True,
+                    response=response,
+                    error_type=None,
+                    error_message=None,
+                    reason="GraphQL response contains data.",
+                ),
+            ),
+            execution_evidence=(),
+        )
 
-    monkeypatch.setattr(cli_module, "run_query_generation_scan", fake_scan)
+    monkeypatch.setattr(cli_module, "run_safe_execution_scan", fake_scan)
     return calls
 
 
@@ -234,14 +254,14 @@ def test_version_command_reports_package_version() -> None:
     assert result.stdout.strip() == f"GQLSleuth {__version__}"
 
 
-def test_scan_command_runs_safe_query_generation_workflow() -> None:
+def test_scan_command_runs_safe_execution_workflow() -> None:
     target = "https://example.com"
 
     result = runner.invoke(app, ["scan", target])
     output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
-    assert "query generation completed" in output
+    assert "safe execution completed" in output
     assert "GraphQL: CONFIRMED" in output
     assert "Introspection: ENABLED" in output
     assert "Schema: PARSED" in output
@@ -257,7 +277,9 @@ def test_scan_command_runs_safe_query_generation_workflow() -> None:
     assert "Generated read-only queries: 1/1" in output
     assert "query { exportUsers }" in output
     assert "generated 1/1 read-only query artifact(s)" in output
-    assert "Generated queries were not executed" in output
+    assert "Safe query execution: 1 executed; 1 succeeded" in output
+    assert "[query] exportUsers — SUCCESS — HTTP 404" in output
+    assert "executed 1, succeeded 1" in output
     assert "processed 1 schema result(s)" in output
     assert "not vulnerability severities or vulnerability confirmation" in output.lower()
     assert target in output
@@ -290,13 +312,13 @@ def test_scan_accepts_explicit_safe_mode() -> None:
     assert "not vulnerability severities or vulnerability confirmation" in output
 
 
-def test_scan_accepts_active_with_the_same_non_executing_query_generation_behavior() -> None:
+def test_scan_accepts_active_with_the_same_safe_query_execution_behavior() -> None:
     result = runner.invoke(app, ["scan", "https://example.com", "--mode", "active"])
     output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
     assert "Effective mode: active" in output
-    assert "same non-executing query-generation behavior" in output
+    assert "same safe Query-only execution behavior" in output
     assert "not vulnerability severities or vulnerability confirmation" in output
 
 
@@ -308,7 +330,7 @@ def test_scan_reports_invalid_target_without_a_traceback() -> None:
     assert "Traceback" not in result.stderr
 
 
-def test_scan_delegates_target_and_mode_to_phase_eight_workflow(
+def test_scan_delegates_target_and_mode_to_phase_nine_workflow(
     scan_calls: list[tuple[str, ScanMode]],
 ) -> None:
     result = runner.invoke(app, ["scan", "https://example.com"])

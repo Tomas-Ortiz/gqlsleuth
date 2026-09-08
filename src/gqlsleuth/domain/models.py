@@ -1,4 +1,4 @@
-"""Typed configuration-independent domain data available through Phase 8."""
+"""Typed configuration-independent domain data available through Phase 9."""
 
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -12,7 +12,7 @@ from gqlsleuth.domain.exceptions import InvalidUrlError, UnsupportedSchemeError
 
 
 class ScanMode(StrEnum):
-    """Selected scan mode; ACTIVE has no distinct behavior through Phase 7."""
+    """Selected scan mode; ACTIVE has no distinct behavior through Phase 9."""
 
     SAFE = "safe"
     ACTIVE = "active"
@@ -84,6 +84,13 @@ class Evidence(BaseModel):
     notes: tuple[str, ...] = ()
     query: str | None = None
     variables: dict[str, JsonValue] | None = None
+    request_method: str | None = None
+    response_status_code: int | None = None
+    response_headers: dict[str, str] | None = None
+    response_body: bytes | None = None
+    duration_seconds: float | None = None
+    error_type: str | None = None
+    error_message: str | None = None
 
 
 class ResultError(BaseModel):

@@ -12,10 +12,11 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 8 — query generation**. It provides the Phase 0
+The repository is currently at **Phase 9 — safe query execution**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
-parsing, Phase 7 operation analysis, and Phase 8 local read-only query generation.
+parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
+controlled Query execution.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
@@ -42,9 +43,14 @@ stable candidate order. GraphQL POST probes and introspection continue using the
 HTTP timeout. A fallback POST is sent only when discovery received an inconclusive HTTP response;
 transport failures without a response proceed directly to the next candidate.
 
-These priorities are manual-review aids, not vulnerability severities or proof of a
-vulnerability. Phase 8 preserves generated queries and placeholder variables as local evidence,
-but it does not send or execute any generated Query, Mutation, or Subscription operation.
+Phase 9 defensively validates each successful generated artifact against the parsed Query root
+before sending it sequentially. It executes at most 20 Query operations per scan and skips Query
+names containing explicit state-changing action tokens such as `delete`, `burn`, or `reset`.
+Mutations and Subscriptions are never executed. Placeholder-related GraphQL errors are retained as
+normal execution evidence rather than treated as scanner failures.
+
+Priorities and execution results are evidence for manual review, not vulnerability severities or
+proof of a vulnerability.
 
 ## Requirements
 
@@ -74,7 +80,7 @@ uv run gqlsleuth version
 ```
 
 Run safe endpoint discovery, GraphQL detection, introspection, schema parsing, operation
-prioritization, and local query generation with the default mode:
+prioritization, query generation, and safe Query execution with the default mode:
 
 ```bash
 uv run gqlsleuth scan https://example.com
@@ -88,15 +94,20 @@ uv run gqlsleuth scan https://example.com --mode active
 ```
 
 ACTIVE performs the same safe discovery, detection, read-only introspection, local schema
-parsing, local rule-based analysis, and non-executing query generation as SAFE during Phase 8.
-It does not enable active-only behavior.
+parsing, local rule-based analysis, query generation, and Query-only execution as SAFE during
+Phase 9. It does not enable active-only behavior or Mutation execution.
 
 The CLI displays at most the ten highest-priority review candidates while the structured
 application result retains every analyzed Query and Mutation root field. Each displayed
 candidate includes its interest score, categories, matched rules, and deterministic reason.
 The CLI also shows at most five generated Query examples. Structured results retain every
 successful or failed Query-generation result. Generated variables are placeholders and may need
-manual adjustment before a future execution phase.
+manual adjustment for the target application's semantics.
+
+The execution summary distinguishes successful responses, GraphQL/application errors, transport
+failures, and operations skipped for safety or because of the 20-request limit. Generated
+placeholder values may be rejected by application-level validation; such responses are expected
+possible outcomes.
 
 ## Configuration
 

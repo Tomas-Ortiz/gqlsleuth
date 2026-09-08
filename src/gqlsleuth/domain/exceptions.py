@@ -1,4 +1,4 @@
-"""Project-specific exceptions available through Phase 8."""
+"""Project-specific exceptions available through Phase 9."""
 
 
 class GQLSleuthError(Exception):
@@ -55,3 +55,7 @@ class OperationAnalysisError(GQLSleuthError):
 
 class QueryGenerationError(GQLSleuthError):
     """Raised when a finite valid query cannot be generated for one operation."""
+
+
+class SafeExecutionValidationError(GQLSleuthError):
+    """Raised when a generated artifact is unsafe or inconsistent with its schema."""

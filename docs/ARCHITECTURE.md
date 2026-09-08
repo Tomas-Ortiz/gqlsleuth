@@ -717,6 +717,35 @@ It must preserve:
 - Error information.
 - Classification and priority.
 
+The initial Phase 9 implementation executes only successful Phase 8 artifacts. Before HTTP, it
+verifies that artifact metadata is Query, the operation exists on the retained parsed Query root,
+the document parses, contains exactly one Query and no Mutation or Subscription, and selects
+exactly the expected top-level Query field. An invalid artifact is skipped without a request.
+
+A separate conservative name-only safety rule tokenizes the primary Query field name and skips
+exact action tokens including `create`, `update`, `delete`, `remove`, `burn`, `write`, `set`,
+`change`, `reset`, `revoke`, `invalidate`, `logout`, `upload`, `import`, `send`, `trigger`,
+`execute`, and `consume`. It does not inspect arguments or return fields and does not reuse Phase 7
+interest scoring. Matching Query operations are retained as `SKIPPED_SAFETY`.
+
+Eligible artifacts are executed sequentially in existing Phase 7 priority order, with a hard
+internal maximum of 20 requests per scan. Remaining safe artifacts become `SKIPPED_LIMIT` and are
+never requested. Each execution sends exactly one POST through the centralized HTTP client using
+`{"query": "...", "variables": {...}}`, without `operationName`, retries, batching, or
+concurrency.
+
+Statuses are `SUCCESS` for GraphQL JSON containing `data` without non-empty interpretable errors,
+`GRAPHQL_ERROR` for GraphQL-shaped errors (including partial data), `HTTP_ERROR` for HTTP 4xx/5xx
+without interpretable GraphQL errors, `INVALID_RESPONSE` for non-error non-GraphQL responses,
+`NETWORK_FAILURE` for normalized transport failures, plus the two skipped statuses above. One
+result never stops later eligible operations.
+
+Every attempted request creates `QUERY_EXECUTION` evidence retaining the POST method, exact query
+and variables, HTTP response status/headers/body/duration when available, normalized transport
+failure details, and the associated classification and review priority. Skipped operations create
+no fabricated HTTP evidence. Execution results are observations, not vulnerability confirmation.
+SAFE and ACTIVE use the same Query-only behavior through Phase 9.
+
 ## 18. Authentication support
 
 The MVP may support user-provided headers:
@@ -1389,6 +1418,12 @@ Deliverables:
 - Execution limits.
 - CLI integration.
 - Tests.
+
+The initial implementation defensively revalidates generated artifacts, conservatively skips
+obviously side-effecting Query names, and sequentially executes no more than 20 Query operations.
+It classifies GraphQL, HTTP, invalid-response, and normalized network outcomes independently,
+preserves exact request/response evidence for attempted operations, and isolates failures. It
+never executes Mutations or Subscriptions; ACTIVE remains behaviorally identical to SAFE.
 
 ### Phase 10 — Active mode
 
