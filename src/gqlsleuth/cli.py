@@ -1,5 +1,7 @@
 """Command-line interface for safe GraphQL discovery and Query execution."""
 
+import re
+import sys
 from json import dumps
 from typing import Annotated
 
@@ -8,12 +10,20 @@ from rich.console import Console
 from rich.markup import escape
 
 from gqlsleuth import __version__
+from gqlsleuth.application.active_execution import (
+    ActiveExecutionScanResult,
+    ActiveMutationPreviewResult,
+    execute_selected_mutations,
+    prepare_active_mutations,
+)
 from gqlsleuth.application.operation_analysis import EndpointOperationAnalysisResult
 from gqlsleuth.application.safe_execution import (
     QueryExecutionResult,
+    SafeExecutionScanResult,
     run_safe_execution_scan,
 )
 from gqlsleuth.application.schema_parsing import EndpointSchemaResult
+from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS, MutationDecision, MutationPreview
 from gqlsleuth.domain.analysis import OperationAnalysis
 from gqlsleuth.domain.exceptions import GQLSleuthError
 from gqlsleuth.domain.execution import QueryExecutionStatus
@@ -55,12 +65,17 @@ def scan(
         ScanMode,
         typer.Option(
             "--mode",
-            help="Scan mode. ACTIVE performs the same safe behavior in Phase 9.",
+            help=(
+                "SAFE is default. ACTIVE acknowledges active capabilities for an authorized "
+                "target; Mutations require explicit selection and one final batch confirmation."
+            ),
             case_sensitive=False,
         ),
     ] = ScanMode.SAFE,
 ) -> None:
     """Discover GraphQL and safely execute validated generated Query operations."""
+    if mode is ScanMode.ACTIVE:
+        console.print("ACTIVE mode: use only against systems you are authorized to test.")
     try:
         result = run_safe_execution_scan(
             target,
@@ -136,7 +151,117 @@ def scan(
     mode = introspection_scan.detection.discovery.mode
     console.print(f"Effective mode: [cyan]{mode.value}[/cyan].")
     if mode is ScanMode.ACTIVE:
-        console.print("ACTIVE mode uses the same safe Query-only execution behavior in Phase 9.")
+        _run_active_stage(result)
+
+
+def _interactive_stdin() -> bool:
+    return sys.stdin is not None and sys.stdin.isatty()
+
+
+def _run_active_stage(safe_result: SafeExecutionScanResult) -> ActiveExecutionScanResult:
+    preview = prepare_active_mutations(safe_result)
+    console.print("Active Mutation candidates:")
+    for index, candidate in enumerate(preview.candidates, start=1):
+        _render_mutation(index, candidate)
+    selected: tuple[int, ...] = ()
+    confirmed = False
+    if not preview.candidates:
+        console.print("No Mutation candidates.")
+    elif not _interactive_stdin():
+        console.print(
+            "Interactive selection and confirmation are required; zero Mutations will execute."
+        )
+    elif not any(candidate.selectable for candidate in preview.candidates):
+        console.print("No executable Mutation candidates.")
+    else:
+        try:
+            selected = _select_mutations(preview)
+            if selected:
+                console.print("Selected Mutations:")
+                for index in selected:
+                    _render_mutation(index, preview.candidates[index - 1])
+                console.print("WARNING: These operations may modify application state.")
+                confirmed = typer.confirm(
+                    f"Execute these {len(selected)} selected Mutations?", default=False
+                )
+        except (typer.Abort, EOFError, KeyboardInterrupt):
+            console.print("Mutation selection/confirmation cancelled; zero Mutations will execute.")
+    result = execute_selected_mutations(preview, selected_indices=selected, confirmed=confirmed)
+    _render_active_execution(result)
+    return result
+
+
+def _select_mutations(preview: ActiveMutationPreviewResult) -> tuple[int, ...]:
+    while True:
+        value = typer.prompt(
+            "Select Mutations to execute (max 5, Enter for none)", default="", show_default=False
+        ).strip()
+        if not value:
+            return ()
+        if re.fullmatch(r"[0-9]+(?:\s*,\s*[0-9]+)*", value) is None:
+            console.print("Enter individual comma-separated indices only (for example, 1,3).")
+            continue
+        # Compare normalized decimal strings first to avoid unbounded integer conversion.
+        indices = {str(index): index for index in range(1, len(preview.candidates) + 1)}
+        tokens = tuple(token.strip().lstrip("0") or "0" for token in value.split(","))
+        if any(token not in indices for token in tokens):
+            console.print("Unknown Mutation index; choose only executable candidate indices.")
+            continue
+        selected = tuple(sorted({indices[token] for token in tokens}))
+        if len(selected) > MAX_MUTATION_EXECUTIONS:
+            console.print("Select at most 5 Mutations.")
+            continue
+        if any(not preview.candidates[index - 1].selectable for index in selected):
+            console.print("Blocked or failed Mutation candidates cannot be selected.")
+            continue
+        return selected
+
+
+def _render_mutation(index: int, candidate: MutationPreview) -> None:
+    artifact = candidate.generated_mutation
+    priority = artifact.operation.priority.value.replace("_", " ").upper()
+    label = priority if candidate.selectable else candidate.decision.value.replace("_", " ").upper()
+    console.print(
+        f"[{index}] {label} {artifact.operation_name} — {artifact.endpoint}", markup=False
+    )
+    if not candidate.selectable:
+        console.print(candidate.reason, markup=False)
+        return
+    console.print(
+        "Categories: " + ", ".join(item.value for item in artifact.operation.categories),
+        markup=False,
+    )
+    console.print(artifact.query_text or "", markup=False)
+    console.print("Variables: " + dumps(artifact.variables, sort_keys=True), markup=False)
+    console.print("Placeholder values may require manual adjustment.")
+    for note in artifact.manual_adjustments:
+        console.print("Warning: " + note, markup=False)
+
+
+def _render_active_execution(result: ActiveExecutionScanResult) -> None:
+    candidates = result.preview.candidates
+    executed = sum(item.attempted for item in result.executions)
+    selected = sum(item.selected for item in result.executions)
+    succeeded = sum(item.status is QueryExecutionStatus.SUCCESS for item in result.executions)
+    graphql_errors = sum(
+        item.status is QueryExecutionStatus.GRAPHQL_ERROR for item in result.executions
+    )
+    blocked = sum(item.decision is MutationDecision.BLOCKED_SAFETY for item in candidates)
+    console.print(
+        f"Active Mutation execution: {len(candidates)} identified; "
+        f"{sum(item.generated_mutation.success for item in candidates)} generated; "
+        f"{blocked} blocked for safety; "
+        f"{selected} selected; {selected if result.confirmed else 0} confirmed; "
+        f"{executed} executed; {succeeded} succeeded; {graphql_errors} GraphQL error(s)."
+    )
+    for item in result.executions:
+        if not item.selected:
+            continue
+        status = item.status.value if item.status is not None else item.decision.value
+        console.print(
+            f"  {item.preview.generated_mutation.operation_name}: {status.upper()}", markup=False
+        )
+    console.print("Mutation execution results are evidence, not vulnerability confirmation.")
 
 
 def _render_schema(schema_result: EndpointSchemaResult) -> None:

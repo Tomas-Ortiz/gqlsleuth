@@ -12,7 +12,7 @@ from gqlsleuth.domain.exceptions import InvalidUrlError, UnsupportedSchemeError
 
 
 class ScanMode(StrEnum):
-    """Selected scan mode; ACTIVE has no distinct behavior through Phase 9."""
+    """SAFE is default; ACTIVE enables previews and separately confirmed Mutation execution."""
 
     SAFE = "safe"
     ACTIVE = "active"

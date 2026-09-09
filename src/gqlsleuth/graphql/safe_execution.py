@@ -9,7 +9,7 @@ from graphql.language.ast import FieldNode, OperationDefinitionNode, OperationTy
 from gqlsleuth.domain.analysis import OperationKind
 from gqlsleuth.domain.exceptions import SafeExecutionValidationError
 from gqlsleuth.domain.execution import QueryExecutionStatus
-from gqlsleuth.domain.query_generation import QueryGenerationResult
+from gqlsleuth.domain.query_generation import OperationGenerationResult, QueryGenerationResult
 from gqlsleuth.domain.schema import ParsedSchema, SchemaTypeKind
 from gqlsleuth.rules.operation_analysis import normalize_terms
 
@@ -45,18 +45,29 @@ class ResponseClassification:
 
 def validate_safe_artifact(schema: ParsedSchema, artifact: QueryGenerationResult) -> None:
     """Reject generated artifacts that are not exactly the expected Query operation."""
-    if artifact.operation_kind is not OperationKind.QUERY:
-        raise SafeExecutionValidationError("Artifact metadata is not a Query operation.")
+    validate_operation_artifact(schema, artifact, expected_kind=OperationKind.QUERY)
+
+
+def validate_operation_artifact(
+    schema: ParsedSchema,
+    artifact: OperationGenerationResult,
+    *,
+    expected_kind: OperationKind,
+) -> None:
+    """Validate actual root membership and document structure independently of generation."""
+    kind = expected_kind.value.title()
+    if artifact.operation_kind is not expected_kind:
+        raise SafeExecutionValidationError(f"Artifact metadata is not a {kind} operation.")
     if not artifact.success or artifact.query_text is None:
         raise SafeExecutionValidationError("Artifact does not contain a generated query.")
 
-    root = schema.type_named(schema.query_root)
+    root_name = schema.query_root if expected_kind is OperationKind.QUERY else schema.mutation_root
+    root = schema.type_named(root_name) if root_name is not None else None
     if root is None or root.kind is not SchemaTypeKind.OBJECT:
-        raise SafeExecutionValidationError(f"Query root '{schema.query_root}' is unavailable.")
+        raise SafeExecutionValidationError(f"{kind} root '{root_name}' is unavailable.")
     if not any(field.name == artifact.operation_name for field in root.fields):
         raise SafeExecutionValidationError(
-            f"Operation '{artifact.operation_name}' is not present on "
-            f"Query root '{schema.query_root}'."
+            f"Operation '{artifact.operation_name}' is not present on {kind} root '{root_name}'."
         )
 
     try:
@@ -71,23 +82,35 @@ def validate_safe_artifact(schema: ParsedSchema, artifact: QueryGenerationResult
         for definition in document.definitions
         if isinstance(definition, OperationDefinitionNode)
     )
-    if any(operation.operation is not OperationType.QUERY for operation in operations):
+    expected_type = OperationType(expected_kind.value)
+    if any(operation.operation is not expected_type for operation in operations):
         raise SafeExecutionValidationError(
             "Generated document contains a Mutation or Subscription."
+            if expected_kind is OperationKind.QUERY
+            else "Generated document contains a Query or Subscription."
         )
     if len(operations) != 1:
         raise SafeExecutionValidationError(
-            "Generated document must contain exactly one Query operation."
+            f"Generated document must contain exactly one {kind} operation."
         )
     selections = operations[0].selection_set.selections
     if len(selections) != 1 or not isinstance(selections[0], FieldNode):
         raise SafeExecutionValidationError(
-            "Generated Query must select exactly one top-level field."
+            f"Generated {kind} must select exactly one top-level field."
         )
     if selections[0].name.value != artifact.operation_name:
         raise SafeExecutionValidationError(
-            "Generated Query top-level field does not match the expected Query-root field."
+            f"Generated {kind} top-level field does not match the expected {kind}-root field."
         )
+    if expected_kind is OperationKind.MUTATION:
+        if artifact.failure_reason is not None:
+            raise SafeExecutionValidationError(
+                "Mutation artifact also declares generation failure."
+            )
+        if operations[0].name is not None or selections[0].alias is not None:
+            raise SafeExecutionValidationError(
+                "Mutations must be anonymous and cannot use aliases."
+            )
 
 
 def side_effect_tokens(operation_name: str) -> tuple[str, ...]:

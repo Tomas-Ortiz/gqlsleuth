@@ -508,13 +508,16 @@ Safe mode must not:
 
 Active behavior must require explicit user acknowledgement.
 
-The expected authorization gate is:
+The Phase 10 explicit active-mode gate is:
 
 ```bash
---mode active --authorized
+--mode active
 ```
 
-Do not weaken or bypass this requirement.
+Selecting ACTIVE acknowledges active capabilities for an authorized target. It does not authorize
+Mutation execution. Require explicit selection of up to five eligible Mutations and one final
+batch confirmation, defaulting to NO. Do not add `--authorized`, automatic confirmation, or
+per-Mutation confirmation prompts. SAFE must never enter the Mutation stage.
 
 Do not introduce functionality that automatically:
 

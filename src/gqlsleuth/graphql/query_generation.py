@@ -1,8 +1,9 @@
-"""Generate deterministic minimal Query operations without executing them."""
+"""Generate minimal Query and Mutation documents using shared finite input/output rules."""
 
 from graphql import GraphQLError, parse
 from pydantic import JsonValue
 
+from gqlsleuth.domain.active import MutationGenerationResult
 from gqlsleuth.domain.analysis import OperationAnalysis, OperationKind
 from gqlsleuth.domain.exceptions import QueryGenerationError
 from gqlsleuth.domain.query_generation import QueryGenerationResult
@@ -36,11 +37,35 @@ def generate_query(
     """Generate one anonymous Query document from project-owned schema models."""
     if operation.kind is not OperationKind.QUERY:
         raise QueryGenerationError("Only Query-root operations can be generated in Phase 8.")
+    return QueryGenerationResult(
+        operation, *_generate_document(schema, operation, max_selection_depth)
+    )
+
+
+def generate_mutation(
+    schema: ParsedSchema,
+    operation: OperationAnalysis,
+    *,
+    max_selection_depth: int = DEFAULT_MAX_SELECTION_DEPTH,
+) -> MutationGenerationResult:
+    """Generate one anonymous Mutation locally; callers must gate execution separately."""
+    if operation.kind is not OperationKind.MUTATION:
+        raise QueryGenerationError("Only Mutation-root operations can generate Mutations.")
+    return MutationGenerationResult(
+        operation, *_generate_document(schema, operation, max_selection_depth)
+    )
+
+
+def _generate_document(
+    schema: ParsedSchema,
+    operation: OperationAnalysis,
+    max_selection_depth: int,
+) -> tuple[str, dict[str, JsonValue], tuple[str, ...], None]:
     if max_selection_depth < 1:
         raise QueryGenerationError("Maximum selection depth must be at least 1.")
 
     try:
-        field = _query_field(schema, operation.name)
+        field = _operation_field(schema, operation)
         required_arguments = tuple(
             sorted(
                 (argument for argument in field.arguments if _is_required(argument)),
@@ -65,30 +90,26 @@ def generate_query(
             max_depth=max_selection_depth,
             active_types=frozenset(),
         )
-        query_text = _render_query(field, required_arguments, selection)
+        query_text = _render_query(field, required_arguments, selection, operation.kind)
         parse(query_text)
     except QueryGenerationError:
         raise
     except (GraphQLError, ValueError) as error:
         raise QueryGenerationError(f"Could not generate a valid query: {error}") from error
 
-    return QueryGenerationResult(
-        operation=operation,
-        query_text=query_text,
-        variables=variables,
-        manual_adjustments=tuple(dict.fromkeys(adjustments)),
-        failure_reason=None,
-    )
+    return query_text, variables, tuple(dict.fromkeys(adjustments)), None
 
 
-def _query_field(schema: ParsedSchema, operation_name: str) -> SchemaField:
-    root = schema.type_named(schema.query_root)
+def _operation_field(schema: ParsedSchema, operation: OperationAnalysis) -> SchemaField:
+    root_name = schema.query_root if operation.kind is OperationKind.QUERY else schema.mutation_root
+    kind = operation.kind.value.title()
+    root = schema.type_named(root_name) if root_name is not None else None
     if root is None or root.kind is not SchemaTypeKind.OBJECT:
-        raise QueryGenerationError(f"Query root '{schema.query_root}' is unavailable.")
-    field = next((item for item in root.fields if item.name == operation_name), None)
+        raise QueryGenerationError(f"{kind} root '{root_name}' is unavailable.")
+    field = next((item for item in root.fields if item.name == operation.name), None)
     if field is None:
         raise QueryGenerationError(
-            f"Query operation '{operation_name}' is missing from root '{schema.query_root}'."
+            f"{kind} operation '{operation.name}' is missing from root '{root_name}'."
         )
     return field
 
@@ -237,12 +258,13 @@ def _render_query(
     field: SchemaField,
     required_arguments: tuple[SchemaArgument, ...],
     selection: str | None,
+    kind: OperationKind,
 ) -> str:
     definitions = ", ".join(
         f"${argument.name}: {argument.type.render()}" for argument in required_arguments
     )
     uses = ", ".join(f"{argument.name}: ${argument.name}" for argument in required_arguments)
-    operation_header = f"query ({definitions})" if definitions else "query"
+    operation_header = f"{kind.value} ({definitions})" if definitions else kind.value
     field_call = f"{field.name}({uses})" if uses else field.name
     if selection is not None:
         field_call = f"{field_call} {{\n{_indent(selection, 2)}\n}}"

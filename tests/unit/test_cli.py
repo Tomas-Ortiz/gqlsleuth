@@ -312,13 +312,14 @@ def test_scan_accepts_explicit_safe_mode() -> None:
     assert "not vulnerability severities or vulnerability confirmation" in output
 
 
-def test_scan_accepts_active_with_the_same_safe_query_execution_behavior() -> None:
+def test_scan_accepts_active_and_retains_safe_query_execution_before_previews() -> None:
     result = runner.invoke(app, ["scan", "https://example.com", "--mode", "active"])
     output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
     assert "Effective mode: active" in output
-    assert "same safe Query-only execution behavior" in output
+    assert "Safe query execution: 1 executed; 1 succeeded" in output
+    assert "Active Mutation candidates:" in output
     assert "not vulnerability severities or vulnerability confirmation" in output
 
 

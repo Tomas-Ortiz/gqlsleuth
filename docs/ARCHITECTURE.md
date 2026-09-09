@@ -88,10 +88,12 @@ Active functionality must require explicit acknowledgement from the user.
 Example:
 
 ```bash
-gqlsleuth scan https://example.com/graphql --mode active --authorized
+gqlsleuth scan https://example.com/graphql --mode active
 ```
 
-Without the `--authorized` flag, active mode must not execute.
+Selecting `--mode active` explicitly acknowledges entry into active capabilities for an
+authorized target. No Mutation executes without explicit selection and one final batch
+confirmation. There is no `--authorized` flag or automatic-confirmation option.
 
 ## 6. Operating modes
 
@@ -142,24 +144,28 @@ gqlsleuth scan https://example.com --mode safe
 
 Active mode enables functionality that may modify application state or produce a higher level of interaction with the target.
 
-It must require both `--mode active` and `--authorized`:
+It requires explicit `--mode active` selection:
 
 ```bash
-gqlsleuth scan https://example.com/graphql --mode active --authorized
+gqlsleuth scan https://example.com/graphql --mode active
 ```
 
-Active mode may eventually support controlled mutation execution.
+Phase 10 supports controlled Mutation execution after the complete existing safe Query workflow.
+ACTIVE alone executes zero Mutations. SAFE never generates Mutation documents, enters Mutation
+selection/confirmation UI, executes Mutations, or creates Mutation execution evidence.
 
 Even in active mode, the tool must:
 
-- Avoid destructive behavior by default.
+- Block clearly destructive primary Mutation-name action tokens with no override.
 - Show the operation before executing it.
-- Require explicit confirmation for risky operations.
+- Require explicit individual-index batch selection and one final confirmation, default NO.
 - Preserve the exact request and response as evidence.
 - Apply request limits and timeouts.
 - Clearly label active results in reports.
 
-Active mode is not part of the first minimal implementation and must be introduced only after safe-mode functionality is stable.
+There are no per-Mutation confirmation prompts. Non-interactive stdin never prompts, selects,
+or confirms: previews are retained, a clear message is printed, and zero Mutations execute.
+The hard limit is five attempted Mutation requests per scan. Subscriptions remain out of scope.
 
 ## 7. Accepted input
 
@@ -211,6 +217,10 @@ Minimal query generation
     ↓
 Safe execution
     ↓
+ACTIVE only: Mutation generation → validation → safety classification → preview
+    ↓
+ACTIVE only: explicit batch selection → one final confirmation → sequential execution
+    ↓
 Evidence collection
     ↓
 Report generation
@@ -254,7 +264,7 @@ normalized transport failure is recorded for its candidate without preventing la
 from being probed. Each outcome creates `ENDPOINT_CANDIDATE` evidence; no GraphQL confirmation,
 observation, finding, or confidence score is produced in this phase.
 
-Discovery GET probes use a five-second per-request timeout. The preferred candidate is requested
+Discovery GET probes use an eight-second per-request timeout. The preferred candidate is requested
 alone first. In the complete scan workflow, Phase 4 immediately analyzes and, when needed, probes
 that result before additional discovery begins. If it reaches `CONFIRMED` or `PROBABLE`, remaining
 candidates are never requested or represented in results. Otherwise, the remaining candidates are
@@ -371,7 +381,7 @@ The Phase 2 defaults are:
 - TLS verification enabled.
 - Redirects enabled.
 - Maximum redirects set to 5.
-- Timeout set to 10 seconds.
+- Timeout set to 10 seconds (discovery GET overrides this to 8 seconds).
 - Maximum response body set to 5 MiB.
 - No proxy.
 - Environment-derived HTTP configuration disabled with `trust_env=False`.
@@ -379,7 +389,7 @@ The Phase 2 defaults are:
 
 The normal ten-second client timeout remains in effect for Phase 4 fallback POST requests and all
 Phase 5 minimal/full introspection requests. Only Phase 3 discovery GET requests override it with
-the shorter five-second timeout.
+the shorter eight-second timeout.
 
 ## 12. Introspection
 
@@ -645,7 +655,7 @@ GQLSleuth should generate syntactically valid minimal GraphQL queries from the s
 Example:
 
 ```graphql
-query GetCurrentUser {
+query {
   currentUser {
     id
     username
@@ -656,7 +666,7 @@ query GetCurrentUser {
 For operations with required arguments:
 
 ```graphql
-query UserById($id: ID!) {
+query ($id: ID!) {
   user(id: $id) {
     id
     username
@@ -746,6 +756,82 @@ failure details, and the associated classification and review priority. Skipped 
 no fabricated HTTP evidence. Execution results are observations, not vulnerability confirmation.
 SAFE and ACTIVE use the same Query-only behavior through Phase 9.
 
+### 17.1 Controlled active Mutation execution (Phase 10)
+
+The application API separates local preparation from selected execution:
+
+```python
+safe_result = run_safe_execution_scan(target, mode=ScanMode.ACTIVE)
+preview = prepare_active_mutations(safe_result)
+# CLI renders previews, reads explicit indices, renders the exact selected batch,
+# and asks one final confirmation, default NO.
+result = execute_selected_mutations(
+    preview,
+    selected_indices=selected_indices,
+    confirmed=confirmed,
+)
+```
+
+`ActiveMutationPreviewResult` composes the complete `SafeExecutionScanResult` with ordered
+`MutationPreview` candidates. Each candidate contains a `MutationGenerationResult`, decision,
+and reason. Query and Mutation generation results share the project-owned
+`OperationGenerationResult` representation: Phase 7 analysis (including endpoint), exact
+document in `query_text`, exact variables, manual-adjustment notes, and optional generation
+failure. No earlier scan data is flattened or duplicated.
+
+Generation uses the shared Phase 8 input-placeholder, required-argument, minimal-output,
+recursion, depth-limit, and syntax-validation implementation. The existing `generate_query`
+API remains Query-only; `generate_mutation` accepts Mutation metadata and resolves the actual
+parsed Mutation root. Mutation operations are anonymous. Optional/default arguments stay omitted,
+custom scalars retain manual-adjustment warnings, and one generation failure does not stop others.
+Preparation makes no HTTP requests and returns no candidates in SAFE mode.
+
+Defensive validation independently checks metadata kind, retained Mutation-root membership,
+GraphQL syntax, exactly one operation of type Mutation with no Query or Subscription, and
+exactly one top-level field matching the expected Mutation. Named Mutations and top-level aliases
+are rejected. Query and Mutation validation share these structural checks without weakening
+Phase 9. Execution revalidates artifacts and their retained Phase 7 metadata instead of trusting
+preview eligibility flags; forged, duplicate, or inconsistent candidates never execute.
+
+Safety uses only exact tokens in the primary Mutation field name. The blocked action tokens are
+`delete`, `remove`, `destroy`, `purge`, `drop`, `wipe`, `erase`, `burn`, and `truncate`. Existing
+camelCase/PascalCase/snake_case/kebab-case tokenization is reused, with no arbitrary substring
+matches. Arguments, output fields, and Phase 7 interest scores do not determine safety.
+`createUser`, `updateProfile`, and `setPreference` can remain executable; `deleteUser` and
+`purgeAuditLog` cannot. There is no destructive-operation override.
+
+The CLI previews all candidates, showing blocked/failed reasons. Executable previews include
+endpoint, name, priority, categories, exact Mutation, variables, and adjustment warnings. Selection
+accepts comma-separated individual executable indices only, with no default, `all`, wildcard,
+or ranges. Duplicates are deduplicated. Invalid or blocked indices cause a concise error and
+another selection attempt. Enter selects none. At most five unique candidates can be selected
+in the CLI. After showing the exact selected batch, one final `[y/N]` confirmation authorizes it.
+Cancellation or declining executes none; non-interactive input is never consumed for approval.
+
+`ActiveExecutionScanResult` composes the preview with selection indices, strict Boolean
+confirmation state, ordered `MutationExecutionResult` decisions, and actual execution evidence.
+Decisions include `EXECUTABLE`, `BLOCKED_SAFETY`, `GENERATION_FAILED`, `INVALID_ARTIFACT`,
+`NOT_SELECTED`, `DECLINED`, `MODE_DISABLED`, `SKIPPED_LIMIT`, and `EXECUTED`. Response status is
+separate and reuses `QueryExecutionStatus` and the exact Phase 9 classifier. `data: null` without
+interpretable non-empty errors remains `SUCCESS`; partial data plus errors is `GRAPHQL_ERROR`.
+
+The application independently enforces ACTIVE mode, selection, strict `confirmed=True`, current
+validity/safety, and at most five attempted requests. Selected candidates run in retained Phase 7
+order regardless of index-input order. Unknown indices raise a controlled project exception;
+blocked/invalid selections stay structured non-execution decisions. Only attempted requests count,
+and excess valid selections are `SKIPPED_LIMIT`. Execution is sequential, one POST per Mutation
+with `query` and `variables` only, through the existing synchronous `HttpClient`. TLS, timeout,
+redirects, size limits, and normalized failures are preserved. There are no retries, concurrency,
+GraphQL batching, aliases, `operationName`, pagination, or semantic placeholder retries.
+
+Only attempted requests create `MutationExecutionEvidence` with type `MUTATION_EXECUTION` and
+mode ACTIVE. It retains the exact document/variables, endpoint, POST method, request timestamp,
+HTTP status/headers/body when available, duration (including transport failures), normalized error,
+response classification, and composed Phase 7 analysis (priority, categories, score). All prior
+Phase 3–9 evidence remains intact. Other decisions create no fabricated execution evidence.
+Default console output omits response bodies. Mutation success is execution evidence, never
+automatically a vulnerability, Finding, authorization bypass, or proof of impact.
+
 ## 18. Authentication support
 
 The MVP may support user-provided headers:
@@ -823,7 +909,7 @@ Initial development may begin with console and JSON output. Reports should conta
 - Scan metadata.
 - Target information.
 - Execution mode.
-- Authorization acknowledgement status.
+- Explicit mode, Mutation selection, and final batch confirmation state.
 - Discovered endpoints.
 - GraphQL confirmation evidence.
 - Introspection status.
@@ -895,7 +981,8 @@ built-in safe default. Environment variables and configuration files are deferre
 configuration needs grow; no configuration file is discovered or loaded in Phase 1.
 
 `active` is accepted as a configuration value during Phase 1, but it does not enable active
-behavior. The `--authorized` gate and active execution remain Phase 10 responsibilities.
+behavior until Phase 10. Phase 10 uses explicit ACTIVE mode, Mutation selection, and one final
+batch confirmation; no separate authorization flag exists.
 
 Possible settings include:
 
@@ -949,7 +1036,6 @@ Possible options:
 
 ```text
 --mode
---authorized
 --header
 --timeout
 --proxy
@@ -1169,7 +1255,7 @@ Important test areas include:
 - Minimal query generation.
 - Depth limiting.
 - Safe-mode restrictions.
-- Active-mode authorization checks.
+- Active-mode explicit gate, selection, and batch-confirmation checks.
 - Report serialization.
 - Configuration precedence.
 - Error mapping.
@@ -1211,7 +1297,7 @@ GQLSleuth itself must follow secure development practices. Requirements include:
 - TLS verification enabled by default.
 - Conservative timeout and concurrency defaults.
 - No mutation execution in safe mode.
-- Explicit authorization acknowledgement for active mode.
+- Explicit ACTIVE-mode acknowledgement plus Mutation selection and final batch confirmation.
 - No arbitrary shell execution.
 - No unsafe deserialization.
 - Controlled file paths.
@@ -1309,7 +1395,7 @@ Deliverables:
 - Discovery evidence.
 - Unit and integration tests.
 
-The refined implementation probes the preferred candidate first with a five-second GET timeout,
+The refined implementation probes the preferred candidate first with an eight-second GET timeout,
 then uses at most four synchronous workers for remaining candidates. It retains all returned HTTP
 statuses, isolates transport failures per candidate, and preserves stable result/evidence order.
 The complete scan coordinates immediate Phase 4 classification of the preferred result so a
@@ -1423,21 +1509,26 @@ The initial implementation defensively revalidates generated artifacts, conserva
 obviously side-effecting Query names, and sequentially executes no more than 20 Query operations.
 It classifies GraphQL, HTTP, invalid-response, and normalized network outcomes independently,
 preserves exact request/response evidence for attempted operations, and isolates failures. It
-never executes Mutations or Subscriptions; ACTIVE remains behaviorally identical to SAFE.
+never executes Mutations or Subscriptions; the Query stage remains identical in SAFE and ACTIVE.
 
 ### Phase 10 — Active mode
 
 Deliverables:
 
-- Active-mode authorization gate.
+- Active-mode explicit gate.
 - Mutation identification.
+- Shared minimal Mutation generation and defensive validation.
+- Deterministic destructive-name safety classification.
 - Mutation preview.
-- Confirmation controls.
-- Controlled execution.
+- Explicit batch selection and one final confirmation, default NO.
+- Sequential execution with a five-request hard limit.
 - Active evidence labels.
 - Safety tests.
 
-This phase must only begin after safe mode is stable.
+Implemented after the stable Phase 9 workflow, which remains unchanged. ACTIVE alone never
+executes Mutations. Non-interactive scans retain previews and execute zero Mutations. Actual
+Mutation execution tests are offline; public smoke tests use previews and select none. Reporting,
+Finding generation, authentication-context comparisons, and AI remain outside Phase 10.
 
 ### Phase 11 — Reports
 

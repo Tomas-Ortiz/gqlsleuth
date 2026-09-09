@@ -8,8 +8,8 @@ from gqlsleuth.domain.analysis import OperationAnalysis, OperationKind
 
 
 @dataclass(frozen=True)
-class QueryGenerationResult:
-    """Generation outcome associated with one Phase 7 Query operation."""
+class OperationGenerationResult:
+    """Exact document and inputs associated with one Phase 7 root operation."""
 
     operation: OperationAnalysis
     query_text: str | None
@@ -19,7 +19,7 @@ class QueryGenerationResult:
 
     @property
     def success(self) -> bool:
-        """Whether a syntactically valid query artifact was generated."""
+        """Whether a syntactically valid document artifact was generated."""
         return self.query_text is not None
 
     @property
@@ -29,10 +29,15 @@ class QueryGenerationResult:
 
     @property
     def operation_name(self) -> str:
-        """Return the generated root Query field name."""
+        """Return the generated root field name."""
         return self.operation.name
 
     @property
     def operation_kind(self) -> OperationKind:
         """Return the schema-derived operation kind."""
         return self.operation.kind
+
+
+@dataclass(frozen=True)
+class QueryGenerationResult(OperationGenerationResult):
+    """Generation outcome associated with one Phase 7 Query operation."""

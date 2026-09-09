@@ -12,11 +12,12 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 9 — safe query execution**. It provides the Phase 0
+The repository is currently at **Phase 10 — controlled Active Mode**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
-controlled Query execution.
+controlled Query execution, followed in ACTIVE mode by Mutation previews and separately
+selected and confirmed Mutation execution. Reports and AI (Phases 11–12) are not implemented.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
@@ -34,9 +35,10 @@ Phase 8 generates one anonymous minimal GraphQL query for each Query-root field 
 It includes only required arguments, creates deterministic placeholder variables, and selects a
 small response field path with a maximum internal depth of three and cycle protection. Custom
 scalar placeholders use the string `"test"` and are marked as potentially requiring manual
-adjustment. Mutation and Subscription operations are not generated.
+adjustment. SAFE generates Query documents only. ACTIVE reuses this same generation algorithm
+for Mutation-root fields after completing the safe workflow. Subscriptions are never generated.
 
-Discovery gives the preferred candidate a five-second GET timeout and immediately applies the
+Discovery gives the preferred candidate an eight-second GET timeout and immediately applies the
 existing GraphQL detection logic. A confirmed or probable preferred candidate stops discovery;
 otherwise, the remaining candidates use at most four synchronous workers while retaining their
 stable candidate order. GraphQL POST probes and introspection continue using the normal ten-second
@@ -46,7 +48,7 @@ transport failures without a response proceed directly to the next candidate.
 Phase 9 defensively validates each successful generated artifact against the parsed Query root
 before sending it sequentially. It executes at most 20 Query operations per scan and skips Query
 names containing explicit state-changing action tokens such as `delete`, `burn`, or `reset`.
-Mutations and Subscriptions are never executed. Placeholder-related GraphQL errors are retained as
+The safe workflow never executes Mutations or Subscriptions. Placeholder-related GraphQL errors are retained as
 normal execution evidence rather than treated as scanner failures.
 
 Priorities and execution results are evidence for manual review, not vulnerability severities or
@@ -93,9 +95,51 @@ uv run gqlsleuth scan https://example.com --mode safe
 uv run gqlsleuth scan https://example.com --mode active
 ```
 
-ACTIVE performs the same safe discovery, detection, read-only introspection, local schema
-parsing, local rule-based analysis, query generation, and Query-only execution as SAFE during
-Phase 9. It does not enable active-only behavior or Mutation execution.
+ACTIVE first completes exactly the same Phase 3–9 workflow as SAFE. Selecting `--mode active`
+acknowledges entry into active capabilities for an authorized target; it does **not** authorize
+any Mutation request. There is no `--authorized`, `--yes`, or `--force` option.
+
+The active stage previews all Mutation candidates in retained Phase 7 order. Executable candidates
+show their endpoint, field name, review priority, categories, exact anonymous Mutation document,
+exact variables, and placeholder/manual-adjustment warnings. Failed generation and blocked
+candidates remain visible with their reasons. Destructive primary-name tokens `delete`, `remove`,
+`destroy`, `purge`, `drop`, `wipe`, `erase`, `burn`, and `truncate` block execution without an
+override. Matching uses exact camelCase/PascalCase/snake_case/kebab-case tokens, not substrings,
+argument names, output fields, or interest scores. Other Mutations may still be impactful.
+
+Select individual executable indices, separated by commas:
+
+```text
+Select Mutations to execute (max 5, Enter for none): 1,3
+```
+
+There is no default selection, `all`, wildcard, or range syntax. Invalid, blocked, and
+failed-generation indices are rejected with another selection attempt. Enter selects none.
+The exact selected batch is displayed again, followed by **one** confirmation:
+
+```text
+WARNING: These operations may modify application state.
+Execute these 2 selected Mutations? [y/N]
+```
+
+Declining or accepting the default NO executes zero Mutations. Non-interactive stdin displays
+previews and a clear message, then finishes without reading input or executing Mutations; piped
+selections/confirmation cannot enable execution. A schema with no Mutations ends the stage directly.
+
+Only confirmed, selected, defensively validated and safety-approved Mutations execute. The
+application independently enforces ACTIVE mode and a hard maximum of five attempted Mutation
+requests, in retained Phase 7 order, sequentially. Each sends one POST containing only `query`
+and `variables` through the existing HTTP client, with its TLS, timeout, redirect, response-size,
+and normalized transport-error behavior. There are no retries, concurrency, or `operationName`.
+One failure does not stop later selected operations.
+
+Mutation responses reuse Phase 9 classifications: `SUCCESS` (including `data: null` without
+interpretable errors), `GRAPHQL_ERROR` (including partial data), `HTTP_ERROR`, `INVALID_RESPONSE`,
+and `NETWORK_FAILURE`. Only attempted requests create `MUTATION_EXECUTION` evidence containing
+ACTIVE mode, the exact request, timestamp, response facts or normalized failure, duration,
+classification, and Phase 7 analysis. Generation failures, invalid artifacts, safety blocks,
+unselected/declined operations, and limit skips remain structured decisions with no fabricated
+execution evidence. Success is not a vulnerability finding or proof of authorization bypass.
 
 The CLI displays at most the ten highest-priority review candidates while the structured
 application result retains every analyzed Query and Mutation root field. Each displayed
