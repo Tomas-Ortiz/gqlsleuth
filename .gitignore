@@ -12,6 +12,9 @@ htmlcov/
 build/
 dist/
 
+gqlsleuth-reports/
+reports/
+
 .env
 .env.*
 !.env.example
@@ -19,4 +22,3 @@ dist/
 .idea/
 .vscode/
 *.code-workspace
-

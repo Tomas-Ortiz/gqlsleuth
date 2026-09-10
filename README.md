@@ -12,12 +12,13 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 10 — controlled Active Mode**. It provides the Phase 0
+The repository is currently at **Phase 11 — Reports**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
 controlled Query execution, followed in ACTIVE mode by Mutation previews and separately
-selected and confirmed Mutation execution. Reports and AI (Phases 11–12) are not implemented.
+selected and confirmed Mutation execution. Phase 11 adds opt-in JSON, Markdown, and HTML reports
+from those structured results. Phase 12 AI is not implemented.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
@@ -152,6 +153,52 @@ The execution summary distinguishes successful responses, GraphQL/application er
 failures, and operations skipped for safety or because of the 20-request limit. Generated
 placeholder values may be rejected by application-level validation; such responses are expected
 possible outcomes.
+
+## Reports
+
+Request one or more formats on the existing `scan` command:
+
+```bash
+uv run gqlsleuth scan https://example.com --format json --format markdown --format html --output ./reports
+uv run gqlsleuth scan https://example.com --mode active --format json --format html
+```
+
+Repeat `--format` to select `json`, `markdown`, or `html`. Repeating the same format writes it
+once. `--output` names a directory, which is created when needed; the default is
+`./gqlsleuth-reports`. Without `--format`, no report files or directories are created and the
+existing scan output is unchanged. Supplying `--output` alone or an unknown format is an input
+error. There is no separate `report` command.
+
+Reporting runs after the existing scan and ACTIVE interaction finish. It performs **zero
+additional network requests or GraphQL operations** and makes no new security decisions.
+
+- **JSON** is the canonical machine-readable format, with `report_schema_version: 1`, stable
+  field names, exact generated documents and variables, execution statuses/errors, and all
+  retained evidence. Byte-valued response bodies use lossless `{ "encoding": "base64", "data":
+  "..." }` objects. Evidence is preserved without introducing redaction.
+- **Markdown** and **HTML** provide deterministic counts, discovery/confidence, introspection
+  status, schema summaries, review candidates and reasons, generated Queries, execution
+  outcomes, evidence counts, observed errors/limitations, and manual-review recommendations.
+  They omit large raw response bodies. HTML is a standalone document with embedded CSS, escaped
+  target text, and no external scripts, stylesheets, or CDN dependencies.
+
+ACTIVE reports separately record Mutation generation, safety blocks and reasons, explicit
+selection, final batch confirmation, and execution outcomes. Unselected, declined, blocked,
+failed, and limit-skipped candidates are not counted as executed. Only existing
+`MUTATION_EXECUTION` evidence establishes an attempted Mutation request; the same rule applies
+to `QUERY_EXECUTION` evidence. Human reports show exact documents and variables for attempted
+Mutations. SAFE reports never imply Mutation execution.
+
+Filenames use a normalized target host and UTC report timestamp, for example
+`gqlsleuth-example.com-20260908-231500.json` (or `.md` / `.html`). Existing files are never
+silently overwritten: conflicts receive `-2`, `-3`, and so on. Reporting failures produce a
+concise error after scanning and leave the scan result unchanged. Generated reports are local
+artifacts and the default report directories are ignored by Git.
+
+Reports are intended only for authorized testing. **CRITICAL/HIGH INTEREST indicates review
+priority, not vulnerability severity.** Enabled introspection and successful execution are not
+proof of exploitability. Reports create no Findings; all automated results require professional
+validation. Recommendations are fixed responses to observed scan state, without AI.
 
 ## Configuration
 

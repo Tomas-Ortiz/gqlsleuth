@@ -3,6 +3,7 @@
 import re
 import sys
 from json import dumps
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -17,6 +18,7 @@ from gqlsleuth.application.active_execution import (
     prepare_active_mutations,
 )
 from gqlsleuth.application.operation_analysis import EndpointOperationAnalysisResult
+from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import (
     QueryExecutionResult,
     SafeExecutionScanResult,
@@ -25,10 +27,11 @@ from gqlsleuth.application.safe_execution import (
 from gqlsleuth.application.schema_parsing import EndpointSchemaResult
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS, MutationDecision, MutationPreview
 from gqlsleuth.domain.analysis import OperationAnalysis
-from gqlsleuth.domain.exceptions import GQLSleuthError
+from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.query_generation import QueryGenerationResult
+from gqlsleuth.reporting.models import ReportFormat
 
 app = typer.Typer(
     name="gqlsleuth",
@@ -72,8 +75,21 @@ def scan(
             case_sensitive=False,
         ),
     ] = ScanMode.SAFE,
+    formats: Annotated[
+        list[ReportFormat] | None,
+        typer.Option(
+            "--format", help="Write a report after scanning; repeat for multiple formats."
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", help="Report output directory (default: ./gqlsleuth-reports)."),
+    ] = None,
 ) -> None:
     """Discover GraphQL and safely execute validated generated Query operations."""
+    if output is not None and not formats:
+        error_console.print("[bold red]Error:[/bold red] --output requires at least one --format.")
+        raise typer.Exit(code=2)
     if mode is ScanMode.ACTIVE:
         console.print("ACTIVE mode: use only against systems you are authorized to test.")
     try:
@@ -150,8 +166,17 @@ def scan(
     )
     mode = introspection_scan.detection.discovery.mode
     console.print(f"Effective mode: [cyan]{mode.value}[/cyan].")
+    report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result
     if mode is ScanMode.ACTIVE:
-        _run_active_stage(result)
+        report_result = _run_active_stage(result)
+    if formats:
+        try:
+            paths = generate_reports(report_result, formats=tuple(formats), output_directory=output)
+        except ReportingError as error:
+            error_console.print(f"[bold red]Reporting error:[/bold red] {escape(str(error))}")
+            raise typer.Exit(code=1) from None
+        for path in paths:
+            console.print(f"Report written: {path}", markup=False)
 
 
 def _interactive_stdin() -> bool:

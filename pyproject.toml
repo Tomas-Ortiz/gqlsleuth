@@ -17,6 +17,7 @@ classifiers = [
 dependencies = [
     "graphql-core>=3.2.12",
     "httpx>=0.28.1",
+    "jinja2>=3.1.6",
     "pydantic>=2.13.4",
     "pyyaml>=6.0.3",
     "rich>=15.0.0",

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>GQLSleuth Security Analysis Report</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172a3a; background: #f3f5f7; }
+    body { margin: 0; padding: 2rem 1rem; line-height: 1.6; }
+    main { max-width: 1050px; margin: auto; background: white; padding: 2rem; border-top: 5px solid #236278; }
+    h1 { font-size: 2rem; line-height: 1.2; margin-top: 0; }
+    h2 { margin-top: 2.5rem; border-bottom: 1px solid #ccd7dd; padding-bottom: .5rem; }
+    h3 { font-size: 1.1rem; margin-top: 1.7rem; }
+    p, td, dd, h3 { overflow-wrap: anywhere; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; border-bottom: 1px solid #e0e6e9; padding: .5rem .75rem; }
+    th { background: #edf3f6; }
+    dl { display: grid; grid-template-columns: minmax(8rem, 13rem) 1fr; gap: .25rem 1rem; }
+    dt { font-weight: 600; } dd { margin: 0; }
+    pre { padding: 1rem; overflow-x: auto; background: #f0f4f6; border-left: 3px solid #6994a4; }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: .9rem; }
+    article { border-bottom: 1px solid #e0e6e9; padding-bottom: 1rem; }
+    @media (max-width: 600px) { main { padding: 1rem; } dl { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>GQLSleuth Security Analysis Report</h1>
+{% for section in sections %}
+  <section>
+    <h2>{{ section.title }}</h2>
+{% for paragraph in section.paragraphs %}
+    <p>{{ paragraph | brief }}</p>
+{% endfor %}
+{% if section.rows %}
+    <table><thead><tr><th scope="col">Metric</th><th scope="col">Value</th></tr></thead><tbody>
+{% for label, value in section.rows %}
+      <tr><td>{{ label }}</td><td>{{ value | brief }}</td></tr>
+{% endfor %}
+    </tbody></table>
+{% endif %}
+{% for entry in section.entries %}
+    <article>
+      <h3>{{ entry.title | brief }}</h3>
+      <dl>
+{% for label, value in entry.details %}
+        <dt>{{ label }}</dt><dd>{{ value | brief }}</dd>
+{% endfor %}
+      </dl>
+{% for paragraph in entry.paragraphs %}
+      <p>{{ paragraph | brief }}</p>
+{% endfor %}
+{% for language, text in entry.code_blocks %}
+      <pre><code class="language-{{ language }}">{{ text }}</code></pre>
+{% endfor %}
+    </article>
+{% endfor %}
+{% if not section.paragraphs and not section.rows and not section.entries %}
+    <p>None recorded.</p>
+{% endif %}
+  </section>
+{% endfor %}
+</main>
+</body>
+</html>

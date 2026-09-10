@@ -897,33 +897,63 @@ The tool must avoid declaring a vulnerability unless the available evidence supp
 
 ## 21. Reporting
 
-The project should eventually support:
+Phase 11 implements opt-in JSON, Markdown, and standalone HTML reports after the existing scan.
+Reporting performs no network requests, GraphQL operations, response reclassification, or new
+security decisions. It consumes project-owned results, never console text or Rich output.
 
-- Console output.
-- JSON report.
-- Markdown report.
-- HTML report.
+```text
+SafeExecutionScanResult | ActiveExecutionScanResult
+    → application.reporting.generate_reports
+    → reporting.builder.build_report → ReportContext
+    → JSON renderer / shared human sections + Jinja2 templates
+    → reporting.output.write_reports
+```
 
-Initial development may begin with console and JSON output. Reports should contain:
+`ReportContext` is a dedicated snapshot rather than a flattened copy of the complete scan graph.
+It composes endpoint summaries, original Phase 7 review candidates, generated operation artifacts,
+execution projections linked to existing evidence IDs, optional ACTIVE state, and retained evidence.
+It includes schema version, GQLSleuth version, UTC generation timestamp, target/mode, deterministic
+counts, detection confidence/signals/reasons, introspection status, schema and operation-analysis
+summaries, generation failures/manual-adjustment notes, execution statuses/errors, observed
+limitations, deterministic recommendations, and an authorized-use safety notice. Review candidates
+retain their existing Phase 7 order, categories, scores, reasons, and matched rules.
 
-- Scan metadata.
-- Target information.
-- Execution mode.
-- Explicit mode, Mutation selection, and final batch confirmation state.
-- Discovered endpoints.
-- GraphQL confirmation evidence.
-- Introspection status.
-- Schema summary.
-- Interesting operations.
-- Generated queries.
-- Execution results.
-- Errors and limitations.
-- Recommendations for manual review.
-- Safety disclaimer.
+JSON is canonical UTF-8, pretty printed with stable field names and `report_schema_version: 1`.
+The same context serializes deterministically, including exact GraphQL documents/variables and
+structured request/response evidence. Byte-valued bodies use explicit lossless base64 objects
+(`encoding` and `data`); enums, timestamps, and IDs use JSON-compatible values. No graphql-core or
+HTTPX objects, Python repr strings, full parsed-schema graph, or CLI formatting are serialized.
+Existing evidence is preserved without adding redaction or silently discarding execution errors.
 
-HTML and Markdown reports may use Jinja2.
+Markdown and HTML share a human presentation model for overview/counts, discovery, introspection,
+schema summaries, security-review candidates, generated Queries, safe execution, optional ACTIVE
+analysis, evidence counts, errors/limitations, recommendations, and safety notice. They show exact
+generated Queries and attempted Mutations in code blocks with variables, while keeping large raw
+response bodies out of the human presentation. Error text is summarized with full text retained
+in JSON. Package-loaded Jinja2 templates work independently of the current directory. HTML uses
+default escaping, semantic headings/tables/code blocks, minimal embedded CSS, and no external
+resources or JavaScript. Markdown escapes untrusted prose and protects code-block delimiters.
 
-Report generation must consume structured scan results and must not depend directly on CLI output.
+ACTIVE reports distinguish candidates, generation outcomes, `BLOCKED_SAFETY` and reasons,
+selection, final batch confirmation, non-execution decisions, and attempted outcomes. Only
+existing `MUTATION_EXECUTION` / `QUERY_EXECUTION` evidence establishes actual attempted requests.
+Missing execution evidence is reported as a limitation rather than fabricated. SAFE has no
+active-analysis section and never implies Mutation execution.
+
+Recommendations depend only on recorded priorities/categories, manual-adjustment notes, GraphQL
+errors, safety blocks, and introspection/schema/transport failures. Review priority is interest,
+never vulnerability severity. Enabled introspection and execution success are not vulnerability
+findings or proof of exploitability. Phase 11 introduces no Finding models or AI interpretation.
+Reports state that testing requires authorization and results require professional validation.
+
+The CLI accepts repeated `--format json|markdown|html` and an optional output-directory `--output`.
+The default directory is `./gqlsleuth-reports`; no format means no report writes. `--output`
+without a format is an input error. Duplicate formats produce one file each. The filesystem layer
+creates directories and normalizes the target host into a safe filename with a UTC timestamp,
+such as `gqlsleuth-example.com-20260908-231500.html`. Exclusive creation prevents overwrites;
+collisions use deterministic numeric suffixes (`-2`, `-3`, ...). `ReportingError` normalizes
+serialization, template, and filesystem failures without modifying the completed scan result.
+The CLI only parses options, invokes the reporting service, and displays paths or concise errors.
 
 ## 22. Optional AI assistance
 
@@ -1031,6 +1061,15 @@ The exact command structure may evolve during implementation. The primary user w
 ```bash
 gqlsleuth scan https://example.com
 ```
+
+Through Phase 11, `scan` and `version` are implemented. Reporting is integrated into `scan`:
+
+```bash
+gqlsleuth scan https://example.com --format json --format markdown --format html --output ./reports
+```
+
+The separate `report` command and other proposed commands remain future work. Reporting options
+do not change scanning, ACTIVE selection, or final confirmation behavior.
 
 Possible options:
 
@@ -1532,16 +1571,18 @@ Finding generation, authentication-context comparisons, and AI remain outside Ph
 
 ### Phase 11 — Reports
 
-Deliverables:
+Implemented:
 
-- JSON report.
-- Markdown report.
-- HTML report.
-- Report templates.
-- Scan summary.
-- Evidence sections.
-- Manual review recommendations.
-- Tests.
+- Dedicated report context built from SAFE or ACTIVE structured results without new requests.
+- Canonical versioned JSON preserving exact artifacts and existing execution/evidence facts.
+- Markdown and standalone escaped HTML using shared human sections and package-loaded Jinja2.
+- Deterministic summaries, evidence counts, observed limitations, and manual-review recommendations.
+- Separate Mutation generation, safety, selection, confirmation, and execution reporting states.
+- Opt-in repeated `scan --format` options, output directories, safe filenames, and no overwrites.
+- Controlled reporting errors and offline report/CLI regression tests.
+
+Reporting creates no Findings, vulnerability severities, AI summaries, or new security decisions.
+Phase 12 remains unimplemented.
 
 ### Phase 12 — AI assistance
 

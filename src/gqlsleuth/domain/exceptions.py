@@ -1,4 +1,4 @@
-"""Project-specific exceptions available through Phase 9."""
+"""Project-specific exceptions for scanning and reporting."""
 
 
 class GQLSleuthError(Exception):
@@ -59,3 +59,7 @@ class QueryGenerationError(GQLSleuthError):
 
 class SafeExecutionValidationError(GQLSleuthError):
     """Raised when a generated artifact is unsafe or inconsistent with its schema."""
+
+
+class ReportingError(GQLSleuthError):
+    """Report building, rendering, or writing failed after scanning completed."""

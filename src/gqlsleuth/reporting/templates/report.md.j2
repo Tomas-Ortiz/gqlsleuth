@@ -1,0 +1,38 @@
+# GQLSleuth Security Analysis Report
+
+{% for section in sections %}
+## {{ section.title }}
+
+{% for paragraph in section.paragraphs %}
+{{ paragraph | markdown_text }}
+
+{% endfor %}
+{% if section.rows %}
+| Metric | Value |
+| --- | --- |
+{% for label, value in section.rows %}
+| {{ label | markdown_text }} | {{ value | markdown_text }} |
+{% endfor %}
+
+{% endif %}
+{% for entry in section.entries %}
+### {{ entry.title | markdown_text }}
+
+{% for label, value in entry.details %}
+- **{{ label | markdown_text }}:** {{ value | markdown_text }}
+{% endfor %}
+
+{% for paragraph in entry.paragraphs %}
+{{ paragraph | markdown_text }}
+
+{% endfor %}
+{% for language, text in entry.code_blocks %}
+{{ text | fenced(language) }}
+
+{% endfor %}
+{% endfor %}
+{% if not section.paragraphs and not section.rows and not section.entries %}
+None recorded.
+
+{% endif %}
+{% endfor %}
