@@ -3,6 +3,7 @@
 import json
 from dataclasses import dataclass, fields
 
+from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult, AIStatement
 from gqlsleuth.reporting.models import OperationReport, ReportContext
 
 
@@ -186,7 +187,62 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             ReportSection("Safety Notice", paragraphs=(report.safety_notice,)),
         )
     )
+    if report.ai_interpretation is not None:
+        sections.append(ai_section(report.ai_interpretation))
     return tuple(sections)
+
+
+def ai_section(result: AIInterpretationResult) -> ReportSection:
+    """Present an already-produced interpretation without modifying deterministic sections."""
+    entries = []
+    interpretation = result.interpretation
+    if interpretation is not None:
+        entries = [
+            ReportEntry(
+                "Execution Summary (validated facts)",
+                paragraphs=(_ai_statement(interpretation.scan_summary),),
+            ),
+            ReportEntry(
+                "Review Focus",
+                paragraphs=tuple(
+                    f"{item.operation}: {item.explanation}" for item in interpretation.review_focus
+                ),
+            ),
+            ReportEntry(
+                "Operation Explanations",
+                paragraphs=tuple(
+                    f"{item.operation}: {item.explanation}"
+                    for item in interpretation.operation_explanations
+                ),
+            ),
+            ReportEntry(
+                "Manual Review Suggestions",
+                paragraphs=tuple(
+                    _ai_statement(item) for item in interpretation.manual_review_suggestions
+                ),
+            ),
+            ReportEntry(
+                "Limitations",
+                paragraphs=tuple(_ai_statement(item) for item in interpretation.limitations),
+            ),
+        ]
+    return ReportSection(
+        "AI-Assisted Interpretation",
+        paragraphs=(AI_NOTICE,) + ((result.error_message,) if result.error_message else ()),
+        rows=(
+            ("Model", result.model),
+            ("AI status", result.status.value.upper()),
+            ("Operations supplied", str(result.context_metadata.operations_included)),
+            ("Operations omitted", str(result.context_metadata.operations_omitted)),
+            ("Context truncated", "Yes" if result.context_metadata.context_truncated else "No"),
+        ),
+        entries=tuple(entries),
+    )
+
+
+def _ai_statement(statement: AIStatement) -> str:
+    references = f" ({', '.join(statement.operations)})" if statement.operations else ""
+    return statement.text + references
 
 
 def _artifact_entry(item: OperationReport) -> ReportEntry:

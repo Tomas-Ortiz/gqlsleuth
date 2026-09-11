@@ -12,13 +12,14 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 11 — Reports**. It provides the Phase 0
+The repository is currently at **Phase 12 — Optional Local AI Assistance**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
 controlled Query execution, followed in ACTIVE mode by Mutation previews and separately
 selected and confirmed Mutation execution. Phase 11 adds opt-in JSON, Markdown, and HTML reports
-from those structured results. Phase 12 AI is not implemented.
+from those structured results. Phase 12 adds optional local interpretation after the completed
+SAFE or ACTIVE workflow, using Ollama and `qwen3:8b`.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
@@ -199,6 +200,71 @@ Reports are intended only for authorized testing. **CRITICAL/HIGH INTEREST indic
 priority, not vulnerability severity.** Enabled introspection and successful execution are not
 proof of exploitability. Reports create no Findings; all automated results require professional
 validation. Recommendations are fixed responses to observed scan state, without AI.
+
+## Optional local AI assistance
+
+AI is disabled by default. Without `--ai`, scans make zero Ollama requests and do not require
+Ollama or a model. Enable interpretation of a completed scan with:
+
+```bash
+uv run gqlsleuth scan https://example.com --ai
+uv run gqlsleuth scan https://example.com --mode active --ai
+uv run gqlsleuth scan https://example.com --ai --format json --format markdown --format html --output ./reports
+```
+
+Install and start [Ollama](https://ollama.com/) separately, then obtain the model yourself:
+
+```bash
+ollama pull qwen3:8b
+```
+
+GQLSleuth never installs Ollama, downloads models, runs shell commands for AI, or manages the
+installation. It uses the existing local API at `http://127.0.0.1:11434` with `qwen3:8b`.
+No cloud providers, remote endpoints, API keys, or provider-selection flags are supported.
+
+One non-streaming structured inference runs **after** deterministic scanning and the complete
+ACTIVE selection/confirmation/execution stage, and **before** requested reports. AI cannot select,
+confirm, generate, or execute GraphQL operations, change priorities/statuses/evidence, or feed
+instructions back into the scanner. It adds zero requests to the GraphQL target.
+
+The AI context is constructed with an explicit allowlist: effective mode, aggregate schema
+counts/root names, operation kind/name/return-type name, existing interest priorities/scores and
+categories, generation/manual-adjustment flags, HTTP status codes, and deterministic execution
+and Mutation decision states. Endpoint labels are anonymous (`endpoint_1`, etc.). No target URLs,
+headers, credentials, variable values, raw request/response bodies, raw errors/stack traces,
+Evidence objects, descriptions, or complete schema graphs are sent. Generated documents are also
+excluded to keep the input purely structural. This is a dedicated projection, not a generic
+redaction subsystem; existing scanner evidence is untouched.
+
+Input is limited to **20 operations** and **12,000 serialized UTF-8 bytes**, prioritizing existing
+Phase 7 interest rankings. Operation names longer than 128 characters are omitted; at most ten
+schema summaries are included. Size reduction removes lower-priority schema summaries before
+operations. Metadata explicitly records included/omitted operations and context truncation.
+
+The validated response contains an execution summary, up to five review-focus entries, ten operation
+explanations, ten manual-review suggestions, and ten limitations, with text bounded to 600
+characters per entry. Operation references use exact endpoint/kind/name identifiers in dedicated
+fields, including summary/suggestions/limitations. Unknown references reject the whole response;
+malformed JSON, extra fields, and invalid structures are rejected without retries. Model-generated
+prose still requires professional validation. Thinking/reasoning metadata is ignored and never
+displayed or persisted.
+
+The execution summary uses canonical text calculated from complete scan classifications before
+context truncation. The response schema requires that exact text, and validation rejects any
+paraphrase or changed count. Attempts, SUCCESS, GraphQL/HTTP/transport errors, and safety/limit
+skips remain distinct; HTTP 200 never overrides a GraphQL error. This summary is labeled as
+validated facts; Qwen generates the separate review explanations, suggestions, and limitations.
+
+Inference uses a finite 180-second timeout (five-second connection timeout), a 128 KiB response
+limit, and no redirects, environment proxies, or retries. Connection failures, timeouts, missing
+models, HTTP errors, and invalid responses produce concise AI statuses. The completed scan and
+requested reports remain available.
+
+CLI, Markdown, and HTML label the optional section **AI-Assisted Interpretation**. JSON adds
+`ai_interpretation` separately from deterministic counts, recommendations, execution facts, and
+evidence. This additive optional field keeps report schema version 1; it is absent when AI was
+not requested. HTML escapes model text. AI produces interpretation only: it is not Evidence,
+does not create Findings, and does not establish vulnerability severity or confirmation.
 
 ## Configuration
 

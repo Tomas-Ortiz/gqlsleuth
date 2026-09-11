@@ -5,6 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from gqlsleuth.ai.models import AIInterpretationResult
 from gqlsleuth.domain.analysis import OperationAnalysis
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, ScanMode, Target
 from gqlsleuth.domain.query_generation import OperationGenerationResult
@@ -93,3 +94,4 @@ class ReportContext:
     errors_and_limitations: tuple[ReportIssue, ...]
     recommendations: tuple[str, ...]
     safety_notice: str
+    ai_interpretation: AIInterpretationResult | None = None

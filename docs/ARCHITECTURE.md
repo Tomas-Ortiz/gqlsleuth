@@ -223,9 +223,9 @@ ACTIVE only: explicit batch selection → one final confirmation → sequential 
     ↓
 Evidence collection
     ↓
-Report generation
+Optional AI-assisted interpretation of the completed result
     ↓
-Optional AI-assisted interpretation
+Report generation (deterministic facts plus optional labeled AI interpretation)
 ```
 
 Each stage must be independently testable and should not depend directly on CLI presentation code.
@@ -957,30 +957,94 @@ The CLI only parses options, invokes the reporting service, and displays paths o
 
 ## 22. Optional AI assistance
 
-AI functionality is optional and must not be required for the deterministic scanner to work.
+Phase 12 implements local, optional interpretation with `scan --ai`. Without the flag, no AI
+request or interpretation is created, and Ollama/model availability is irrelevant. The sole
+provider is the user's existing Ollama service at `http://127.0.0.1:11434`, using `qwen3:8b`.
+Installation and model downloads are user-managed; GQLSleuth never installs, pulls, runs shell
+commands, or exposes cloud providers, remote endpoint configuration, API keys, or model management.
 
-The planned initial AI integration is Ollama running Qwen3 8B locally. Possible AI use cases:
+The application flow is strictly one-way:
 
-- Prioritizing interesting schema elements.
-- Explaining complex GraphQL operations.
-- Summarizing schema relationships.
-- Suggesting manual review paths.
-- Interpreting GraphQL errors.
-- Generating human-readable report summaries.
-- Identifying suspicious combinations of fields, arguments and return types.
+```text
+Completed SafeExecutionScanResult | ActiveExecutionScanResult
+    → application.ai_assistance.interpret_completed_scan
+    → ai.context.build_ai_context → AIContext
+    → infrastructure.ollama.OllamaClient (one local POST /api/chat)
+    → validated AIInterpretationResult
+    → CLI and optional reports
+```
 
-AI must not:
+In ACTIVE, AI begins only after previews, selection, final confirmation, and any controlled
+Mutation execution have finished. No interpretation can influence scanner generation, HTTP
+decisions, operation selection, confirmation, safety gates, request limits/order, Phase 7
+scores/priorities, execution classifications, or any later scanner action. The deterministic
+engine remains authoritative. AI requests create no scanner Evidence or Findings.
 
-- Control the HTTP client directly.
-- Execute operations independently.
-- Bypass safe-mode controls.
-- Invent evidence.
-- Replace deterministic parsing.
-- Mark an issue as confirmed without supporting evidence.
-- Receive secrets.
-- Be necessary for endpoint discovery or schema parsing.
+`AIContext` is an explicit allowlist built directly from named project-owned result fields. It
+includes mode, confirmation state, aggregate numeric schema/failure/request counts, anonymous
+endpoint labels, root names, operation kind/name/base return-type name, existing Phase 7
+priority/score/categories, generation/manual-adjustment flags, HTTP status, execution
+classifications, and Mutation safety/selection/attempt/decision states. Query and Mutation
+operations with the same field name remain independent.
 
-AI output must be clearly labeled as model-generated interpretation. The deterministic engine remains the source of truth.
+It excludes URLs, all headers/authentication values, exact variables, raw request/response bodies,
+arbitrary errors/reasons/stack traces, Evidence objects/payloads, raw introspection, full parsed
+schemas, and schema descriptions. Generated documents are omitted because structural identifiers
+are sufficient for this initial interpretation and require no review of embedded literal values.
+Unsafe objects are never serialized and then redacted. There is no generic redaction subsystem.
+
+Input has a hard maximum of 20 operations and 12,000 serialized UTF-8 bytes using the same
+serialization path as the actual request. Stable Phase 7 priority/score ordering comes first;
+at most ten schema summaries are retained, and byte-limit reduction removes summaries before
+lower-priority operations. Identifiers must be valid GraphQL names of at most 128 characters;
+otherwise they are omitted. Metadata records total/included/omitted operations, total/included
+schemas, and whether context was truncated. No extra inference is made for omitted context.
+
+The stable system prompt treats all target-derived strings as untrusted data and instructs the
+model to ignore embedded instructions, use only supplied facts, distinguish interest from
+severity and execution from vulnerability confirmation, and offer only non-destructive manual
+review suggestions. It prohibits invented operations/evidence, unsafe testing, execution, Findings,
+and scoring. Operation references must be placed in dedicated fields rather than free prose.
+
+The adapter uses Ollama's JSON-schema `format`, `stream: false`, and `think: false`, with temperature
+zero, an 8192-token model context, and a 2048-token output cap. This follows the local
+[Ollama structured-output API](https://docs.ollama.com/capabilities/structured-outputs).
+Pydantic strictly validates the final `message.content` into `AIInterpretation`: an execution
+summary, up to five review-focus entries, ten operation explanations, ten manual-review
+suggestions, and ten limitations. Text fields are limited to 600 characters; unknown properties
+and invalid structures are rejected. Every dedicated operation reference, including those in
+summary/suggestions/limitations, must exactly match an endpoint/kind/name identifier supplied
+in the bounded input. Unknown references reject the entire response, without partial acceptance
+or retry. Model-generated prose is interpretation requiring manual validation, not verified fact.
+
+Execution totals are calculated from the complete results before input truncation. A canonical
+summary distinguishes attempted requests, SUCCESS, each error classification, Query safety/limit
+skips, and unexecuted Mutation candidates. Its exact text is constrained in the per-request JSON
+schema and checked again after parsing; modified counts or paraphrases reject the whole response.
+The summary is labeled as validated facts. Other sections remain model-generated review
+interpretation, instructed to preserve per-operation classifications and never treat HTTP 200,
+GraphQL errors, skips, or mere attempts as successful execution.
+
+`AIInterpretationResult` retains model, status, timestamp, measured duration, context metadata,
+optional validated interpretation, and normalized error code/message. Statuses are `SUCCESS`,
+`UNAVAILABLE`, `HTTP_ERROR`, and `INVALID_RESPONSE`; when disabled, no result is produced.
+Thinking/reasoning and other raw envelope metadata are ignored, never logged, displayed, or
+persisted. Malformed final content is rejected rather than extracting reasoning or partial JSON.
+
+The dedicated HTTPX adapter is independent from target `HttpClient`. It uses a fixed loopback
+destination, no redirects or environment proxies, one request, no retries, a finite 180-second
+inference timeout with a five-second connection timeout, and a 128 KiB response limit. Model-not-
+found, connection and timeout failures, HTTP errors, malformed envelopes, incomplete generation,
+and invalid final answers become controlled AI-only statuses. They cannot fail the completed
+deterministic scan or prevent report generation. No new Python dependencies are required.
+
+Reports receive the already-produced result and perform no inference themselves. Optional JSON
+`ai_interpretation` is an additive field under report schema version 1, absent without `--ai`.
+Markdown/HTML and CLI clearly label AI-Assisted Interpretation as model-generated interpretation,
+not evidence or vulnerability confirmation. HTML escapes model text. Deterministic sections,
+counts, evidence, recommendations, and Errors and Limitations are unchanged; AI failures stay
+in the separate AI section. Offline tests mock Ollama and capture exact requests to prove secret
+canary exclusion, bounded input, reference validation, execution isolation, and graceful fallback.
 
 ## 23. Configuration
 
@@ -1062,7 +1126,7 @@ The exact command structure may evolve during implementation. The primary user w
 gqlsleuth scan https://example.com
 ```
 
-Through Phase 11, `scan` and `version` are implemented. Reporting is integrated into `scan`:
+Through Phase 12, `scan` and `version` are implemented. Reporting is integrated into `scan`:
 
 ```bash
 gqlsleuth scan https://example.com --format json --format markdown --format html --output ./reports
@@ -1070,6 +1134,8 @@ gqlsleuth scan https://example.com --format json --format markdown --format html
 
 The separate `report` command and other proposed commands remain future work. Reporting options
 do not change scanning, ACTIVE selection, or final confirmation behavior.
+Optional `--ai` adds one local interpretation after the completed SAFE/ACTIVE result and before
+requested reports. It is disabled by default and exposes no provider/model configuration flags.
 
 Possible options:
 
@@ -1582,23 +1648,23 @@ Implemented:
 - Controlled reporting errors and offline report/CLI regression tests.
 
 Reporting creates no Findings, vulnerability severities, AI summaries, or new security decisions.
-Phase 12 remains unimplemented.
+Optional AI interpretations are produced separately by Phase 12 and passed into reporting.
 
 ### Phase 12 — AI assistance
 
-Deliverables:
+Implemented:
 
-- Ollama adapter.
-- Qwen3 8B configuration.
-- Structured prompts that exclude secrets.
-- Schema prioritization.
-- Operation explanations.
-- Report summaries.
-- Clear AI labeling.
-- Graceful fallback when Ollama is unavailable.
-- Tests using mocked model responses.
+- Opt-in `--ai`, after the complete deterministic SAFE/ACTIVE workflow and before reports.
+- Fixed local Ollama adapter using installed `qwen3:8b`, with one bounded structured inference.
+- Explicit allowlisted context, maximum 20 operations and 12,000 serialized UTF-8 bytes.
+- Strict typed output and supplied-operation reference validation across all sections.
+- Separate AI interpretation/status models, with no Evidence or Findings.
+- Ignored thinking/reasoning metadata and escaped, clearly labeled CLI/report presentation.
+- Non-fatal connection, timeout, model-not-found, HTTP, and invalid-response handling.
+- Offline privacy-canary, boundary, failure, reporting, and SAFE/ACTIVE regression tests.
 
-The deterministic scanner must remain fully operational without AI.
+AI cannot control the scanner. No installation/download automation, remote providers, generic
+redaction, tool calls, feedback loops, or future-roadmap features are implemented.
 
 ## 35. MVP definition
 

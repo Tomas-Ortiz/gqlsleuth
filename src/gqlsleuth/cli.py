@@ -11,12 +11,14 @@ from rich.console import Console
 from rich.markup import escape
 
 from gqlsleuth import __version__
+from gqlsleuth.ai.models import AIAnalysisStatus, AIInterpretationResult
 from gqlsleuth.application.active_execution import (
     ActiveExecutionScanResult,
     ActiveMutationPreviewResult,
     execute_selected_mutations,
     prepare_active_mutations,
 )
+from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.operation_analysis import EndpointOperationAnalysisResult
 from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import (
@@ -32,6 +34,7 @@ from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.reporting.models import ReportFormat
+from gqlsleuth.reporting.presentation import ai_section
 
 app = typer.Typer(
     name="gqlsleuth",
@@ -85,6 +88,12 @@ def scan(
         Path | None,
         typer.Option("--output", help="Report output directory (default: ./gqlsleuth-reports)."),
     ] = None,
+    ai: Annotated[
+        bool,
+        typer.Option(
+            "--ai", help="Interpret the completed scan using local Ollama/qwen3:8b (optional)."
+        ),
+    ] = False,
 ) -> None:
     """Discover GraphQL and safely execute validated generated Query operations."""
     if output is not None and not formats:
@@ -169,14 +178,43 @@ def scan(
     report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result
     if mode is ScanMode.ACTIVE:
         report_result = _run_active_stage(result)
+    ai_result = None
+    if ai:
+        console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
+        ai_result = interpret_completed_scan(report_result)
+        _render_ai(ai_result)
     if formats:
         try:
-            paths = generate_reports(report_result, formats=tuple(formats), output_directory=output)
+            paths = generate_reports(
+                report_result,
+                formats=tuple(formats),
+                output_directory=output,
+                ai_interpretation=ai_result,
+            )
         except ReportingError as error:
             error_console.print(f"[bold red]Reporting error:[/bold red] {escape(str(error))}")
             raise typer.Exit(code=1) from None
         for path in paths:
             console.print(f"Report written: {path}", markup=False)
+
+
+def _render_ai(result: AIInterpretationResult) -> None:
+    if result.status is not AIAnalysisStatus.SUCCESS:
+        console.print(f"AI assistance {result.status.value}: {result.error_message}", markup=False)
+        console.print("Deterministic scan completed normally.")
+        return
+    section = ai_section(result)
+    console.print(section.title, style="bold")
+    console.print(f"Model: {result.model}", markup=False)
+    for entry in section.entries:
+        if not entry.paragraphs:
+            continue
+        console.print(entry.title, style="bold")
+        for paragraph in entry.paragraphs[:5]:
+            visible = paragraph if len(paragraph) <= 400 else paragraph[:400] + "…"
+            console.print(visible, markup=False)
+    for paragraph in section.paragraphs:
+        console.print(paragraph, markup=False)
 
 
 def _interactive_stdin() -> bool:

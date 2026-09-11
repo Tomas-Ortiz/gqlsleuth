@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from gqlsleuth.ai.models import AIInterpretationResult
 from gqlsleuth.application.active_execution import ActiveExecutionScanResult
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult
 from gqlsleuth.domain.exceptions import ReportingError
@@ -17,12 +18,13 @@ def generate_reports(
     *,
     formats: tuple[ReportFormat, ...],
     output_directory: Path | None = None,
+    ai_interpretation: AIInterpretationResult | None = None,
 ) -> tuple[Path, ...]:
     """Build one context for all requested formats, leaving the scan result untouched."""
     if not formats:
         return ()
     try:
-        context = build_report(result)
+        context = build_report(result, ai_interpretation=ai_interpretation)
     except (TypeError, ValueError, RecursionError) as error:
         raise ReportingError(f"Could not build report context: {type(error).__name__}.") from error
     return write_reports(context, formats, output_directory or DEFAULT_REPORT_DIRECTORY)

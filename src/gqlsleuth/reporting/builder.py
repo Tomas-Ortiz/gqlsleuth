@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from gqlsleuth import __version__
+from gqlsleuth.ai.models import AIInterpretationResult
 from gqlsleuth.application.active_execution import (
     ActiveExecutionScanResult,
     MutationExecutionResult,
@@ -36,6 +37,7 @@ def build_report(
     result: SafeExecutionScanResult | ActiveExecutionScanResult,
     *,
     generated_at: datetime | None = None,
+    ai_interpretation: AIInterpretationResult | None = None,
 ) -> ReportContext:
     """Snapshot existing facts; a supplied timestamp makes builds reproducible."""
     safe = result.safe_execution if isinstance(result, ActiveExecutionScanResult) else result
@@ -140,6 +142,7 @@ def build_report(
         errors_and_limitations=issues,
         recommendations=(),
         safety_notice=SAFETY_NOTICE,
+        ai_interpretation=ai_interpretation,
     )
     return deepcopy(replace(context, recommendations=_recommendations(context)))
 

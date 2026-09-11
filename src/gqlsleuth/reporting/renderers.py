@@ -67,7 +67,15 @@ def _json_value(value: object) -> JsonValue:
         # Serialize declared fields directly to retain subclass evidence fields and raw bytes.
         return {name: _json_value(getattr(value, name)) for name in type(value).model_fields}
     if is_dataclass(value) and not isinstance(value, type):
-        return {field.name: _json_value(getattr(value, field.name)) for field in fields(value)}
+        return {
+            field.name: _json_value(getattr(value, field.name))
+            for field in fields(value)
+            if not (
+                isinstance(value, ReportContext)
+                and field.name == "ai_interpretation"
+                and value.ai_interpretation is None
+            )
+        }
     if isinstance(value, dict):
         if any(not isinstance(key, str) for key in value):
             raise TypeError("JSON object keys must be strings.")
