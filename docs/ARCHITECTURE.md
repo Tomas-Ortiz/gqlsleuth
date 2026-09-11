@@ -704,8 +704,8 @@ valid and finite. Final documents are syntax-checked with `graphql-core`. Succes
 create `GENERATED_QUERY` evidence containing the exact query and placeholder variables. Failed
 generation creates no successful evidence and does not stop other operations or endpoints.
 
-The CLI shows a generation count and at most five examples while structured results retain every
-Query outcome. Phase 8 does not generate Mutations or Subscriptions and never executes any
+The CLI shows a generation count by default; Phase 13 verbose output shows retained artifacts
+and adjustment notes while structured results retain every Query outcome. Phase 8 does not generate Mutations or Subscriptions and never executes any
 generated operation; execution begins only in Phase 9.
 
 ## 17. Safe query execution
@@ -829,7 +829,8 @@ mode ACTIVE. It retains the exact document/variables, endpoint, POST method, req
 HTTP status/headers/body when available, duration (including transport failures), normalized error,
 response classification, and composed Phase 7 analysis (priority, categories, score). All prior
 Phase 3–9 evidence remains intact. Other decisions create no fabricated execution evidence.
-Default console output omits response bodies. Mutation success is execution evidence, never
+Phase 13.1 displays bounded attempted Mutation responses in default console output and Query
+responses with verbose output. Mutation success is execution evidence, never
 automatically a vulnerability, Finding, authorization bypass, or proof of impact.
 
 ## 18. Authentication support
@@ -928,11 +929,23 @@ Existing evidence is preserved without adding redaction or silently discarding e
 Markdown and HTML share a human presentation model for overview/counts, discovery, introspection,
 schema summaries, security-review candidates, generated Queries, safe execution, optional ACTIVE
 analysis, evidence counts, errors/limitations, recommendations, and safety notice. They show exact
-generated Queries and attempted Mutations in code blocks with variables, while keeping large raw
-response bodies out of the human presentation. Error text is summarized with full text retained
-in JSON. Package-loaded Jinja2 templates work independently of the current directory. HTML uses
+generated Queries and attempted Query/Mutation requests in code blocks with variables. Phase 13.1
+adds bounded observed response bodies, classification, HTTP status, and duration when available.
+HTML uses native collapsible `details` sections; Markdown uses Response subsections and safe code
+fences. Skipped/unselected operations have no response section. Network failures explicitly retain
+the absence of an HTTP response. Canonical JSON and execution evidence remain lossless and unchanged.
+Package-loaded Jinja2 templates work independently of the current directory. HTML uses
 default escaping, semantic headings/tables/code blocks, minimal embedded CSS, and no external
 resources or JavaScript. Markdown escapes untrusted prose and protects code-block delimiters.
+
+`presentation/responses.py` supplies a small shared human-response formatter with
+`MAX_HUMAN_RESPONSE_BODY_BYTES = 64 * 1024`. It bounds both the raw UTF-8 prefix and formatted output,
+pretty-prints complete bounded valid JSON deterministically, displays non-JSON text, and identifies
+binary/unrenderable content. Truncated views state that full bytes remain in canonical JSON evidence.
+Presentation parsing never reclassifies execution, removes response fields, changes evidence IDs,
+or alters authoritative bytes. Human reports may contain application data and must be handled as
+potentially sensitive pentest artifacts. No redaction subsystem is added; raw responses remain
+excluded from the unchanged AI allowlist.
 
 ACTIVE reports distinguish candidates, generation outcomes, `BLOCKED_SAFETY` and reasons,
 selection, final batch confirmation, non-execution decisions, and attempted outcomes. Only
@@ -946,7 +959,9 @@ never vulnerability severity. Enabled introspection and execution success are no
 findings or proof of exploitability. Phase 11 introduces no Finding models or AI interpretation.
 Reports state that testing requires authorization and results require professional validation.
 
-The CLI accepts repeated `--format json|markdown|html` and an optional output-directory `--output`.
+The CLI accepts repeated or comma-separated `--format` / `-f` values (`json`, `markdown`, `html`)
+and an optional output-directory `--output` / `-o`. Phase 13 normalizes whitespace, rejects empty
+or unknown entries before scanning, and deduplicates formats in first-occurrence order.
 The default directory is `./gqlsleuth-reports`; no format means no report writes. `--output`
 without a format is an input error. Duplicate formats produce one file each. The filesystem layer
 creates directories and normalizes the target host into a safe filename with a UTC timestamp,
@@ -1126,7 +1141,7 @@ The exact command structure may evolve during implementation. The primary user w
 gqlsleuth scan https://example.com
 ```
 
-Through Phase 12, `scan` and `version` are implemented. Reporting is integrated into `scan`:
+Through Phase 13.1, `scan` and `version` are implemented. Reporting is integrated into `scan`:
 
 ```bash
 gqlsleuth scan https://example.com --format json --format markdown --format html --output ./reports
@@ -1136,6 +1151,40 @@ The separate `report` command and other proposed commands remain future work. Re
 do not change scanning, ACTIVE selection, or final confirmation behavior.
 Optional `--ai` adds one local interpretation after the completed SAFE/ACTIVE result and before
 requested reports. It is disabled by default and exposes no provider/model configuration flags.
+
+Phase 13 provides `--help` / `-h` on root and subcommands using Typer context settings. Root help
+includes quick starts and common scan options; scan help remains authoritative. `--format` / `-f`
+accepts repeated, comma-separated, and mixed values with stable deduplication. `--output` / `-o`
+only chooses the report directory. `--verbose` / `-v` is one Boolean console-detail option.
+
+`cli.py` owns argument normalization, application calls, controlled errors, and the existing
+ACTIVE selection/confirmation interaction. `presentation/console.py` owns Rich rendering of
+completed results, with a small shared semantic theme, a target/mode panel, naturally wrapping
+tables, status text, GraphQL syntax highlighting, and a prominent final state-change warning.
+Application/domain modules remain independent from Rich. Console rendering performs no requests
+or new classifications and does not build or alter reports.
+
+Default output shows endpoint/confidence, introspection/schema status and counts, up to ten review
+candidates per retained endpoint in existing Phase 7 order, generation totals, and execution totals
+with up to five noteworthy non-success outcomes. Verbose shows all retained candidates with rule
+matches, generated Query artifacts/notes/failures, schema roots, and detailed execution reasons.
+Default Query output omits response bodies; verbose shows bounded observed responses. Attempted
+Mutation responses are displayed even by default. ACTIVE previews always retain exact executable Mutation
+documents, variables, priorities/categories, adjustment warnings, blocked reasons, and the exact
+selected batch before one default-NO confirmation. AI output remains separately labeled with its
+existing subsections; report paths are grouped by format. No scan, evidence, safety, AI, or report
+semantics change with verbosity.
+
+Phase 13.1 groups candidate and selected-batch endpoints in first-seen order while preserving
+candidate indices and within-endpoint order. Post-Mutation output shows runtime counts and
+observed responses, or a concise zero-execution/declined message, without repeating preview totals.
+`presentation/priorities.py` centralizes CRITICAL magenta, HIGH red, MEDIUM yellow, LOW green,
+and INFORMATIONAL bright blue for tables, verbose labels, previews, and selected batches. It also
+styles standalone priority words/phrases in AI console text without substring replacement or
+Rich markup parsing. The AI console consumes validated structured entries directly, with cyan
+subsection headings/references and wrapping tables. Validated canonical summary clauses are
+aligned without recalculating counts. Stored interpretation, report AI prose, AI validation,
+context, and inference behavior are unchanged.
 
 Possible options:
 
@@ -1576,8 +1625,9 @@ and accumulate into YAML-defined interest thresholds. The bundled rule set does 
 `create`, `update`, or `delete` terminology: actual root structure determines Query versus
 Mutation, and unmatched Mutations receive the informational state-changing fallback category.
 It produces ordered project-owned analysis models and `INTERESTING_OPERATION` evidence only for
-non-zero review candidates. The CLI shows the top ten candidates with explanations while the
-structured result retains every analyzed root operation. This phase performs no additional HTTP
+non-zero review candidates. The CLI shows the top ten candidates in a compact table; verbose output
+includes all retained candidates and explanations. The structured result retains every analyzed
+root operation. This phase performs no additional HTTP
 requests, query generation, operation execution, or vulnerability confirmation.
 
 ### Phase 8 — Query generation
@@ -1665,6 +1715,37 @@ Implemented:
 
 AI cannot control the scanner. No installation/download automation, remote providers, generic
 redaction, tool calls, feedback loops, or future-roadmap features are implemented.
+
+### Phase 13 — CLI & Console UX Overhaul
+
+Implemented:
+
+- Root/scan help aliases, concise quick starts, and common scan options in root help.
+- `-f` / `--format`: repeated, comma-separated, and mixed formats, trimming and stable deduplication.
+- Controlled errors for empty/unknown formats and output directories without formats.
+- `-o` / `--output` for directories; independent `-v` / `--verbose` for detailed console output.
+- Compact default Rich summaries and detailed verbose output in a dedicated console presentation layer.
+- Complete ACTIVE previews/selected batches and unchanged explicit selection/default-NO confirmation.
+- Separate labeled AI subsections and grouped report paths, preserving existing result semantics.
+- Offline CLI parsing, rendering, narrow-terminal, ACTIVE/AI, and report-equivalence regression tests.
+
+No new dependencies, scanner requests, generation/execution behavior, scores, evidence, AI context,
+AI validation, report semantics, or future-roadmap capabilities are introduced.
+
+### Phase 13.1 — Execution Evidence & Console Presentation Polish
+
+Implemented:
+
+- Shared bounded human response formatting for attempted Queries and Mutations.
+- Exact requests/variables and observed response details in Markdown and collapsible HTML.
+- Verbose Query responses and default ACTIVE Mutation responses, preserving compact SAFE output.
+- One 64 KiB human presentation limit, clear truncation/binary notices, and lossless canonical JSON.
+- Central priority colors, grouped Mutation endpoints, and concise runtime-only Mutation summaries.
+- Structured AI console tables with safe priority-term spans and consistent informational styling.
+- Offline evidence, escaping, size-boundary, priority, grouping, AI immutability, and safety regressions.
+
+No scanner, safety, execution, evidence, canonical JSON, AI context/validation/call-count, dependency,
+or Phase 14+ changes are introduced.
 
 ## 35. MVP definition
 

@@ -70,6 +70,10 @@ def test_empty_selection_displays_previews_and_executes_none(active_cli):
     assert "0 executed" in output
     assert active_cli[0] == []
     assert active_cli[1][0].selected_indices == ()
+    preview_output = result.stdout.split("Active Mutation candidates:")[1].split(
+        "Select Mutations"
+    )[0]
+    assert preview_output.count("Endpoint: https://example.com/graphql") == 1
 
 
 def test_selected_batch_is_rendered_then_confirmed_exactly_once(active_cli, phase_ten_scan):
@@ -85,6 +89,7 @@ def test_selected_batch_is_rendered_then_confirmed_exactly_once(active_cli, phas
     assert result.stdout.count("Select Mutations to execute") == 1
     selected_output = result.stdout.split("Selected Mutations:")[1].split("Execute these")[0]
     assert "WARNING: These operations may modify application state." in selected_output
+    assert selected_output.count("Endpoint: https://example.com/graphql") == 1
     for index in indices:
         artifact = preview.candidates[index - 1].generated_mutation
         assert artifact.operation_name in selected_output

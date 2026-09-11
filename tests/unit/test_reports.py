@@ -222,6 +222,9 @@ def test_human_reports_share_sections_interest_labels_and_omit_raw_bodies(report
     rendered = render_report(build_report(safe), format)
     for title in MAJOR_SECTIONS:
         assert title in rendered
+    assert rendered.count("Safety Notice") == 1
+    tail = rendered.split("Safety Notice", 1)[1]
+    assert "\n## " not in tail and "<h2>" not in tail
     assert "CRITICAL INTEREST" in rendered
     assert "HUGE_BODY" not in rendered
     assert "Active Mutation Analysis" not in rendered

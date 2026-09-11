@@ -261,29 +261,37 @@ def test_scan_command_runs_safe_execution_workflow() -> None:
     output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
-    assert "safe execution completed" in output
+    assert "GQLSleuth" in output
     assert "GraphQL: CONFIRMED" in output
     assert "Introspection: ENABLED" in output
     assert "Schema: PARSED" in output
-    assert "Query root: Query" in output
-    assert "Mutation root: Mutation" in output
-    assert "Types: 4; Queries: 2; Mutations: 1; Subscriptions: 0" in output
-    assert "2 root operation(s); 2 security-review candidate(s)" in output
-    assert "HIGH INTEREST [mutation] resetPassword" in output
-    assert "interest score 6" in output
-    assert "MEDIUM INTEREST [query] exportUsers" in output
-    assert "interest score 4" in output
+    assert "Types Queries Mutations Subscriptions" in output
+    assert any(line.split() == ["4", "2", "1", "0"] for line in result.stdout.splitlines())
+    assert "2 root operation(s); 2 review candidate(s)" in output
+    assert "HIGH Mutation resetPassword 6" in output
+    assert "MEDIUM Query exportUsers 4" in output
     assert output.index("resetPassword") < output.index("exportUsers")
-    assert "Generated read-only queries: 1/1" in output
-    assert "query { exportUsers }" in output
-    assert "generated 1/1 read-only query artifact(s)" in output
-    assert "Safe query execution: 1 executed; 1 succeeded" in output
-    assert "[query] exportUsers — SUCCESS — HTTP 404" in output
-    assert "executed 1, succeeded 1" in output
-    assert "processed 1 schema result(s)" in output
+    assert "Generated Queries 1/1 generated; 0 generation failures." in output
+    assert "query { exportUsers }" not in output
+    assert "Deterministic test terminology" not in output
+    assert "Query Execution Attempted 1; Success 1; GraphQL errors 0" in output
     assert "not vulnerability severities or vulnerability confirmation" in output.lower()
     assert target in output
-    assert "Effective mode: safe" in output
+    assert "Mode SAFE" in output
+
+
+@pytest.mark.parametrize("flag", ["--verbose", "-v"])
+def test_verbose_retains_detailed_technical_output(flag):
+    result = runner.invoke(app, ["scan", "https://example.com", flag])
+    output = " ".join(result.stdout.split())
+    assert result.exit_code == 0
+    assert "Query root: Query" in output
+    assert "Mutation root: Mutation" in output
+    assert "HIGH INTEREST [mutation] resetPassword" in output
+    assert "interest score 6" in output
+    assert "Deterministic test terminology." in output
+    assert "query { exportUsers }" in output
+    assert "exportUsers SUCCESS 404" in output
 
 
 def test_scan_command_requires_a_target() -> None:
@@ -308,7 +316,7 @@ def test_scan_accepts_explicit_safe_mode() -> None:
     output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
-    assert "Effective mode: safe" in output
+    assert "Mode SAFE" in output
     assert "not vulnerability severities or vulnerability confirmation" in output
 
 
@@ -317,8 +325,8 @@ def test_scan_accepts_active_and_retains_safe_query_execution_before_previews() 
     output = " ".join(result.stdout.split())
 
     assert result.exit_code == 0
-    assert "Effective mode: active" in output
-    assert "Safe query execution: 1 executed; 1 succeeded" in output
+    assert "Mode ACTIVE" in output
+    assert "Query Execution Attempted 1; Success 1" in output
     assert "Active Mutation candidates:" in output
     assert "not vulnerability severities or vulnerability confirmation" in output
 

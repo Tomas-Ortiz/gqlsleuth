@@ -19,6 +19,8 @@ from gqlsleuth.infrastructure.ollama import OllamaClient
 
 @pytest.fixture
 def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
+    # Durations are now visible; compare presentation with deterministic transport timing.
+    monkeypatch.setattr("gqlsleuth.infrastructure.http.perf_counter", lambda: 1.0)
     scans = {mode: phase_ten_scan(mode=mode)[0] for mode in ScanMode}
     events = []
     target_requests = []
@@ -85,10 +87,12 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
     return events, target_requests, ai_requests, results, behavior
 
 
-def invoke(mode, *, ai=False, reports=False, input="\n"):
+def invoke(mode, *, ai=False, reports=False, input="\n", verbose=False):
     options = ["scan", "https://example.com", "--mode", mode]
     if ai:
         options.append("--ai")
+    if verbose:
+        options.append("--verbose")
     if reports:
         for format in ("json", "markdown", "html"):
             options.extend(["--format", format])
@@ -114,14 +118,15 @@ def test_disabled_ai_makes_no_inference_or_ai_report_section(ai_cli, tmp_path, m
     "mode,selection,mutation_count",
     [("safe", "\n", 0), ("active", "\n", 0), ("active", "1\ny\n", 1)],
 )
+@pytest.mark.parametrize("verbose", [False, True])
 def test_one_ai_inference_follows_completed_safe_and_active_behavior(
-    ai_cli, mode, selection, mutation_count
+    ai_cli, mode, selection, mutation_count, verbose
 ):
-    baseline = invoke(mode, input=selection)
+    baseline = invoke(mode, input=selection, verbose=verbose)
     events, target_requests, ai_requests, results, _ = ai_cli
     before_requests = list(target_requests)
     events.clear()
-    result = invoke(mode, ai=True, input=selection)
+    result = invoke(mode, ai=True, input=selection, verbose=verbose)
     assert result.exit_code == baseline.exit_code == 0
     assert result.stdout.split("AI assistance: interpreting")[0] == baseline.stdout
     assert events == (["safe", "active_complete", "ai"] if mode == "active" else ["safe", "ai"])

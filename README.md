@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 12 — Optional Local AI Assistance**. It provides the Phase 0
+The repository is currently at **Phase 13.1 — Execution Evidence & Console Presentation Polish**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -20,6 +20,11 @@ controlled Query execution, followed in ACTIVE mode by Mutation previews and sep
 selected and confirmed Mutation execution. Phase 11 adds opt-in JSON, Markdown, and HTML reports
 from those structured results. Phase 12 adds optional local interpretation after the completed
 SAFE or ACTIVE workflow, using Ollama and `qwen3:8b`.
+Phase 13 adds concise default console output, optional detailed output, help/option aliases,
+and comma-separated report formats. Scanning, ACTIVE controls, AI, and report semantics are unchanged.
+Phase 13.1 adds bounded execution responses to human reports and console details, consistent
+priority colors, grouped Mutation previews, and structured AI console tables. Canonical JSON
+evidence, scanner behavior, and AI inputs/validation remain unchanged.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
@@ -73,6 +78,8 @@ Show the available commands:
 
 ```bash
 uv run gqlsleuth --help
+uv run gqlsleuth -h
+uv run gqlsleuth scan -h
 ```
 
 ## Current commands
@@ -102,7 +109,7 @@ acknowledges entry into active capabilities for an authorized target; it does **
 any Mutation request. There is no `--authorized`, `--yes`, or `--force` option.
 
 The active stage previews all Mutation candidates in retained Phase 7 order. Executable candidates
-show their endpoint, field name, review priority, categories, exact anonymous Mutation document,
+show their endpoint once per group, field name, review priority, categories, exact anonymous Mutation document,
 exact variables, and placeholder/manual-adjustment warnings. Failed generation and blocked
 candidates remain visible with their reasons. Destructive primary-name tokens `delete`, `remove`,
 `destroy`, `purge`, `drop`, `wipe`, `erase`, `burn`, and `truncate` block execution without an
@@ -143,12 +150,38 @@ classification, and Phase 7 analysis. Generation failures, invalid artifacts, sa
 unselected/declined operations, and limit skips remain structured decisions with no fabricated
 execution evidence. Success is not a vulnerability finding or proof of authorization bypass.
 
-The CLI displays at most the ten highest-priority review candidates while the structured
-application result retains every analyzed Query and Mutation root field. Each displayed
-candidate includes its interest score, categories, matched rules, and deterministic reason.
-The CLI also shows at most five generated Query examples. Structured results retain every
-successful or failed Query-generation result. Generated variables are placeholders and may need
-manual adjustment for the target application's semantics.
+Default console output is compact: target/mode, endpoint confidence and introspection status,
+schema counts, the first ten review candidates in existing Phase 7 order, Query-generation totals,
+and execution counts with up to five noteworthy error/skip outcomes. Review candidates show
+interest priority, kind, name, and score. The console does not dump generated Queries or rule
+explanations by default. Structured results retain all operations and evidence.
+
+Use `--verbose` / `-v` for all retained review candidates and rule matches, schema roots,
+generated Query documents/variables/adjustment notes, generation failures, and detailed execution
+outcomes. This is one Boolean display option; it changes neither requests nor report content.
+Full Mutation previews, selected documents, variables, safety reasons, warnings, and the final
+confirmation remain visible without verbose mode.
+
+Verbose Query execution shows the observed response body, classification, HTTP status, and
+duration when available. Default SAFE output continues to omit Query bodies. Attempted ACTIVE
+Mutation responses are shown even without verbose mode; the final **Mutation Execution** summary
+focuses on executed/success/error counts. Empty or declined batches report zero executions.
+Skipped, blocked, unselected, and declined operations have no fabricated response.
+
+Console priorities use one palette everywhere: **CRITICAL** magenta, **HIGH** red, **MEDIUM** yellow,
+**LOW** green, and **INFORMATIONAL** bright blue. Priority remains review interest, not severity.
+
+```bash
+uv run gqlsleuth scan https://example.com
+uv run gqlsleuth scan https://example.com -v
+uv run gqlsleuth scan https://example.com -f html
+uv run gqlsleuth scan https://example.com -f json,html -o ./reports
+uv run gqlsleuth scan https://example.com --ai -f html
+uv run gqlsleuth scan https://example.com --mode active
+```
+
+Root help (`--help` / `-h`) includes quick starts and common scan options; `scan --help` / `scan -h`
+documents the full scan command. Reports remain the detailed persisted analysis/evidence output.
 
 The execution summary distinguishes successful responses, GraphQL/application errors, transport
 failures, and operations skipped for safety or because of the 20-request limit. Generated
@@ -164,11 +197,13 @@ uv run gqlsleuth scan https://example.com --format json --format markdown --form
 uv run gqlsleuth scan https://example.com --mode active --format json --format html
 ```
 
-Repeat `--format` to select `json`, `markdown`, or `html`. Repeating the same format writes it
-once. `--output` names a directory, which is created when needed; the default is
+Use `--format` / `-f` to select `json`, `markdown`, or `html`. Both comma-separated and repeated
+values work, including mixed syntax such as `-f json,html -f markdown -f json`. Surrounding
+whitespace is trimmed; empty or unknown values are rejected before scanning. Formats retain
+first-occurrence order and each is written once. `--output` / `-o` names a directory, which is created when needed; the default is
 `./gqlsleuth-reports`. Without `--format`, no report files or directories are created and the
 existing scan output is unchanged. Supplying `--output` alone or an unknown format is an input
-error. There is no separate `report` command.
+error. Output-directory options never change console verbosity. There is no separate `report` command.
 
 Reporting runs after the existing scan and ACTIVE interaction finish. It performs **zero
 additional network requests or GraphQL operations** and makes no new security decisions.
@@ -180,7 +215,10 @@ additional network requests or GraphQL operations** and makes no new security de
 - **Markdown** and **HTML** provide deterministic counts, discovery/confidence, introspection
   status, schema summaries, review candidates and reasons, generated Queries, execution
   outcomes, evidence counts, observed errors/limitations, and manual-review recommendations.
-  They omit large raw response bodies. HTML is a standalone document with embedded CSS, escaped
+  Attempted Query and Mutation execution entries show the exact request/variables and an observed
+  Response section, including status, classification, duration, and bounded response content.
+  HTML uses native collapsible server-response sections, without JavaScript.
+  HTML is a standalone document with embedded CSS, escaped
   target text, and no external scripts, stylesheets, or CDN dependencies.
 
 ACTIVE reports separately record Mutation generation, safety blocks and reasons, explicit
@@ -188,7 +226,18 @@ selection, final batch confirmation, and execution outcomes. Unselected, decline
 failed, and limit-skipped candidates are not counted as executed. Only existing
 `MUTATION_EXECUTION` evidence establishes an attempted Mutation request; the same rule applies
 to `QUERY_EXECUTION` evidence. Human reports show exact documents and variables for attempted
-Mutations. SAFE reports never imply Mutation execution.
+Queries and Mutations. SAFE reports never imply Mutation execution.
+
+Human response content has a **64 KiB UTF-8 presentation limit** shared by console, Markdown,
+and HTML. Complete valid JSON within the limit is pretty-printed deterministically; non-JSON
+text is displayed as text. Both the input prefix and expanded formatted output are bounded.
+Truncation is explicitly labeled; canonical JSON/evidence retains the complete raw bytes.
+Binary/unrenderable bodies receive a notice, and network failures state that no HTTP response
+was received. Pretty-printing never changes execution classifications or underlying evidence.
+
+**Markdown/HTML execution sections may contain application response data. Treat these reports
+as potentially sensitive pentest artifacts.** No response fields are automatically removed or
+redacted. Raw response bodies remain excluded from AI context.
 
 Filenames use a normalized target host and UTC report timestamp, for example
 `gqlsleuth-example.com-20260908-231500.json` (or `.md` / `.html`). Existing files are never
@@ -265,6 +314,12 @@ CLI, Markdown, and HTML label the optional section **AI-Assisted Interpretation*
 evidence. This additive optional field keeps report schema version 1; it is absent when AI was
 not requested. HTML escapes model text. AI produces interpretation only: it is not Evidence,
 does not create Findings, and does not establish vulnerability severity or confirmation.
+
+The AI console uses cyan subsection headings and operation references, with separate tables for
+validated execution facts and interpretation entries. Standalone priority terms in model prose
+are uppercased and colored only for console display (for example, `high interest` becomes
+`HIGH INTEREST`; `highly` is unchanged). Stored AI results and JSON/Markdown/HTML AI prose are
+not rewritten. Model text is rendered as untrusted text, never interpreted as Rich markup.
 
 ## Configuration
 

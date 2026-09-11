@@ -21,6 +21,8 @@
     pre { padding: 1rem; overflow-x: auto; background: #f0f4f6; border-left: 3px solid #6994a4; }
     code { font-family: ui-monospace, Consolas, monospace; font-size: .9rem; }
     article { border-bottom: 1px solid #e0e6e9; padding-bottom: 1rem; }
+    details { margin: 1rem 0; padding: .75rem 1rem; border: 1px solid #ccd7dd; }
+    summary { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
     @media (max-width: 600px) { main { padding: 1rem; } dl { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -54,6 +56,35 @@
 {% for language, text in entry.code_blocks %}
       <pre><code class="language-{{ language }}">{{ text }}</code></pre>
 {% endfor %}
+{% if entry.request_blocks %}
+      <h4>Request</h4>
+{% for language, text in entry.request_blocks %}
+{% if language == 'json' %}
+      <p>Variables:</p>
+{% endif %}
+      <pre><code class="language-{{ language }}">{{ text }}</code></pre>
+{% endfor %}
+{% endif %}
+{% if entry.response %}
+      <details>
+        <summary>{{ entry.response.summary }}</summary>
+        <dl>
+{% for label, value in entry.response.details %}
+          <dt>{{ label }}</dt><dd>{{ value }}</dd>
+{% endfor %}
+        </dl>
+{% if entry.response.body is not none %}
+{% if entry.response.body.notice %}
+        <p>{{ entry.response.body.notice }}</p>
+{% endif %}
+{% if entry.response.body.text %}
+        <pre><code class="language-{{ entry.response.body.language }}">{{ entry.response.body.text }}</code></pre>
+{% endif %}
+{% else %}
+        <p>No HTTP response was received; no server response body is available.</p>
+{% endif %}
+      </details>
+{% endif %}
     </article>
 {% endfor %}
 {% if not section.paragraphs and not section.rows and not section.entries %}

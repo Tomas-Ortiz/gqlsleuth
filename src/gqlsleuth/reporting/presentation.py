@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass, fields
 
 from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult, AIStatement
+from gqlsleuth.domain.models import Evidence
+from gqlsleuth.presentation.responses import ResponsePresentation, present_response
 from gqlsleuth.reporting.models import OperationReport, ReportContext
 
 
@@ -13,6 +15,8 @@ class ReportEntry:
     details: tuple[tuple[str, str], ...] = ()
     paragraphs: tuple[str, ...] = ()
     code_blocks: tuple[tuple[str, str], ...] = ()
+    request_blocks: tuple[tuple[str, str], ...] = ()
+    response: ResponsePresentation | None = None
 
 
 @dataclass(frozen=True)
@@ -24,7 +28,7 @@ class ReportSection:
 
 
 def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
-    """Format only recorded facts; no response-body parsing or operation classification."""
+    """Present recorded facts; response parsing is display-only, never classification."""
     sections = [
         ReportSection(
             "Scan Overview",
@@ -122,7 +126,9 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 "Attempted requests are established only by QUERY_EXECUTION evidence. "
                 "SUCCESS is an execution outcome, not a vulnerability finding.",
             ),
-            entries=tuple(_execution_entry(item) for item in report.queries if item.execution),
+            entries=tuple(
+                _execution_entry(item, report.evidence) for item in report.queries if item.execution
+            ),
         ),
     ]
     if report.mode.value == "active":
@@ -156,7 +162,9 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                         ),
                         ("Final batch confirmed", "Yes" if active.confirmed else "No"),
                     ),
-                    entries=tuple(_mutation_entry(item) for item in active.candidates),
+                    entries=tuple(
+                        _mutation_entry(item, report.evidence) for item in active.candidates
+                    ),
                 )
             )
     sections.extend(
@@ -166,7 +174,7 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 paragraphs=(
                     "Counts refer to retained evidence. "
                     "Exact request/response facts are preserved in JSON; "
-                    "large raw bodies are omitted from this human-readable report.",
+                    "human execution response bodies are bounded for presentation.",
                 ),
                 rows=tuple(
                     (key.upper(), str(value)) for key, value in report.evidence_counts.items()
@@ -184,11 +192,20 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 ),
             ),
             ReportSection("Manual Review Recommendations", paragraphs=report.recommendations),
-            ReportSection("Safety Notice", paragraphs=(report.safety_notice,)),
         )
     )
     if report.ai_interpretation is not None:
         sections.append(ai_section(report.ai_interpretation))
+    sections.append(
+        ReportSection(
+            "Safety Notice",
+            paragraphs=(
+                report.safety_notice,
+                "Execution sections may contain application response data. "
+                "Handle this report as a potentially sensitive pentest artifact.",
+            ),
+        )
+    )
     return tuple(sections)
 
 
@@ -273,11 +290,24 @@ def _artifact_entry(item: OperationReport) -> ReportEntry:
     )
 
 
-def _execution_entry(item: OperationReport) -> ReportEntry:
+def _execution_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ()) -> ReportEntry:
     execution = item.execution
     if execution is None:
         return ReportEntry(
             item.generated.operation_name, paragraphs=("No execution result retained.",)
+        )
+    response = None
+    if execution.attempted:
+        duration = next(
+            (
+                fact.duration_seconds
+                for fact in evidence
+                if fact.evidence_id in execution.evidence_ids
+            ),
+            None,
+        )
+        response = present_response(
+            execution.response, execution.status or "Not recorded", duration_seconds=duration
         )
     return ReportEntry(
         item.generated.operation_name,
@@ -296,11 +326,13 @@ def _execution_entry(item: OperationReport) -> ReportEntry:
         ),
         paragraphs=(execution.reason,)
         + ((execution.error_message,) if execution.error_message else ()),
+        request_blocks=_artifact_entry(item).code_blocks if execution.attempted else (),
+        response=response,
     )
 
 
-def _mutation_entry(item: OperationReport) -> ReportEntry:
-    execution = _execution_entry(item)
+def _mutation_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ()) -> ReportEntry:
+    execution = _execution_entry(item, evidence)
     artifact = item.generated
     return ReportEntry(
         f"[{item.candidate_index}] {artifact.operation_name}",
@@ -320,9 +352,8 @@ def _mutation_entry(item: OperationReport) -> ReportEntry:
                 *((artifact.failure_reason,) if artifact.failure_reason else ()),
             )
         ),
-        code_blocks=_artifact_entry(item).code_blocks
-        if item.execution and item.execution.attempted
-        else (),
+        request_blocks=execution.request_blocks,
+        response=execution.response,
     )
 
 

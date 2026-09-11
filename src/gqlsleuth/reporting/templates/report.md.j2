@@ -30,6 +30,39 @@
 {{ text | fenced(language) }}
 
 {% endfor %}
+{% if entry.request_blocks %}
+#### Request
+
+{% for language, text in entry.request_blocks %}
+{% if language == 'json' %}
+Variables:
+
+{% endif %}
+{{ text | fenced(language) }}
+
+{% endfor %}
+{% endif %}
+{% if entry.response %}
+#### Response
+
+{% for label, value in entry.response.details %}
+- **{{ label }}:** {{ value | markdown_text }}
+{% endfor %}
+
+{% if entry.response.body is not none %}
+{% if entry.response.body.notice %}
+{{ entry.response.body.notice | markdown_text }}
+
+{% endif %}
+{% if entry.response.body.text %}
+{{ entry.response.body.text | fenced(entry.response.body.language) }}
+
+{% endif %}
+{% else %}
+No HTTP response was received; no server response body is available.
+
+{% endif %}
+{% endif %}
 {% endfor %}
 {% if not section.paragraphs and not section.rows and not section.entries %}
 None recorded.
