@@ -8,6 +8,7 @@ from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode
 from gqlsleuth.domain.schema import ParsedSchema, SchemaSummary
 from gqlsleuth.graphql.introspection import IntrospectionStatus
 from gqlsleuth.graphql.schema_parser import parse_introspection_response
+from gqlsleuth.infrastructure.http import HttpClientSettings
 
 SCHEMA_SOURCE = "gqlsleuth.application.schema_parsing"
 
@@ -46,9 +47,12 @@ def run_schema_scan(
     target_url: str,
     *,
     mode: ScanMode = ScanMode.SAFE,
+    http_settings: HttpClientSettings | None = None,
 ) -> SchemaScanResult:
     """Run Phases 3–6, parsing retained full responses without new requests."""
-    return parse_introspection_schemas(run_introspection_scan(target_url, mode=mode))
+    return parse_introspection_schemas(
+        run_introspection_scan(target_url, mode=mode, http_settings=http_settings)
+    )
 
 
 def parse_introspection_schemas(introspection: IntrospectionScanResult) -> SchemaScanResult:

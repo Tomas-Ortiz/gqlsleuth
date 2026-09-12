@@ -1,8 +1,63 @@
-"""Map scan command inputs to the minimal Phase 1 application settings."""
+"""Map CLI inputs to scan mode and immutable target HTTP settings."""
 
 from dataclasses import dataclass
+from math import isfinite
 
+from pydantic import ValidationError
+
+from gqlsleuth.domain.exceptions import HttpConfigurationError
 from gqlsleuth.domain.models import ScanMode, Target
+from gqlsleuth.infrastructure.http import (
+    DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
+    DEFAULT_TIMEOUT_SECONDS,
+    HttpClientSettings,
+    validate_target_header,
+)
+
+
+def map_target_http_inputs(
+    *,
+    headers: list[str] | None = None,
+    timeout: str | None = None,
+    verify_tls: bool = True,
+    proxy: str | None = None,
+) -> HttpClientSettings:
+    """Map CLI-only inputs once; errors identify arguments without echoing their values."""
+    parsed_headers = []
+    for index, entry in enumerate(headers or (), start=1):
+        try:
+            if "\r" in entry or "\n" in entry:
+                raise ValueError("CR/LF characters are not allowed.")
+            name, separator, value = entry.partition(":")
+            if not separator:
+                raise ValueError("Expected NAME: VALUE.")
+            parsed_headers.append(validate_target_header(name.strip(" \t"), value))
+        except ValueError as error:
+            raise HttpConfigurationError(f"Header argument {index}: {error}") from None
+    seconds = DEFAULT_TIMEOUT_SECONDS
+    discovery_seconds = DEFAULT_DISCOVERY_TIMEOUT_SECONDS
+    if timeout is not None:
+        try:
+            seconds = float(timeout)
+            if not isfinite(seconds) or seconds <= 0:
+                raise ValueError
+        except ValueError:
+            raise HttpConfigurationError(
+                "--timeout must be a finite positive number of seconds."
+            ) from None
+        discovery_seconds = seconds
+    try:
+        return HttpClientSettings(
+            custom_headers=tuple(parsed_headers),
+            verify_tls=verify_tls,
+            proxy=proxy,
+            timeout_seconds=seconds,
+            discovery_timeout_seconds=discovery_seconds,
+        )
+    except ValidationError:
+        raise HttpConfigurationError(
+            "--proxy must be a valid HTTP(S) proxy URL with a host and optional port."
+        ) from None
 
 
 @dataclass(frozen=True)

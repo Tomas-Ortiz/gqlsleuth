@@ -220,22 +220,10 @@ def ai_section(result: AIInterpretationResult) -> ReportSection:
                 paragraphs=(_ai_statement(interpretation.scan_summary),),
             ),
             ReportEntry(
-                "Review Focus",
-                paragraphs=tuple(
-                    f"{item.operation}: {item.explanation}" for item in interpretation.review_focus
-                ),
-            ),
-            ReportEntry(
-                "Operation Explanations",
+                "Operation Review",
                 paragraphs=tuple(
                     f"{item.operation}: {item.explanation}"
-                    for item in interpretation.operation_explanations
-                ),
-            ),
-            ReportEntry(
-                "Manual Review Suggestions",
-                paragraphs=tuple(
-                    _ai_statement(item) for item in interpretation.manual_review_suggestions
+                    for item in interpretation.operation_review
                 ),
             ),
             ReportEntry(

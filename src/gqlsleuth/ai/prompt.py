@@ -23,31 +23,37 @@ scan_summary.operations array. Do not paraphrase it or add execution claims to i
 the complete scan, including operations omitted from the bounded input. Keep other sections
 focused on review interpretation, not restating aggregate execution counts. Any discussion of an
 individual operation's outcome must preserve its exact supplied classification.
-Review priority is INTEREST, not vulnerability severity. SUCCESS means successful execution,
-not a vulnerability. GRAPHQL_ERROR means GraphQL errors, not a vulnerability. BLOCKED, SKIPPED,
-NOT_SELECTED, and DECLINED operations were not executed. A schema Mutation in SAFE mode was only
+Review priority is INTEREST, not vulnerability severity. Always express priority as review
+interest: use CRITICAL-interest, HIGH-interest, MEDIUM-interest, LOW-interest,
+INFORMATIONAL-interest, or "has CRITICAL review interest" with the supplied priority.
+Never write "this operation is CRITICAL" or "this mutation is HIGH"; a bare priority label
+must not describe the operation.
+SUCCESS means successful execution, not a vulnerability. GRAPHQL_ERROR means GraphQL errors,
+not a vulnerability. BLOCKED, SKIPPED, NOT_SELECTED, and DECLINED operations were not executed.
+A schema Mutation in SAFE mode was only
 analyzed. You cannot execute, select, confirm, reclassify, or control any scanner operation.
 Suggest only non-destructive, non-disruptive manual review. Never recommend brute force, DoS,
 flooding, destructive actions, exploits, or automatic execution. Do not assign severity or CVSS,
 create Findings, or claim vulnerability confirmation. Do not infer return fields or arguments
 that were not supplied. A return type name alone does not prove what fields it exposes.
 Give each interpretation section a distinct purpose:
-- review_focus: Explain WHY the operation deserves manual attention, using its supplied interest
-  priority, categories, apparent role, and relevant execution evidence. Prefer CRITICAL/HIGH
-  interest and materially relevant attempted operations over LOW-interest unselected operations
-  where appropriate. A HIGH-interest Mutation that actually succeeded generally deserves attention
-  before a LOW-interest unselected operation. Status may support the reason, but must not be the
-  entire explanation. Preserve the supplied deterministic priority/order among chosen entries;
-  do not rescore operations or treat review-focus selection as scanner execution selection.
-- operation_explanations: Explain WHAT the operation appears to do and its apparent security role
-  from the supplied kind, name, return-type name, and categories. Qualify inferred roles as
-  apparent; do not invent arguments, return fields, access controls, or impact. Do not repeat
-  execution status unless essential to understanding the role. Execution outcomes belong
-  primarily in validated facts and review_focus. Do not copy the review_focus explanation.
-- manual_review_suggestions: Give concrete, non-destructive manual checks grounded in the
-  supplied context, such as inspecting relevant schema definitions or reviewing recorded outcomes
-  against intended behavior. Explain what to inspect and why; do not just repeat priority/status
-  or prescribe executing unselected operations.
+- operation_review: Write one concise paragraph per operation combining its supplied review
+  interest, apparent functional or security role, relevant observed execution/result context,
+  why it deserves attention, and a concrete, non-destructive manual review direction.
+  Prefer CRITICAL-interest/HIGH-interest and materially relevant attempted operations over
+  LOW-interest unselected operations where appropriate. A HIGH-interest Mutation that actually
+  succeeded generally deserves attention before a LOW-interest unselected operation. Status may
+  support the reason for attention, but must not be the entire explanation. Preserve the supplied
+  deterministic priority/order among chosen entries; do not rescore operations or treat inclusion
+  in this review as scanner execution selection. Use the supplied kind, name, return-type name,
+  and categories to explain what it appears to do; qualify inferred roles as apparent.
+  Do not invent arguments, return fields, access controls, impact, or root causes.
+  Include relevant recorded outcomes
+  using their exact classifications, without merely repeating status or aggregate counts.
+  For unexecuted operations, runtime behavior was not observed; distinguish safety blocks from
+  non-selection when relevant. Explain what to inspect and why, such as relevant schema
+  definitions or recorded outcomes against intended behavior. Do not prescribe executing
+  unselected operations. Use one entry per operation, combining these points without repetition.
 - limitations: Describe uncertainty, omitted context, and evidence needed to validate an
   interpretation. Distinguish a safety block from an operator's non-selection or declined
   confirmation. For NOT_SELECTED, BLOCKED_SAFETY, DECLINED, and similar non-execution decisions,
@@ -58,7 +64,7 @@ Give each interpretation section a distinct purpose:
 Return ONLY the requested JSON structure, no reasoning/thinking, markdown, or commentary.
 Keep prose concise (prefer 1-2 sentences), and lists short; empty lists are valid.
 Every operation reference must use its exact supplied 'operation' identifier in the dedicated
-'operation' or 'operations' fields, including summary, suggestions, and limitations. Never put
+'operation' or 'operations' fields, including summary, review, and limitations. Never put
 operation names or identifiers into free-text prose: use those reference fields instead.
 Only reference operations included in this input, not omitted operations. All required fields
 must be present. Explain uncertainty and omitted context without inventing findings.
@@ -112,13 +118,9 @@ def validate_interpretation(text: str, context: AIContext) -> AIInterpretation:
     """Reject the entire answer on malformed structure or unknown references in any section."""
     interpretation = AIInterpretation.model_validate_json(text, strict=True)
     known = {item.operation for item in context.operations}
-    references = [
-        item.operation
-        for item in (*interpretation.review_focus, *interpretation.operation_explanations)
-    ]
+    references = [item.operation for item in interpretation.operation_review]
     for statement in (
         interpretation.scan_summary,
-        *interpretation.manual_review_suggestions,
         *interpretation.limitations,
     ):
         references.extend(statement.operations)

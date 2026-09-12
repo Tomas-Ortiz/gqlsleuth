@@ -39,7 +39,7 @@ from gqlsleuth.domain.models import ConfidenceLevel, ScanMode, Target
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.domain.schema import ParsedSchema, SchemaSummary, TypeReference
 from gqlsleuth.graphql.introspection import IntrospectionStatus
-from gqlsleuth.infrastructure.http import HttpResponse
+from gqlsleuth.infrastructure.http import HttpClientSettings, HttpResponse
 
 runner = CliRunner()
 app = cli_module.app
@@ -54,6 +54,7 @@ def scan_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
         target_url: str,
         *,
         mode: ScanMode = ScanMode.SAFE,
+        http_settings: HttpClientSettings | None = None,
     ) -> SafeExecutionScanResult:
         target = Target.parse(target_url)
         calls.append((target_url, mode))

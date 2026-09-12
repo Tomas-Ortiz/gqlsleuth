@@ -264,7 +264,8 @@ normalized transport failure is recorded for its candidate without preventing la
 from being probed. Each outcome creates `ENDPOINT_CANDIDATE` evidence; no GraphQL confirmation,
 observation, finding, or confidence score is produced in this phase.
 
-Discovery GET probes use an eight-second per-request timeout. The preferred candidate is requested
+Discovery GET probes default to an eight-second per-request timeout (an explicit Phase 14
+`--timeout` overrides this). The preferred candidate is requested
 alone first. In the complete scan workflow, Phase 4 immediately analyzes and, when needed, probes
 that result before additional discovery begins. If it reaches `CONFIRMED` or `PROBABLE`, remaining
 candidates are never requested or represented in results. Otherwise, the remaining candidates are
@@ -387,9 +388,40 @@ The Phase 2 defaults are:
 - Environment-derived HTTP configuration disabled with `trust_env=False`.
 - User-Agent set to `GQLSleuth/<current version>`.
 
-The normal ten-second client timeout remains in effect for Phase 4 fallback POST requests and all
-Phase 5 minimal/full introspection requests. Only Phase 3 discovery GET requests override it with
+Without an explicit timeout, the normal ten-second client timeout remains in effect for Phase 4
+fallback POST requests and all Phase 5 minimal/full introspection requests. Only Phase 3 discovery GET requests override it with
 the shorter eight-second timeout.
+
+Phase 14 exposes the existing target HTTP adapter through repeated `--header` / `-H`,
+`--timeout`, `--proxy`, and `--verify-tls` / `--no-verify-tls`. The application input mapper
+builds one immutable `HttpClientSettings` value and passes it through the existing scan entry
+points and ACTIVE execution. Existing client lifetimes remain; there is no phase-specific
+header merging, new credential-validation request, or duplication of networking logic.
+
+An explicit finite positive timeout sets both normal and discovery timeouts; omission retains
+10/8 seconds. TLS verification stays enabled unless explicitly disabled, with one CLI warning
+and no insecure retry. Only explicit HTTP(S) proxy origins are accepted (optional credentials
+and port, no path except `/`, query, or fragment). SOCKS requires no new dependency because it
+is not supported. `trust_env=False` remains authoritative; there is no environment/config-file
+discovery. None of these settings affect the separate local Ollama adapter.
+
+Custom headers split at the first colon; name/value boundary spaces and tabs are trimmed.
+HTTP token names and ASCII text values are validated; CR/LF, other controls except internal
+horizontal tabs, empty names, and missing separators fail before scanning. Errors identify
+the argument number without echoing its value. Duplicate names retain separate fields in
+supplied order rather than being comma-joined. Explicit User-Agent overrides the default.
+Scanner-owned request fields take precedence case-insensitively; HTTPX supplies JSON POST
+Content-Type and body length, ignoring supplied Content-Type on those requests. Custom Host,
+Content-Length, Transfer-Encoding, Connection, Keep-Alive, Proxy-Connection, Proxy-Authorization,
+TE, Trailer, and Upgrade are rejected as transport-controlled fields.
+
+The centralized adapter scopes supplied headers to the original request origin (scheme, host,
+port) with per-request redirect state, safe for concurrent discovery. Same-origin redirects
+retain authentication, including explicit Cookies. Crossing origins strips supplied headers
+and credentials for the rest of that redirect chain, including redirects back; it never
+reapplies them to unrelated destinations. HTTPX retains ownership of redirects, method/body
+handling, and limits. Offline tests verify arbitrary API-key/custom header canaries as well
+as Authorization/Cookie behavior; HTTPX's default Authorization stripping alone is insufficient.
 
 ## 12. Introspection
 
@@ -835,15 +867,29 @@ automatically a vulnerability, Finding, authorization bypass, or proof of impact
 
 ## 18. Authentication support
 
-The MVP may support user-provided headers:
+Phase 14 supports one user-supplied authentication/request context per scan:
 
 ```bash
 gqlsleuth scan https://example.com/graphql --header "Authorization: Bearer TOKEN"
+gqlsleuth scan https://example.com/graphql -H "Cookie: session=test-session"
+gqlsleuth scan https://example.com/graphql -H "X-API-Key: test-api-key" -H "X-Tenant-ID: 123"
 ```
 
-Additional headers may be supplied more than once.
+Headers apply to every target stage: discovery GET, fallback confirmation POST, both
+introspection requests, safe Queries, and explicitly selected/confirmed ACTIVE Mutations.
+This also applies to direct endpoints. No `--token` or separate User-Agent option is added.
 
-The tool should not attempt to obtain credentials automatically. The MVP will not perform differential authorization testing between anonymous, user and administrator contexts. Multi-context authorization comparison may be introduced in a later version.
+The tool never obtains credentials, logs in, refreshes tokens, reads browser cookies, or performs
+OAuth/OIDC flows automatically. Anonymous/user/admin comparison and multiple profiles remain
+future work. SAFE and ACTIVE safety gates, validation, limits, and classifications are unchanged.
+
+Custom header values and proxy credentials are excluded from console/configuration errors and
+are hidden in settings representations. They are not added to human reports or AI context.
+There is no generic redaction subsystem. Existing canonical evidence does not record request
+headers or target HTTP settings; Phase 14 does not add or remove evidence fields. Canonical JSON
+still preserves exact variables and observed response headers/bodies, which may contain secrets
+or echoed request configuration. Handle all reports securely as potentially sensitive pentest
+artifacts; existing human-response sensitivity warnings remain applicable.
 
 ## 19. Evidence model
 
@@ -1025,10 +1071,14 @@ The adapter uses Ollama's JSON-schema `format`, `stream: false`, and `think: fal
 zero, an 8192-token model context, and a 2048-token output cap. This follows the local
 [Ollama structured-output API](https://docs.ollama.com/capabilities/structured-outputs).
 Pydantic strictly validates the final `message.content` into `AIInterpretation`: an execution
-summary, up to five review-focus entries, ten operation explanations, ten manual-review
-suggestions, and ten limitations. Text fields are limited to 600 characters; unknown properties
+summary, up to ten operation-review entries, and ten limitations. Each Operation Review paragraph
+combines the supplied review interest, apparent role, relevant recorded outcome, reason for
+attention, and a concrete, non-destructive manual review direction. Priority wording explicitly
+indicates review interest (for example, HIGH-interest), never vulnerability severity.
+The validated Execution Summary and model-generated Limitations remain separate.
+Text fields are limited to 600 characters; unknown properties
 and invalid structures are rejected. Every dedicated operation reference, including those in
-summary/suggestions/limitations, must exactly match an endpoint/kind/name identifier supplied
+summary/review/limitations, must exactly match an endpoint/kind/name identifier supplied
 in the bounded input. Unknown references reject the entire response, without partial acceptance
 or retry. Model-generated prose is interpretation requiring manual validation, not verified fact.
 
@@ -1088,6 +1138,9 @@ sources are introduced.
 The initial Phase 1 implementation supports only the explicit `--mode` CLI option and the
 built-in safe default. Environment variables and configuration files are deferred until
 configuration needs grow; no configuration file is discovered or loaded in Phase 1.
+Through Phase 14, configuration still uses CLI plus built-in defaults only. Target headers,
+timeout, TLS policy, and proxy are mapped once into immutable HTTP settings; no environment,
+`.env`, global/project configuration file, or multi-source precedence is implemented.
 
 `active` is accepted as a configuration value during Phase 1, but it does not enable active
 behavior until Phase 10. Phase 10 uses explicit ACTIVE mode, Mutation selection, and one final
@@ -1141,7 +1194,7 @@ The exact command structure may evolve during implementation. The primary user w
 gqlsleuth scan https://example.com
 ```
 
-Through Phase 13.1, `scan` and `version` are implemented. Reporting is integrated into `scan`:
+Through Phase 14, `scan` and `version` are implemented. Reporting is integrated into `scan`:
 
 ```bash
 gqlsleuth scan https://example.com --format json --format markdown --format html --output ./reports
@@ -1181,8 +1234,8 @@ observed responses, or a concise zero-execution/declined message, without repeat
 `presentation/priorities.py` centralizes CRITICAL magenta, HIGH red, MEDIUM yellow, LOW green,
 and INFORMATIONAL bright blue for tables, verbose labels, previews, and selected batches. It also
 styles standalone priority words/phrases in AI console text without substring replacement or
-Rich markup parsing. The AI console consumes validated structured entries directly, with cyan
-subsection headings/references and wrapping tables. Validated canonical summary clauses are
+Rich markup parsing. The AI console consumes validated structured entries directly, with neutral
+bold white subsection headings, cyan references, and wrapping tables. Validated canonical summary clauses are
 aligned without recalculating counts. Stored interpretation, report AI prose, AI validation,
 context, and inference behavior are unchanged.
 
@@ -1746,6 +1799,23 @@ Implemented:
 
 No scanner, safety, execution, evidence, canonical JSON, AI context/validation/call-count, dependency,
 or Phase 14+ changes are introduced.
+
+### Phase 14 — Target HTTP Configuration & Authentication Support
+
+Implemented:
+
+- One immutable target HTTP settings value, mapped once from CLI plus built-in defaults.
+- Repeated `-H` / `--header`, first-colon parsing, duplicate preservation, and controlled validation.
+- User-supplied authentication throughout discovery, confirmation, introspection, Query and
+  separately confirmed Mutation execution; one request context per scan.
+- Explicit finite positive `--timeout` for all target stages, preserving omitted 8/10-second defaults.
+- HTTP(S) `--proxy`, no environment proxies, and secure-default target TLS Boolean options.
+- Central header merge/framing rules and same-origin/cross-origin redirect protection.
+- Secret-free configuration presentation and unchanged evidence/report/AI allowlist boundaries.
+- Offline propagation, redirect, transport, secret-canary, CLI, and Ollama-isolation tests.
+
+No dependencies, credential preflights, authentication acquisition, retries, multiple identities,
+configuration sources, authorization comparison, generic redaction, or Phase 15+ behavior added.
 
 ## 35. MVP definition
 

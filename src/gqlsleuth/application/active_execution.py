@@ -21,7 +21,7 @@ from gqlsleuth.domain.schema import ParsedSchema
 from gqlsleuth.graphql.active_execution import assess_mutation
 from gqlsleuth.graphql.query_generation import DEFAULT_MAX_SELECTION_DEPTH, generate_mutation
 from gqlsleuth.graphql.safe_execution import classify_execution_response
-from gqlsleuth.infrastructure.http import HttpClient, HttpRequest, HttpResponse
+from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings, HttpRequest, HttpResponse
 
 
 @dataclass(frozen=True)
@@ -107,6 +107,7 @@ def execute_selected_mutations(
     selected_indices: tuple[int, ...] = (),
     confirmed: bool = False,
     client: HttpClient | None = None,
+    http_settings: HttpClientSettings | None = None,
 ) -> ActiveExecutionScanResult:
     """Execute at most five explicitly selected, confirmed, revalidated active operations.
 
@@ -115,7 +116,7 @@ def execute_selected_mutations(
     Blocked/invalid selections remain structured decisions and never consume the limit.
     """
     if client is None:
-        with HttpClient() as active_client:
+        with HttpClient(http_settings) as active_client:
             return execute_selected_mutations(
                 preview,
                 selected_indices=selected_indices,

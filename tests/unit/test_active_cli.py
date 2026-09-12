@@ -18,15 +18,15 @@ def active_cli(phase_ten_scan, monkeypatch):
     requests = []
     results = []
 
-    def fake_scan(target_url, *, mode=ScanMode.SAFE):
+    def fake_scan(target_url, *, mode=ScanMode.SAFE, http_settings=None):
         return phase_ten_scan(mode=mode)[0]
 
     def handler(request):
         requests.append(json.loads(request.content))
         return httpx.Response(200, json={"data": None})
 
-    def execute(preview, *, selected_indices=(), confirmed=False):
-        with HttpClient(transport=httpx.MockTransport(handler)) as client:
+    def execute(preview, *, selected_indices=(), confirmed=False, http_settings=None):
+        with HttpClient(http_settings, transport=httpx.MockTransport(handler)) as client:
             result = execute_selected_mutations(
                 preview, selected_indices=selected_indices, confirmed=confirmed, client=client
             )

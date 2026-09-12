@@ -7,10 +7,15 @@ from gqlsleuth.application.scan_configuration import map_scan_inputs
 from gqlsleuth.discovery.endpoint_candidates import generate_endpoint_candidates
 from gqlsleuth.domain.exceptions import HttpError
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode, Target
-from gqlsleuth.infrastructure.http import HttpClient, HttpRequest, HttpResponse
+from gqlsleuth.infrastructure.http import (
+    DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
+    HttpClient,
+    HttpRequest,
+    HttpResponse,
+)
 
 DISCOVERY_SOURCE = "gqlsleuth.application.endpoint_discovery"
-DISCOVERY_TIMEOUT_SECONDS = 8.0
+DISCOVERY_TIMEOUT_SECONDS = DEFAULT_DISCOVERY_TIMEOUT_SECONDS
 DISCOVERY_MAX_WORKERS = 4
 
 
@@ -114,7 +119,7 @@ def _probe_candidate(candidate_url: str, client: HttpClient) -> EndpointProbeRes
             HttpRequest(
                 method="GET",
                 url=candidate_url,
-                timeout_seconds=DISCOVERY_TIMEOUT_SECONDS,
+                timeout_seconds=client.settings.discovery_timeout_seconds,
             )
         )
     except HttpError as error:

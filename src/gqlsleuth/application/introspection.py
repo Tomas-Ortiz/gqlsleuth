@@ -15,7 +15,7 @@ from gqlsleuth.graphql.introspection import (
     IntrospectionStatus,
     classify_introspection_response,
 )
-from gqlsleuth.infrastructure.http import HttpClient, HttpRequest, HttpResponse
+from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings, HttpRequest, HttpResponse
 
 INTROSPECTION_SOURCE = "gqlsleuth.application.introspection"
 
@@ -54,10 +54,11 @@ def run_introspection_scan(
     target_url: str,
     *,
     mode: ScanMode = ScanMode.SAFE,
+    http_settings: HttpClientSettings | None = None,
 ) -> IntrospectionScanResult:
     """Run Phases 3–5 through one shared synchronous HTTP client."""
     target, settings = map_scan_inputs(target_url, mode=mode)
-    with HttpClient() as client:
+    with HttpClient(http_settings) as client:
         detection = discover_and_detect_graphql(target, mode=settings.mode, client=client)
         return introspect_detected_endpoints(detection, client=client)
 

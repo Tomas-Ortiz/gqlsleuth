@@ -21,7 +21,7 @@ def report_cli(phase_ten_scan, monkeypatch, tmp_path):
     calls = []
     mutations = []
 
-    def scan(target, *, mode=ScanMode.SAFE):
+    def scan(target, *, mode=ScanMode.SAFE, http_settings=None):
         calls.append(mode)
         return active if mode is ScanMode.ACTIVE else safe
 
@@ -29,8 +29,8 @@ def report_cli(phase_ten_scan, monkeypatch, tmp_path):
         mutations.append(json.loads(request.content))
         return httpx.Response(200, json={"data": None})
 
-    def execute(preview, *, selected_indices=(), confirmed=False):
-        with HttpClient(transport=httpx.MockTransport(handler)) as client:
+    def execute(preview, *, selected_indices=(), confirmed=False, http_settings=None):
+        with HttpClient(http_settings, transport=httpx.MockTransport(handler)) as client:
             return execute_selected_mutations(
                 preview, selected_indices=selected_indices, confirmed=confirmed, client=client
             )

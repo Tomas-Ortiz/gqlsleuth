@@ -41,7 +41,9 @@ def test_help_aliases_describe_main_workflow(command, flag):
     assert "comma-separated" in output
     if not command:
         assert "scan" in output and "version" in output
-        assert "Quick Start" in output and "Common scan options" in output
+        assert (
+            output.index("Commands") < output.index("Common options") < output.index("Quick Start")
+        )
         assert "gqlsleuth scan https://example.com" in output
     else:
         assert "TARGET" in output
@@ -58,7 +60,7 @@ def completed_cli(phase_ten_scan, monkeypatch, tmp_path):
     target_requests = deepcopy(requests)
     calls = []
 
-    def scan(target, *, mode=ScanMode.SAFE):
+    def scan(target, *, mode=ScanMode.SAFE, http_settings=None):
         calls.append((target, mode))
         return safe
 

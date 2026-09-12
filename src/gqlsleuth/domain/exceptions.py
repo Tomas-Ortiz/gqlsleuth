@@ -21,6 +21,10 @@ class HttpError(GQLSleuthError):
     """Base class for normalized HTTP-layer failures."""
 
 
+class HttpConfigurationError(GQLSleuthError):
+    """Invalid local target HTTP settings; messages must not include secret values."""
+
+
 class HttpTimeoutError(HttpError):
     """Raised when an HTTP operation exceeds its configured timeout."""
 

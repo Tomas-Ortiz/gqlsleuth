@@ -328,14 +328,15 @@ def ai_view(execution_views):
     active = execution_views[1]
     context = build_ai_context(active)
     reference = context.operations[0].operation
-    prose = "[bold]high interest[/bold] and highly relevant; critical, medium, low, informational."
+    prose = (
+        "[bold]high-interest[/bold] and highly relevant; critical-interest, medium-interest, "
+        "low-interest, informational-interest."
+    )
     interpretation = validate_interpretation(
         json.dumps(
             {
                 "scan_summary": {"text": execution_summary(context), "operations": []},
-                "review_focus": [{"operation": reference, "explanation": prose}],
-                "operation_explanations": [{"operation": reference, "explanation": prose}],
-                "manual_review_suggestions": [{"operations": [reference], "text": prose}],
+                "operation_review": [{"operation": reference, "explanation": prose}],
                 "limitations": [{"operations": [], "text": "Runtime assessment remains limited."}],
             }
         ),
@@ -352,15 +353,16 @@ def test_ai_tables_preserve_stored_prose_and_validated_facts(execution_views, ai
     context = build_ai_context(active)
     result = ai_view
     interpretation = result.interpretation
-    prose = interpretation.review_focus[0].explanation
+    prose = interpretation.operation_review[0].explanation
     report = build_report(active, generated_at=STAMP, ai_interpretation=result)
     before = tuple(render_report(report, format) for format in ReportFormat)
     output = capture(render_ai, result, width=width)
     assert max(map(len, output.splitlines())) <= width
     assert "AI-Assisted Interpretation" in output
     assert "Model-generated interpretation" in output
-    assert "Execution Summary" in output and "Review Focus" in output
-    assert "Operation Explanations" in output and "Manual Review Suggestions" in output
+    assert "Execution Summary" in output and "Review Focus" not in output
+    assert "Operation Review" in output
+    assert "Operation Explanations" not in output and "Manual Review Suggestions" not in output
     assert "Limitations" in output
     assert "HIGH" in output and "CRITICAL" in output
     assert "[bold]" in output
@@ -368,7 +370,7 @@ def test_ai_tables_preserve_stored_prose_and_validated_facts(execution_views, ai
     normalized = " ".join(output.split())
     assert "6 attempted" in normalized and "1 SUCCESS" in normalized
     assert interpretation.scan_summary.text == execution_summary(context)
-    assert interpretation.review_focus[0].explanation == prose
+    assert interpretation.operation_review[0].explanation == prose
     assert tuple(render_report(report, format) for format in ReportFormat) == before
     if width == 100:
         segments = []
@@ -382,7 +384,7 @@ def test_ai_tables_preserve_stored_prose_and_validated_facts(execution_views, ai
         console.print = collect
         render_ai(console, result)
         references = [segment for segment in segments if "endpoint_1" in segment.text]
-        assert len(references) == 3
+        assert len(references) == 1
         assert all(segment.style.color.name == "cyan" for segment in references)
 
 
@@ -432,9 +434,7 @@ def test_rendered_titles_and_tables_use_structural_styles(execution_views, ai_vi
         "Mutation Execution",
         "AI-Assisted Interpretation",
         "Execution Summary (validated facts)",
-        "Review Focus",
-        "Operation Explanations",
-        "Manual Review Suggestions",
+        "Operation Review",
         "Limitations",
     ]
     for table in tables:
@@ -456,14 +456,12 @@ def test_structural_console_spacing(execution_views, ai_view, width):
     output = capture(render_ai, ai_view, width=width)
     for title in (
         "Execution Summary",
-        "Review Focus",
-        "Operation Explanations",
-        "Manual Review Suggestions",
+        "Operation Review",
         "Limitations",
     ):
         assert_separated(output, title)
     assert "Model: qwen3:8b\nAI status: SUCCESS\n\nExecution Summary" in output
-    assert "Review Focus\n\n" in output
+    assert "Operation Review\n\n" in output
     for rendered in (compact, output):
         assert "\n\n\n" not in rendered
         assert max(map(len, rendered.splitlines())) <= width

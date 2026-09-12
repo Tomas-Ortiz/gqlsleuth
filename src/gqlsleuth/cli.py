@@ -2,11 +2,14 @@
 
 import re
 import sys
+from copy import copy
 from pathlib import Path
 from typing import Annotated
 
 import typer
 from rich.console import Console
+from typer._click import Context, HelpFormatter
+from typer.core import TyperGroup
 
 from gqlsleuth import __version__
 from gqlsleuth.application.active_execution import (
@@ -18,30 +21,51 @@ from gqlsleuth.application.active_execution import (
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
+from gqlsleuth.application.scan_configuration import map_target_http_inputs
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
 from gqlsleuth.domain.models import ScanMode
+from gqlsleuth.infrastructure.http import HttpClientSettings
 from gqlsleuth.presentation.console import (
     CONSOLE_THEME,
-    ROOT_HELP_EPILOG,
     render_active_execution,
     render_active_gate,
     render_ai,
     render_error,
     render_mutations,
     render_reports,
+    render_root_help,
     render_scan,
     render_state_warning,
 )
 from gqlsleuth.reporting.models import ReportFormat
 
+
+class RootHelpGroup(TyperGroup):
+    """Keep Typer's header/options and group scan guidance in root command help."""
+
+    def format_help(self, ctx: Context, formatter: HelpFormatter) -> None:
+        commands = []
+        for name in self.list_commands(ctx):
+            command = self.get_command(ctx, name)
+            if command is not None and not command.hidden:
+                description = command.short_help or command.help or ""
+                commands.append((name, " ".join(description.split("\n\n", 1)[0].split())))
+        # Suppress only the generated command panel on a presentation copy. The real
+        # command registry and each subcommand's help remain untouched.
+        header = copy(self)
+        header.commands = {}
+        TyperGroup.format_help(header, ctx, formatter)
+        render_root_help(console, tuple(commands))
+
+
 app = typer.Typer(
+    cls=RootHelpGroup,
     name="gqlsleuth",
     help=(
         "Authorized GraphQL security discovery and analysis. "
         "Use only against systems you are explicitly authorized to test."
     ),
-    epilog=ROOT_HELP_EPILOG,
     rich_markup_mode="rich",
     context_settings={"help_option_names": ["--help", "-h"]},
     no_args_is_help=True,
@@ -134,6 +158,48 @@ def scan(
             help="Show detailed analysis, generated Queries, and execution outcomes.",
         ),
     ] = False,
+    headers: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--header",
+            "-H",
+            metavar="NAME: VALUE",
+            rich_help_panel="Target HTTP",
+            help=(
+                "Add a target HTTP header (user-supplied authentication); repeatable. "
+                "Never sent to Ollama."
+            ),
+        ),
+    ] = None,
+    timeout: Annotated[
+        str | None,
+        typer.Option(
+            "--timeout",
+            metavar="SECONDS",
+            rich_help_panel="Target HTTP",
+            help="Positive target HTTP timeout, including discovery; does not affect Ollama.",
+        ),
+    ] = None,
+    proxy: Annotated[
+        str | None,
+        typer.Option(
+            "--proxy",
+            metavar="URL",
+            rich_help_panel="Target HTTP",
+            help="Explicit HTTP(S) proxy for target traffic only; environment proxies are ignored.",
+        ),
+    ] = None,
+    verify_tls: Annotated[
+        bool,
+        typer.Option(
+            "--verify-tls/--no-verify-tls",
+            rich_help_panel="Target HTTP",
+            help=(
+                "Verify target TLS certificates (default); disabling is insecure. "
+                "Does not affect Ollama."
+            ),
+        ),
+    ] = True,
 ) -> None:
     """Discover and analyze GraphQL; safely execute validated Query operations."""
     report_formats = _parse_formats(formats)
@@ -143,7 +209,15 @@ def scan(
     if mode is ScanMode.ACTIVE:
         render_active_gate(console)
     try:
-        result = run_safe_execution_scan(target, mode=mode)
+        http_settings = map_target_http_inputs(
+            headers=headers, timeout=timeout, verify_tls=verify_tls, proxy=proxy
+        )
+        if not http_settings.verify_tls:
+            console.print(
+                "WARNING: TLS certificate verification is disabled for target requests.",
+                style="gql.warning",
+            )
+        result = run_safe_execution_scan(target, mode=mode, http_settings=http_settings)
     except GQLSleuthError as error:
         render_error(error_console, str(error))
         raise typer.Exit(code=2) from None
@@ -153,7 +227,7 @@ def scan(
     mode = schema_scan.introspection.detection.discovery.mode
     report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result
     if mode is ScanMode.ACTIVE:
-        report_result = _run_active_stage(result)
+        report_result = _run_active_stage(result, http_settings=http_settings)
     ai_result = None
     if ai:
         console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
@@ -177,7 +251,9 @@ def _interactive_stdin() -> bool:
     return sys.stdin is not None and sys.stdin.isatty()
 
 
-def _run_active_stage(safe_result: SafeExecutionScanResult) -> ActiveExecutionScanResult:
+def _run_active_stage(
+    safe_result: SafeExecutionScanResult, *, http_settings: HttpClientSettings | None = None
+) -> ActiveExecutionScanResult:
     preview = prepare_active_mutations(safe_result)
     render_mutations(
         console, tuple(enumerate(preview.candidates, start=1)), title="Active Mutation candidates:"
@@ -207,7 +283,9 @@ def _run_active_stage(safe_result: SafeExecutionScanResult) -> ActiveExecutionSc
                 )
         except (typer.Abort, EOFError, KeyboardInterrupt):
             console.print("Mutation selection/confirmation cancelled; zero Mutations will execute.")
-    result = execute_selected_mutations(preview, selected_indices=selected, confirmed=confirmed)
+    result = execute_selected_mutations(
+        preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
+    )
     render_active_execution(console, result)
     return result
 

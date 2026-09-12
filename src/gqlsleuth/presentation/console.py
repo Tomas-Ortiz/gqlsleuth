@@ -5,7 +5,8 @@ from json import dumps
 from pathlib import Path
 
 from rich import box
-from rich.console import Console
+from rich.console import Console, Group
+from rich.padding import Padding
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -36,23 +37,73 @@ CONSOLE_THEME = Theme(
         "gql.secondary": "dim",
     }
 )
-ROOT_HELP_EPILOG = "\n\n".join(
-    (
-        "[bold]Quick Start[/bold]",
+
+
+def render_root_help(console: Console, commands: tuple[tuple[str, str], ...]) -> None:
+    """Group common scan options within Commands, followed by standalone examples."""
+    blocks: list[Table | Padding] = []
+    command_width = max((len(name) for name, _ in commands), default=0)
+    for name, description in commands:
+        row = Table.grid(padding=(0, 2), expand=True)
+        row.add_column(style="gql.metadata", width=command_width, no_wrap=True)
+        row.add_column(ratio=1)
+        row.add_row(Text(name), Text(description))
+        blocks.append(row)
+        if name == "scan":
+            blocks.append(
+                Padding(
+                    Group(
+                        Text("Common options", style="gql.section"),
+                        _common_scan_options(),
+                    ),
+                    (1, 0, 0, 2),
+                )
+            )
+    _render_help_rows(
+        console,
+        Panel(Group(*blocks), title="Commands", title_align="left", border_style="dim"),
+    )
+    _section(console, "Quick Start")
+    for command in (
         "gqlsleuth scan https://example.com",
         "gqlsleuth scan https://example.com --mode active",
         "gqlsleuth scan https://example.com --ai",
         "gqlsleuth scan https://example.com -f html -o ./reports",
-        "",
-        "[bold]Common scan options[/bold]",
-        "--mode  safe|active (default: safe)",
-        "--format, -f  json|markdown|html; comma-separated or repeated",
-        "--output, -o  report output directory",
-        "--ai  optional local Ollama/qwen3:8b interpretation",
-        "--verbose, -v  detailed console output",
-        "--help, -h  help; use gqlsleuth scan -h for complete scan options",
+    ):
+        _render_help_rows(console, Text(command, style="gql.metadata"))
+
+    console.print()
+    _render_help_rows(
+        console,
+        Text.assemble("Run ", ("gqlsleuth scan --help", "gql.metadata"), " for all scan options."),
     )
-)
+
+
+def _common_scan_options() -> Table:
+    table = Table.grid(padding=(0, 2))
+    table.add_column(style="gql.metadata", overflow="fold")
+    table.add_column(ratio=1)
+    for option, description in (
+        ("--mode", "safe | active"),
+        ("-f, --format", "json | markdown | html; comma-separated or repeated"),
+        ("-o, --output", "Report output directory"),
+        ("--ai", "Optional local Ollama/qwen3:8b interpretation"),
+        ("-v, --verbose", "Detailed console output"),
+        ("-H, --header", "Target HTTP header; repeatable"),
+        ("--timeout", "Target request timeout in seconds"),
+        ("--proxy", "Explicit HTTP(S) target proxy"),
+        ("--verify-tls / --no-verify-tls", "Target TLS verification"),
+    ):
+        table.add_row(Text(option), Text(description))
+    return table
+
+
+def _render_help_rows(console: Console, content: Text | Table | Panel) -> None:
+    # Rich lays out/wraps content; remove only trailing cell padding or wrap whitespace.
+    for line in console.render_lines(content, pad=False):
+        text = Text.assemble(*((segment.text, segment.style or "") for segment in line))
+        text.rstrip()
+        console.print(text, soft_wrap=True)
 
 
 def _status(value: str) -> Text:
@@ -494,20 +545,9 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
     _render_table(console, facts)
     collections = (
         (
-            "Review Focus",
-            tuple(((item.operation,), item.explanation) for item in interpretation.review_focus),
-        ),
-        (
-            "Operation Explanations",
+            "Operation Review",
             tuple(
-                ((item.operation,), item.explanation)
-                for item in interpretation.operation_explanations
-            ),
-        ),
-        (
-            "Manual Review Suggestions",
-            tuple(
-                (item.operations, item.text) for item in interpretation.manual_review_suggestions
+                ((item.operation,), item.explanation) for item in interpretation.operation_review
             ),
         ),
         ("Limitations", tuple((item.operations, item.text) for item in interpretation.limitations)),

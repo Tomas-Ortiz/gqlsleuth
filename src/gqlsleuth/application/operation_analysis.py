@@ -6,6 +6,7 @@ from gqlsleuth.application.schema_parsing import SchemaScanResult, run_schema_sc
 from gqlsleuth.domain.analysis import OperationAnalysis, RuleSet
 from gqlsleuth.domain.exceptions import OperationAnalysisError
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode
+from gqlsleuth.infrastructure.http import HttpClientSettings
 from gqlsleuth.rules.loader import load_bundled_rules
 from gqlsleuth.rules.operation_analysis import analyze_schema_operations
 
@@ -46,10 +47,13 @@ def run_operation_analysis_scan(
     target_url: str,
     *,
     mode: ScanMode = ScanMode.SAFE,
+    http_settings: HttpClientSettings | None = None,
 ) -> OperationAnalysisScanResult:
     """Run Phases 3–7 using bundled deterministic operation-analysis rules."""
     rules = load_bundled_rules()
-    return analyze_schema_results(run_schema_scan(target_url, mode=mode), rules)
+    return analyze_schema_results(
+        run_schema_scan(target_url, mode=mode, http_settings=http_settings), rules
+    )
 
 
 def analyze_schema_results(

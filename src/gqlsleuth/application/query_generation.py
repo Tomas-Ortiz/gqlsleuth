@@ -11,6 +11,7 @@ from gqlsleuth.domain.exceptions import QueryGenerationError
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.graphql.query_generation import DEFAULT_MAX_SELECTION_DEPTH, generate_query
+from gqlsleuth.infrastructure.http import HttpClientSettings
 
 QUERY_GENERATION_SOURCE = "gqlsleuth.application.query_generation"
 
@@ -33,9 +34,12 @@ def run_query_generation_scan(
     target_url: str,
     *,
     mode: ScanMode = ScanMode.SAFE,
+    http_settings: HttpClientSettings | None = None,
 ) -> QueryGenerationScanResult:
     """Run Phases 3–8 without executing any generated query."""
-    return generate_analyzed_queries(run_operation_analysis_scan(target_url, mode=mode))
+    return generate_analyzed_queries(
+        run_operation_analysis_scan(target_url, mode=mode, http_settings=http_settings)
+    )
 
 
 def generate_analyzed_queries(

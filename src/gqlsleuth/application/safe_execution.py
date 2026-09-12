@@ -15,7 +15,7 @@ from gqlsleuth.graphql.safe_execution import (
     side_effect_tokens,
     validate_safe_artifact,
 )
-from gqlsleuth.infrastructure.http import HttpClient, HttpRequest, HttpResponse
+from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings, HttpRequest, HttpResponse
 
 MAX_QUERY_EXECUTIONS = 20
 EXECUTION_SOURCE = "gqlsleuth.application.safe_execution"
@@ -60,10 +60,11 @@ def run_safe_execution_scan(
     target_url: str,
     *,
     mode: ScanMode = ScanMode.SAFE,
+    http_settings: HttpClientSettings | None = None,
 ) -> SafeExecutionScanResult:
     """Run Phases 3–9, executing only validated generated Query operations."""
-    generation = run_query_generation_scan(target_url, mode=mode)
-    with HttpClient() as client:
+    generation = run_query_generation_scan(target_url, mode=mode, http_settings=http_settings)
+    with HttpClient(http_settings) as client:
         return execute_generated_queries(generation, client=client)
 
 

@@ -83,7 +83,7 @@ OperationReference = Annotated[str, Field(strict=True, min_length=1, max_length=
 
 
 class AIStatement(AIModel):
-    """References live in explicit fields, including summary/suggestions/limitations."""
+    """References live in explicit fields, including summary and limitations."""
 
     text: AIText
     operations: tuple[OperationReference, ...] = Field(max_length=MAX_AI_OPERATIONS)
@@ -96,9 +96,7 @@ class AIOperationExplanation(AIModel):
 
 class AIInterpretation(AIModel):
     scan_summary: AIStatement
-    review_focus: tuple[AIOperationExplanation, ...] = Field(max_length=5)
-    operation_explanations: tuple[AIOperationExplanation, ...] = Field(max_length=10)
-    manual_review_suggestions: tuple[AIStatement, ...] = Field(max_length=10)
+    operation_review: tuple[AIOperationExplanation, ...] = Field(max_length=10)
     limitations: tuple[AIStatement, ...] = Field(max_length=10)
 
 

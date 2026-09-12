@@ -30,17 +30,15 @@ def answer(context):
     operation = context.operations[0].operation if context.operations else None
     return {
         "scan_summary": {"text": execution_summary(context), "operations": []},
-        "review_focus": [{"operation": operation, "explanation": "Review the recorded context."}]
-        if operation
-        else [],
-        "operation_explanations": [
-            {"operation": operation, "explanation": "Only recorded state is known."}
+        "operation_review": [
+            {
+                "operation": operation,
+                "explanation": "The apparent role needs manual review against the schema; "
+                "only the recorded execution outcome is known.",
+            }
         ]
         if operation
         else [],
-        "manual_review_suggestions": [
-            {"text": "Review the schema manually.", "operations": [operation] if operation else []}
-        ],
         "limitations": [{"text": "No vulnerability is confirmed.", "operations": []}],
     }
 
@@ -263,6 +261,23 @@ def test_canaries_are_excluded_from_exact_ollama_request_by_construction(complet
         assert payload["format"]["properties"]["scan_summary"]["properties"]["text"]["enum"] == [
             execution_summary(build_ai_context(active))
         ]
+        assert set(payload["format"]["properties"]) == {
+            "scan_summary",
+            "operation_review",
+            "limitations",
+        }
+        prompt = payload["messages"][0]["content"]
+        assert "operation_review: Write one concise paragraph per operation" in prompt
+        assert "relevant observed execution/result context" in prompt
+        assert "manual review direction" in prompt
+        assert "why it deserves attention" in prompt
+        assert "Always express priority as review" in prompt
+        assert "CRITICAL-interest, HIGH-interest, MEDIUM-interest" in prompt
+        assert 'Never write "this operation is CRITICAL"' in prompt
+        assert '"this mutation is HIGH"' in prompt
+        assert "review_focus" not in prompt
+        assert "operation_explanations" not in prompt
+        assert "manual_review_suggestions" not in prompt
         assert "tools" not in payload
         return httpx.Response(200, json=envelope(json.dumps(answer(build_ai_context(active)))))
 
@@ -282,9 +297,7 @@ def test_canaries_are_excluded_from_exact_ollama_request_by_construction(complet
     "section",
     [
         "scan_summary",
-        "review_focus",
-        "operation_explanations",
-        "manual_review_suggestions",
+        "operation_review",
         "limitations",
     ],
 )
@@ -294,7 +307,7 @@ def test_unknown_operation_references_reject_the_whole_response(completed, secti
     invented = "endpoint_1/mutation/totallyInventedAdminBackdoor"
     if section == "scan_summary":
         payload[section]["operations"] = [invented]
-    elif section in {"review_focus", "operation_explanations"}:
+    elif section == "operation_review":
         payload[section][0]["operation"] = invented
     else:
         payload[section][0]["operations"] = [invented]
@@ -330,9 +343,35 @@ def test_output_structure_is_strict_and_bounded(completed, change):
     elif change == "long_text":
         payload["scan_summary"]["text"] = "x" * 601
     elif change == "too_many":
-        payload["review_focus"] *= 6
+        payload["operation_review"] *= 11
     else:
         payload["scan_summary"]["text"] = 42
+    with pytest.raises(ValueError):
+        validate_interpretation(json.dumps(payload), context)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "missing",
+        "review_focus",
+        "operation_explanations",
+        "manual_review_suggestions",
+        "long_text",
+        "too_many",
+    ],
+)
+def test_operation_review_replaces_obsolete_fields_and_retains_bounds(completed, change):
+    context = build_ai_context(completed)
+    payload = answer(context)
+    if change == "missing":
+        del payload["operation_review"]
+    elif change == "long_text":
+        payload["operation_review"][0]["explanation"] = "x" * 601
+    elif change == "too_many":
+        payload["operation_review"] *= 11
+    else:
+        payload[change] = []
     with pytest.raises(ValueError):
         validate_interpretation(json.dumps(payload), context)
 
@@ -391,7 +430,7 @@ def test_inference_timeout_must_remain_finite_and_bounded(seconds):
 def test_ai_reports_are_additive_escaped_and_exclude_thinking(completed, monkeypatch):
     context = build_ai_context(completed)
     payload = answer(context)
-    payload["manual_review_suggestions"][0]["text"] = (
+    payload["operation_review"][0]["explanation"] = (
         '<script>alert("test")</script> Model interpretation.'
     )
     client = OllamaClient(
@@ -409,7 +448,9 @@ def test_ai_reports_are_additive_escaped_and_exclude_thinking(completed, monkeyp
     deterministic = json.loads(render_report(before, ReportFormat.JSON))
     additive = json.loads(render_report(after, ReportFormat.JSON))
     assert "ai_interpretation" not in deterministic
-    assert additive.pop("ai_interpretation")["status"] == "success"
+    ai_json = additive.pop("ai_interpretation")
+    assert ai_json["status"] == "success"
+    assert ai_json["interpretation"] == payload
     assert additive == deterministic
     for format in ReportFormat:
         rendered = render_report(after, format)
@@ -418,6 +459,21 @@ def test_ai_reports_are_additive_escaped_and_exclude_thinking(completed, monkeyp
             assert "AI-Assisted Interpretation" in rendered
             assert "Model-generated interpretation" in rendered.replace("\\-", "-")
             assert "AI-Assisted Interpretation" not in render_report(before, format)
+            assert "Operation Explanations" not in rendered
+            assert "Manual Review Suggestions" not in rendered
+            assert "Review Focus" not in rendered
+            titles = (
+                "Execution Summary (validated facts)",
+                "Operation Review",
+                "Limitations",
+                "Safety Notice",
+            )
+            ai_section = rendered[rendered.index("AI-Assisted Interpretation") :]
+            # Markdown escapes parentheses, but preserves the section labels otherwise.
+            ai_section = ai_section.replace("\\(", "(").replace("\\)", ")")
+            positions = [ai_section.index(title) for title in titles]
+            assert positions == sorted(positions)
+            assert ai_section.count("Operation Review") == 1
             assert "<script>" not in rendered
             assert "&lt;script&gt;" in rendered
 

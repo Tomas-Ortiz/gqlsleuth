@@ -28,7 +28,7 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
     results = []
     behavior = {"fail": False}
 
-    def scan(target, *, mode=ScanMode.SAFE):
+    def scan(target, *, mode=ScanMode.SAFE, http_settings=None):
         events.append("safe")
         return scans[mode]
 
@@ -36,8 +36,8 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
         target_requests.append(json.loads(request.content))
         return httpx.Response(200, json={"data": None})
 
-    def execute(preview, *, selected_indices=(), confirmed=False):
-        with HttpClient(transport=httpx.MockTransport(target_handler)) as client:
+    def execute(preview, *, selected_indices=(), confirmed=False, http_settings=None):
+        with HttpClient(http_settings, transport=httpx.MockTransport(target_handler)) as client:
             result = execute_selected_mutations(
                 preview, selected_indices=selected_indices, confirmed=confirmed, client=client
             )
@@ -52,9 +52,7 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
         context = AIContext.model_validate_json(ai_requests[-1]["messages"][1]["content"])
         payload = {
             "scan_summary": {"text": execution_summary(context), "operations": []},
-            "review_focus": [],
-            "operation_explanations": [],
-            "manual_review_suggestions": [],
+            "operation_review": [],
             "limitations": [],
         }
         return httpx.Response(

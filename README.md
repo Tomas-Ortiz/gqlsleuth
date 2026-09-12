@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 13.1 — Execution Evidence & Console Presentation Polish**. It provides the Phase 0
+The repository is currently at **Phase 14 — Target HTTP Configuration & Authentication Support**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -25,6 +25,8 @@ and comma-separated report formats. Scanning, ACTIVE controls, AI, and report se
 Phase 13.1 adds bounded execution responses to human reports and console details, consistent
 priority colors, grouped Mutation previews, and structured AI console tables. Canonical JSON
 evidence, scanner behavior, and AI inputs/validation remain unchanged.
+Phase 14 exposes repeated target headers, user-supplied authentication, explicit timeout/proxy,
+and target TLS verification settings, isolated from local Ollama.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
@@ -45,12 +47,13 @@ scalar placeholders use the string `"test"` and are marked as potentially requir
 adjustment. SAFE generates Query documents only. ACTIVE reuses this same generation algorithm
 for Mutation-root fields after completing the safe workflow. Subscriptions are never generated.
 
-Discovery gives the preferred candidate an eight-second GET timeout and immediately applies the
+By default, discovery gives the preferred candidate an eight-second GET timeout and immediately applies the
 existing GraphQL detection logic. A confirmed or probable preferred candidate stops discovery;
 otherwise, the remaining candidates use at most four synchronous workers while retaining their
 stable candidate order. GraphQL POST probes and introspection continue using the normal ten-second
 HTTP timeout. A fallback POST is sent only when discovery received an inconclusive HTTP response;
 transport failures without a response proceed directly to the next candidate.
+An explicit `--timeout` overrides both discovery and subsequent target request timeouts.
 
 Phase 9 defensively validates each successful generated artifact against the parsed Query root
 before sending it sequentially. It executes at most 20 Query operations per scan and skips Query
@@ -290,10 +293,10 @@ Phase 7 interest rankings. Operation names longer than 128 characters are omitte
 schema summaries are included. Size reduction removes lower-priority schema summaries before
 operations. Metadata explicitly records included/omitted operations and context truncation.
 
-The validated response contains an execution summary, up to five review-focus entries, ten operation
-explanations, ten manual-review suggestions, and ten limitations, with text bounded to 600
+The validated response contains an execution summary, up to ten operation
+reviews, and ten limitations, with text bounded to 600
 characters per entry. Operation references use exact endpoint/kind/name identifiers in dedicated
-fields, including summary/suggestions/limitations. Unknown references reject the whole response;
+fields, including summary/review/limitations. Unknown references reject the whole response;
 malformed JSON, extra fields, and invalid structures are rejected without retries. Model-generated
 prose still requires professional validation. Thinking/reasoning metadata is ignored and never
 displayed or persisted.
@@ -302,7 +305,10 @@ The execution summary uses canonical text calculated from complete scan classifi
 context truncation. The response schema requires that exact text, and validation rejects any
 paraphrase or changed count. Attempts, SUCCESS, GraphQL/HTTP/transport errors, and safety/limit
 skips remain distinct; HTTP 200 never overrides a GraphQL error. This summary is labeled as
-validated facts; Qwen generates the separate review explanations, suggestions, and limitations.
+validated facts; Qwen generates Operation Review and Limitations. Each Operation Review paragraph
+combines the supplied review interest, apparent role, relevant recorded outcome, reason for
+attention, and a concrete, non-destructive manual review direction. Priority wording explicitly
+indicates review interest (for example, HIGH-interest), never vulnerability severity.
 
 Inference uses a finite 180-second timeout (five-second connection timeout), a 128 KiB response
 limit, and no redirects, environment proxies, or retries. Connection failures, timeouts, missing
@@ -315,7 +321,7 @@ evidence. This additive optional field keeps report schema version 1; it is abse
 not requested. HTML escapes model text. AI produces interpretation only: it is not Evidence,
 does not create Findings, and does not establish vulnerability severity or confirmation.
 
-The AI console uses cyan subsection headings and operation references, with separate tables for
+The AI console uses neutral bold white subsection headings and cyan operation references, with separate tables for
 validated execution facts and interpretation entries. Standalone priority terms in model prose
 are uppercased and colored only for console display (for example, `high interest` becomes
 `HIGH INTEREST`; `highly` is unchanged). Stored AI results and JSON/Markdown/HTML AI prose are
@@ -323,9 +329,54 @@ not rewritten. Model text is rendered as untrusted text, never interpreted as Ri
 
 ## Configuration
 
-Phase 1 has one application setting, `mode`, with supported values `safe` and `active`. SAFE
-is the built-in default. The initial implementation accepts configuration only through the
-explicit `--mode` CLI option and this safe default.
+Configuration uses CLI options and built-in defaults only. `--mode safe` remains the default.
+Phase 14 supports **one authentication/request context per scan**, through user-supplied headers:
+
+```bash
+uv run gqlsleuth scan https://example.com -H "Authorization: Bearer TOKEN" -H "X-Tenant-ID: 123"
+uv run gqlsleuth scan https://example.com --header "Cookie: session=test-session"
+uv run gqlsleuth scan https://example.com -H "X-API-Key: test-api-key"
+uv run gqlsleuth scan https://example.com --timeout 20 --proxy http://127.0.0.1:8080
+uv run gqlsleuth scan https://example.com --no-verify-tls
+```
+
+- `-H` / `--header` is repeatable. Each value splits at the **first colon**, so additional
+  colons in values are preserved. Surrounding spaces/tabs are trimmed; names must be HTTP
+  tokens and values ASCII text without control characters (internal horizontal tabs are allowed).
+  Invalid arguments fail before scanning, identifying the argument number without echoing values.
+- Duplicate names are retained as separate fields in supplied order, not comma-joined by
+  GQLSleuth. Use only duplicates understood by the target. Explicit `User-Agent` overrides
+  `GQLSleuth/<version>`. Scanner-provided fields take precedence case-insensitively, and JSON
+  POSTs always use HTTPX's `application/json` Content-Type, regardless of supplied Content-Type.
+  Host, Content-Length, Transfer-Encoding, Connection, Keep-Alive, Proxy-Connection,
+  Proxy-Authorization, TE, Trailer, and Upgrade are transport-controlled and rejected via `-H`.
+- `--timeout SECONDS` accepts finite positive integers/fractions and governs **every target
+  request**, including discovery. Omitted: discovery GETs retain 8 seconds; other requests 10.
+- `--verify-tls` / `--no-verify-tls` controls target certificate verification, enabled by default.
+  Disabling it is insecure and prints one warning. There is no automatic insecure retry.
+- `--proxy URL` accepts an explicit HTTP(S) proxy origin, optionally with credentials and a
+  port. SOCKS and proxy URL paths/queries/fragments are unsupported. Proxy credentials are
+  never displayed. Environment proxy variables remain ignored (`trust_env=False`).
+
+The same settings apply to discovery GETs, fallback confirmation POSTs, minimal/full
+introspection, safe Queries, and explicitly selected/confirmed ACTIVE Mutations, including
+direct endpoint targets. Settings are passed through existing client lifetimes; no credential
+validation request is added. Same-origin redirects retain supplied authentication, including
+Cookies. On crossing scheme, host, or port, supplied headers are removed and never restored
+within that redirect chain, including a redirect back. HTTPX still handles redirect methods,
+limits, and body framing. Scanner-owned JSON headers remain valid.
+
+There is no automatic login, credential acquisition, token refresh, browser-cookie access,
+multiple-profile support, or anonymous/user/admin comparison. Target headers, proxy, timeout,
+and TLS settings **do not affect Ollama**. The unchanged AI allowlist excludes these values.
+Normal/verbose console and configuration errors never display supplied header values; human
+reports add no request-header-values section. Existing server response presentation is unchanged.
+
+Treat reports as potentially sensitive pentest artifacts. Canonical JSON preserves existing
+evidence, including exact variables and response headers/bodies, which may contain credentials
+or echoed request information. Current evidence does **not** retain request headers or target
+HTTP configuration; Phase 14 neither adds those fields nor removes existing facts. There is no
+generic automatic redaction. Store reports securely and never commit real credentials/evidence.
 
 Environment variables and configuration files are not supported yet. They remain deferred
 until the project has enough settings to justify multiple configuration sources.
