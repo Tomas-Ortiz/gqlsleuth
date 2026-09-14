@@ -15,13 +15,16 @@ from rich.theme import Theme
 
 from gqlsleuth.ai.models import AI_NOTICE, AIAnalysisStatus, AIInterpretationResult
 from gqlsleuth.application.active_execution import ActiveExecutionScanResult
+from gqlsleuth.application.differential_review import DifferentialScanResult
 from gqlsleuth.application.operation_analysis import EndpointOperationAnalysisResult
 from gqlsleuth.application.safe_execution import QueryExecutionResult, SafeExecutionScanResult
 from gqlsleuth.application.schema_parsing import EndpointSchemaResult
 from gqlsleuth.domain.active import MutationDecision, MutationPreview
+from gqlsleuth.domain.differential import DIFFERENTIAL_NOTICE
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.infrastructure.http import HttpResponse
+from gqlsleuth.presentation.differential import present_differential
 from gqlsleuth.presentation.priorities import priority_label, style_priority_terms
 from gqlsleuth.presentation.responses import present_response, present_response_body
 
@@ -90,6 +93,7 @@ def _common_scan_options() -> Table:
         ("--ai", "Optional local Ollama/qwen3:8b interpretation"),
         ("-v, --verbose", "Detailed console output"),
         ("-H, --header", "Target HTTP header; repeatable"),
+        ("--auth-context", "2–3 named SAFE contexts; repeatable"),
         ("--timeout", "Target request timeout in seconds"),
         ("--proxy", "Explicit HTTP(S) target proxy"),
         ("--verify-tls / --no-verify-tls", "Target TLS verification"),
@@ -578,3 +582,53 @@ def render_reports(console: Console, paths: tuple[Path, ...]) -> None:
         label = "Markdown" if path.suffix == ".md" else path.suffix[1:].upper()
         table.add_row(Text(label, style="gql.heading"), Text(str(path), overflow="fold"))
     console.print(table)
+
+
+def render_differential(
+    console: Console, result: DifferentialScanResult, *, verbose: bool = False
+) -> None:
+    _section(console, "Authorization Differential Review")
+    candidates = present_differential(result.pairs)
+    if len(candidates.endpoints) == 1:
+        console.print(Text.assemble("Target endpoint: ", (candidates.endpoints[0], "gql.metadata")))
+    else:
+        console.print(Text.assemble("Target: ", (result.target.original_url, "gql.metadata")))
+    console.print(Text("Contexts: " + ", ".join(item.name for item in result.contexts)))
+    console.print(f"Pairs compared: {len(result.pairs)}")
+    console.print(f"Review candidates: {sum(len(pair.candidates) for pair in result.pairs)}")
+    console.print(DIFFERENTIAL_NOTICE, markup=False, style="gql.secondary")
+    summary = _table("Context", "SAFE Query attempts", "SUCCESS", "Scan state")
+    for context in result.contexts:
+        executions = context.scan.executions if context.scan else ()
+        summary.add_row(
+            Text(context.name, style="gql.metadata"),
+            str(sum(item.attempted for item in executions)),
+            str(sum(item.status.value == "success" for item in executions)),
+            "Completed" if context.scan else f"Failed: {context.error_code}",
+        )
+    _render_table(console, summary)
+    table = _table(*candidates.headers)
+    rows = candidates.rows if verbose else candidates.rows[:10]
+    shown = len(rows)
+    for row in rows:
+        table.add_row(
+            *(
+                Text(value, style="gql.metadata" if index in (0, 3) else "")
+                for index, value in enumerate(row)
+            )
+        )
+    if shown:
+        _render_table(console, table)
+    if not verbose and sum(len(pair.candidates) for pair in result.pairs) > shown:
+        console.print("Additional candidates available with --verbose or in reports.")
+    limitations = [(pair, item) for pair in result.pairs for item in pair.limitations]
+    if limitations:
+        console.print(
+            f"Comparison limitations: {len(limitations)}. "
+            "Missing observations do not establish absence."
+        )
+        for pair, item in limitations if verbose else limitations[:3]:
+            console.print(
+                Text(f"{pair.context_a} <-> {pair.context_b}: {item.stage}: {item.reason}")
+            )
+    console.print("Zero differential Mutations executed. Comparison added zero HTTP requests.")

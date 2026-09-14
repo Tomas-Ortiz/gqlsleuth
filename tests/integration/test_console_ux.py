@@ -47,7 +47,7 @@ def test_help_aliases_describe_main_workflow(command, flag):
         assert "gqlsleuth scan https://example.com" in output
     else:
         assert "TARGET" in output
-        assert "disabled by default" in output
+        assert "Default: disabled" in output
 
 
 @pytest.fixture

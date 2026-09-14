@@ -12,6 +12,7 @@ from typer._click import Context, HelpFormatter
 from typer.core import TyperGroup
 
 from gqlsleuth import __version__
+from gqlsleuth.ai.models import AIInterpretationResult
 from gqlsleuth.application.active_execution import (
     ActiveExecutionScanResult,
     ActiveMutationPreviewResult,
@@ -19,9 +20,10 @@ from gqlsleuth.application.active_execution import (
     prepare_active_mutations,
 )
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
+from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
 from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
-from gqlsleuth.application.scan_configuration import map_target_http_inputs
+from gqlsleuth.application.scan_configuration import map_auth_context_inputs, map_target_http_inputs
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
 from gqlsleuth.domain.models import ScanMode
@@ -31,6 +33,7 @@ from gqlsleuth.presentation.console import (
     render_active_execution,
     render_active_gate,
     render_ai,
+    render_differential,
     render_error,
     render_mutations,
     render_reports,
@@ -117,10 +120,12 @@ def scan(
         typer.Option(
             "--mode",
             help=(
-                "SAFE is default. ACTIVE acknowledges active capabilities for an authorized "
+                "Scan mode: safe | active. Default: safe. "
+                "ACTIVE acknowledges active capabilities for an authorized "
                 "target; Mutations require explicit selection and one final batch confirmation."
             ),
             case_sensitive=False,
+            show_default=False,
         ),
     ] = ScanMode.SAFE,
     formats: Annotated[
@@ -130,24 +135,25 @@ def scan(
             "-f",
             metavar="json|markdown|html",
             help=(
-                "Write reports after scanning. Accepts comma-separated values and may be repeated."
+                "Report format: json | markdown | html; comma-separated or repeated. Default: none."
             ),
         ),
     ] = None,
     output: Annotated[
         Path | None,
         typer.Option(
-            "--output", "-o", help="Report output directory (default: ./gqlsleuth-reports)."
+            "--output",
+            "-o",
+            help=(
+                "Report output directory. Default: ./gqlsleuth-reports when reports are requested."
+            ),
         ),
     ] = None,
     ai: Annotated[
         bool,
         typer.Option(
             "--ai",
-            help=(
-                "Interpret the completed scan using local Ollama/qwen3:8b. "
-                "Optional; disabled by default."
-            ),
+            help=("Optional local Ollama/qwen3:8b interpretation. Default: disabled."),
         ),
     ] = False,
     verbose: Annotated[
@@ -155,7 +161,7 @@ def scan(
         typer.Option(
             "--verbose",
             "-v",
-            help="Show detailed analysis, generated Queries, and execution outcomes.",
+            help="Detailed analysis, generated Queries, and execution outcomes. Default: disabled.",
         ),
     ] = False,
     headers: Annotated[
@@ -167,7 +173,20 @@ def scan(
             rich_help_panel="Target HTTP",
             help=(
                 "Add a target HTTP header (user-supplied authentication); repeatable. "
-                "Never sent to Ollama."
+                "Default: none. Never sent to Ollama."
+            ),
+        ),
+    ] = None,
+    auth_context: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--auth-context",
+            metavar="LABEL[=NAME: VALUE]",
+            rich_help_panel="Authorization Differential Review",
+            help=(
+                "Compare 2–3 user-named HTTP contexts in SAFE mode. Repeat a label to add headers; "
+                "a bare label has no supplied headers. Labels imply no privilege order. "
+                "Cannot combine with --header, ACTIVE, or --ai. Default: disabled."
             ),
         ),
     ] = None,
@@ -177,7 +196,10 @@ def scan(
             "--timeout",
             metavar="SECONDS",
             rich_help_panel="Target HTTP",
-            help="Positive target HTTP timeout, including discovery; does not affect Ollama.",
+            help=(
+                "Positive target HTTP timeout. An explicit value applies to all target stages. "
+                "Default: discovery 8s, other target requests 10s. Does not affect Ollama."
+            ),
         ),
     ] = None,
     proxy: Annotated[
@@ -186,7 +208,7 @@ def scan(
             "--proxy",
             metavar="URL",
             rich_help_panel="Target HTTP",
-            help="Explicit HTTP(S) proxy for target traffic only; environment proxies are ignored.",
+            help=("Explicit HTTP(S) target proxy. Default: none. Environment proxies are ignored."),
         ),
     ] = None,
     verify_tls: Annotated[
@@ -195,9 +217,10 @@ def scan(
             "--verify-tls/--no-verify-tls",
             rich_help_panel="Target HTTP",
             help=(
-                "Verify target TLS certificates (default); disabling is insecure. "
-                "Does not affect Ollama."
+                "Enable or disable target TLS verification. Default: enabled. "
+                "Disabling is insecure. Does not affect Ollama."
             ),
+            show_default=False,
         ),
     ] = True,
 ) -> None:
@@ -206,6 +229,15 @@ def scan(
     if output is not None and not report_formats:
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
+    try:
+        contexts = (
+            map_auth_context_inputs(auth_context, headers=headers, mode=mode, ai=ai)
+            if auth_context is not None
+            else None
+        )
+    except GQLSleuthError as error:
+        render_error(error_console, str(error))
+        raise typer.Exit(code=2) from None
     if mode is ScanMode.ACTIVE:
         render_active_gate(console)
     try:
@@ -217,11 +249,19 @@ def scan(
                 "WARNING: TLS certificate verification is disabled for target requests.",
                 style="gql.warning",
             )
-        result = run_safe_execution_scan(target, mode=mode, http_settings=http_settings)
+        result = (
+            run_differential_scan(target, contexts=contexts, http_settings=http_settings, mode=mode)
+            if contexts is not None
+            else run_safe_execution_scan(target, mode=mode, http_settings=http_settings)
+        )
     except GQLSleuthError as error:
         render_error(error_console, str(error))
         raise typer.Exit(code=2) from None
 
+    if isinstance(result, DifferentialScanResult):
+        render_differential(console, result, verbose=verbose)
+        _finish_reports(result, report_formats, output)
+        return
     render_scan(console, result, verbose=verbose)
     schema_scan = result.query_generation.operation_analysis.schema_scan
     mode = schema_scan.introspection.detection.discovery.mode
@@ -233,10 +273,19 @@ def scan(
         console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
         ai_result = interpret_completed_scan(report_result)
         render_ai(console, ai_result, verbose=verbose)
+    _finish_reports(report_result, report_formats, output, ai_result)
+
+
+def _finish_reports(
+    result: SafeExecutionScanResult | ActiveExecutionScanResult | DifferentialScanResult,
+    report_formats: tuple[ReportFormat, ...],
+    output: Path | None,
+    ai_result: AIInterpretationResult | None = None,
+) -> None:
     if report_formats:
         try:
             paths = generate_reports(
-                report_result,
+                result,
                 formats=report_formats,
                 output_directory=output,
                 ai_interpretation=ai_result,

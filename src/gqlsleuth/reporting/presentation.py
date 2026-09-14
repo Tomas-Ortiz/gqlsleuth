@@ -17,6 +17,7 @@ class ReportEntry:
     code_blocks: tuple[tuple[str, str], ...] = ()
     request_blocks: tuple[tuple[str, str], ...] = ()
     response: ResponsePresentation | None = None
+    evidence_references: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,8 @@ class ReportSection:
     paragraphs: tuple[str, ...] = ()
     rows: tuple[tuple[str, str], ...] = ()
     entries: tuple[ReportEntry, ...] = ()
+    table_headers: tuple[str, ...] = ()
+    table_rows: tuple[tuple[str, ...], ...] = ()
 
 
 def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:

@@ -5,6 +5,7 @@ from math import isfinite
 
 from pydantic import ValidationError
 
+from gqlsleuth.domain.differential import NamedAuthContext, validate_context_names
 from gqlsleuth.domain.exceptions import HttpConfigurationError
 from gqlsleuth.domain.models import ScanMode, Target
 from gqlsleuth.infrastructure.http import (
@@ -58,6 +59,36 @@ def map_target_http_inputs(
         raise HttpConfigurationError(
             "--proxy must be a valid HTTP(S) proxy URL with a host and optional port."
         ) from None
+
+
+def map_auth_context_inputs(
+    entries: list[str],
+    *,
+    headers: list[str] | None = None,
+    mode: ScanMode = ScanMode.SAFE,
+    ai: bool = False,
+) -> tuple[NamedAuthContext, ...]:
+    """Accumulate first-seen labels, reusing Phase 14 header syntax and validation."""
+    if headers:
+        raise HttpConfigurationError("--auth-context cannot be combined with --header / -H.")
+    if mode is not ScanMode.SAFE:
+        raise HttpConfigurationError("--auth-context supports SAFE mode only.")
+    if ai:
+        raise HttpConfigurationError(
+            "Differential AI interpretation is not implemented; omit --ai."
+        )
+    grouped: dict[str, list[str]] = {}
+    for entry in entries:
+        name, separator, header = entry.partition("=")
+        validate_context_names((name,), check_count=False)
+        grouped.setdefault(name, [])
+        if separator:
+            grouped[name].append(header)
+    validate_context_names(tuple(grouped))
+    return tuple(
+        NamedAuthContext(name, map_target_http_inputs(headers=values).custom_headers)
+        for name, values in grouped.items()
+    )
 
 
 @dataclass(frozen=True)

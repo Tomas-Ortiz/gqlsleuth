@@ -42,6 +42,13 @@
 {% endfor %}
     </tbody></table>
 {% endif %}
+{% if section.table_rows %}
+    <table><thead><tr>{% for header in section.table_headers %}<th scope="col">{{ header }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in section.table_rows %}
+      <tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>
+{% endfor %}
+    </tbody></table>
+{% endif %}
 {% for entry in section.entries %}
     <article>
       <h3>{{ entry.title | brief }}</h3>
@@ -50,6 +57,16 @@
         <dt>{{ label }}</dt><dd>{{ value | brief }}</dd>
 {% endfor %}
       </dl>
+{% if entry.evidence_references %}
+      <details>
+        <summary>Evidence references</summary>
+        <dl>
+{% for label, value in entry.evidence_references %}
+          <dt>{{ label }}</dt><dd>{{ value }}</dd>
+{% endfor %}
+        </dl>
+      </details>
+{% endif %}
 {% for paragraph in entry.paragraphs %}
       <p>{{ paragraph | brief }}</p>
 {% endfor %}
@@ -87,7 +104,7 @@
 {% endif %}
     </article>
 {% endfor %}
-{% if not section.paragraphs and not section.rows and not section.entries %}
+{% if not section.paragraphs and not section.rows and not section.entries and not section.table_rows %}
     <p>None recorded.</p>
 {% endif %}
   </section>

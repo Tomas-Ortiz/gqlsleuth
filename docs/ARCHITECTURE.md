@@ -880,8 +880,9 @@ introspection requests, safe Queries, and explicitly selected/confirmed ACTIVE M
 This also applies to direct endpoints. No `--token` or separate User-Agent option is added.
 
 The tool never obtains credentials, logs in, refreshes tokens, reads browser cookies, or performs
-OAuth/OIDC flows automatically. Anonymous/user/admin comparison and multiple profiles remain
-future work. SAFE and ACTIVE safety gates, validation, limits, and classifications are unchanged.
+OAuth/OIDC flows automatically. Phase 15 adds generic named SAFE contexts below; it does not
+infer identities or roles. SAFE and ACTIVE safety gates, validation, limits, and classifications
+are unchanged.
 
 Custom header values and proxy credentials are excluded from console/configuration errors and
 are hidden in settings representations. They are not added to human reports or AI context.
@@ -890,6 +891,62 @@ headers or target HTTP settings; Phase 14 does not add or remove evidence fields
 still preserves exact variables and observed response headers/bodies, which may contain secrets
 or echoed request configuration. Handle all reports securely as potentially sensitive pentest
 artifacts; existing human-response sensitivity warnings remain applicable.
+
+### Named contexts and differential authorization review (Phase 15)
+
+GraphQL does not prescribe an authentication mechanism. `--auth-context LABEL[=NAME: VALUE]`
+is repeatable and supports 2–3 unique user-defined, case-sensitive labels in first-seen order.
+Names contain 1–64 ASCII letters/digits/dots/underscores/hyphens and start with a letter or digit.
+The first `=` separates the label; repeated names accumulate headers through the existing Phase 14
+first-colon parser. A bare label contributes no headers and never clears accumulated headers.
+Bearer, Cookie, API key, tenant, and proprietary headers are examples; none receives role semantics.
+No fixed names, hierarchy, JWT claims, or automatic authentication acquisition are inferred.
+
+The CLI rejects fewer than two/more than three unique labels, invalid syntax, `--header` mixed
+with contexts, ACTIVE mode, and `--ai` before starting work. Common timeout/proxy/TLS settings
+are validated as usual. The application also enforces SAFE, valid context counts, independent
+validated settings, and no common headers. Each context gets a distinct immutable settings value
+and fresh clients through `run_safe_execution_scan`; no cookie jar or header state is reused across
+contexts. The normal 20-Query attempt limit applies independently to each SAFE scan.
+
+`DifferentialScanResult` composes ordered `ContextScanResult` objects (label plus the complete
+existing `SafeExecutionScanResult`, or a controlled failure code) and `ContextPairReview` objects.
+Settings and header values are not part of this result. A normalized failure in one context
+does not cancel later contexts. The existing per-context evidence remains unchanged.
+
+After scanning, `compare_context_scans` performs local symmetric comparisons for every unique pair
+in input order. Matching uses exact candidate URLs and parsed root-field names, without consulting
+response bodies. Candidate categories are `ENDPOINT_ACCESS_DIFFERENCE` (recorded GraphQL
+confidence/HTTP outcome), `INTROSPECTION_DIFFERENCE`, `OPERATION_VISIBILITY_DIFFERENCE` (Query and
+Mutation roots only), and `EXECUTION_OUTCOME_DIFFERENCE` (existing Query classification, attempt
+state, HTTP status). Source evidence IDs belong to the respective named result; comparisons
+create no HTTP evidence and send zero requests.
+
+Visibility is compared only when both parsed schemas exist. Missing endpoint probes (including
+preferred-endpoint short circuit), unavailable introspection/schema data, and missing execution
+results produce explicit limitations, not fabricated absence. Different generated documents or
+placeholder variables are flagged as non-equivalent requests. No variables are altered, retried,
+or guessed. Subscriptions, Mutation generation/execution, returned business-data comparison,
+ownership inference, ID enumeration, and BOLA/IDOR automation are outside this phase.
+
+All differences are authorization review candidates requiring manual validation against intended
+application policy. They may be legitimate behavior. GraphQL errors retain their existing
+classification and may be due to placeholders, validation, business input, or other server logic;
+they are never promoted to authorization weaknesses or Findings. Names imply no privilege order.
+
+Console output provides structural context summaries and at most ten candidates by default;
+verbose output shows all candidates and limitations. `DifferentialReportContext` wraps one
+existing report projection per named scan plus pair results for canonical JSON. Dedicated human
+sections show structural context facts, safe Query statuses, candidate observations, and source
+evidence links; they do not render response bodies, raw error messages, or HTTP configuration.
+This is a presentation projection, not redaction: JSON preserves the normal per-context evidence.
+Safety Notice remains the final Markdown/HTML section. Differential AI is not implemented and
+Ollama receives no requests or contexts; single-context AI remains unchanged.
+
+`tests/fixtures/phase15_target.py` supplies a loopback-only manual target and a shared MockTransport
+response fixture. `uv run python tests/fixtures/phase15_target.py --smoke` runs the complete local
+three-context SAFE scan and writes reports without real credentials or public targets. Fixture
+labels are test cases only and never become production role logic.
 
 ## 19. Evidence model
 
@@ -1138,7 +1195,7 @@ sources are introduced.
 The initial Phase 1 implementation supports only the explicit `--mode` CLI option and the
 built-in safe default. Environment variables and configuration files are deferred until
 configuration needs grow; no configuration file is discovered or loaded in Phase 1.
-Through Phase 14, configuration still uses CLI plus built-in defaults only. Target headers,
+Through Phase 15, configuration still uses CLI plus built-in defaults only. Target headers,
 timeout, TLS policy, and proxy are mapped once into immutable HTTP settings; no environment,
 `.env`, global/project configuration file, or multi-source precedence is implemented.
 
@@ -1194,7 +1251,7 @@ The exact command structure may evolve during implementation. The primary user w
 gqlsleuth scan https://example.com
 ```
 
-Through Phase 14, `scan` and `version` are implemented. Reporting is integrated into `scan`:
+Through Phase 15, `scan` and `version` are implemented. Reporting is integrated into `scan`:
 
 ```bash
 gqlsleuth scan https://example.com --format json --format markdown --format html --output ./reports
@@ -1817,6 +1874,28 @@ Implemented:
 No dependencies, credential preflights, authentication acquisition, retries, multiple identities,
 configuration sources, authorization comparison, generic redaction, or Phase 15+ behavior added.
 
+### Phase 15 — Named Authentication Contexts & Differential Authorization Review
+
+Implemented:
+
+- Repeatable `--auth-context LABEL[=NAME: VALUE]`, 2–3 opaque labels, ordered aggregation,
+  and reuse of Phase 14 header parsing and validation.
+- Independent immutable HTTP settings and complete SAFE pipelines per context, including
+  isolated clients/cookie jars, common transport policy, and unchanged Query validation/limits.
+- Pre-scan rejection of common headers, ACTIVE, and AI combined with named contexts.
+- Local symmetric pairwise endpoint, introspection, Query/Mutation visibility, and Query outcome
+  comparisons; explicit missing-data/non-equivalent-request limitations and source evidence IDs.
+- Composed per-context results and conservative authorization review candidates, never Findings.
+- Compact/verbose console summaries and deterministic JSON/Markdown/HTML reports, with no
+  configuration values in result projections and Safety Notice last in human reports.
+- Offline tests for isolation, redirects, cookies, secret canaries, failures, exact SAFE request
+  equivalence, local-only comparison/reporting, and Windows console compatibility.
+- A test-only loopback target and reproducible manual smoke with three contexts, six review
+  candidates, 13 normal target requests, and zero Mutation requests.
+
+No dependencies, AI differential interpretation, hierarchy inference, automatic authentication,
+BOLA/IDOR automation, variable substitution, business-data comparison, or Phase 16+ behavior added.
+
 ## 35. MVP definition
 
 The first meaningful MVP should be able to:
@@ -1843,10 +1922,7 @@ Potential future improvements include:
 
 - Custom endpoint wordlists.
 - JavaScript endpoint extraction.
-- Authentication profiles.
-- Anonymous versus authenticated comparisons.
-- User versus administrator comparisons.
-- Authorization differential analysis.
+- Persisted authentication context profiles (CLI-only named contexts are implemented in Phase 15).
 - Batch query analysis.
 - Alias abuse detection.
 - Query depth and complexity analysis.

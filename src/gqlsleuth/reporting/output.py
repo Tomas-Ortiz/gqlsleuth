@@ -5,12 +5,12 @@ from itertools import count
 from pathlib import Path
 
 from gqlsleuth.domain.exceptions import ReportingError
-from gqlsleuth.reporting.models import ReportContext, ReportFormat
+from gqlsleuth.reporting.models import DifferentialReportContext, ReportContext, ReportFormat
 from gqlsleuth.reporting.renderers import render_report
 
 
 def write_reports(
-    context: ReportContext,
+    context: ReportContext | DifferentialReportContext,
     formats: tuple[ReportFormat, ...],
     output_directory: Path,
 ) -> tuple[Path, ...]:

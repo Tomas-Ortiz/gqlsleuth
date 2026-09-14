@@ -176,3 +176,44 @@ def test_complete_root_help_on_narrow_terminal(monkeypatch, width):
     for title in ("Options", "Commands", "Quick Start", "Common options"):
         assert title in result.stdout
     assert "gqlsleuth scan --help" in result.stdout
+
+
+def test_scan_help_documents_defaults_without_duplicate_metadata():
+    result = CliRunner().invoke(cli.app, ["scan", "--help"])
+    assert result.exit_code == 0
+    output = " ".join(result.stdout.replace("│", " ").replace("|", " ").split())
+    assert output.lower().count("default:") == 10
+    assert "[default:" not in output.lower()
+    for text in (
+        "Default: safe.",
+        "Default: discovery 8s, other target requests 10s.",
+        "An explicit value applies to all target stages.",
+        "Default: enabled.",
+        "Default: ./gqlsleuth-reports when reports are requested.",
+        "Environment proxies are ignored.",
+    ):
+        assert text in output
+
+
+@pytest.mark.parametrize(
+    "name,default,description",
+    [
+        ("mode", "safe", "Default: safe."),
+        ("timeout", None, "Default: discovery 8s, other target requests 10s."),
+        ("verify_tls", True, "Default: enabled."),
+        ("proxy", None, "Default: none."),
+        ("headers", None, "Default: none."),
+        ("ai", False, "Default: disabled."),
+        ("verbose", False, "Default: disabled."),
+        ("formats", None, "Default: none."),
+        ("output", None, "Default: ./gqlsleuth-reports when reports are requested."),
+        ("auth_context", None, "Default: disabled."),
+    ],
+)
+def test_default_descriptions_belong_to_the_right_options_without_changing_values(
+    name, default, description
+):
+    scan = get_command(cli.app).commands["scan"]
+    parameter = next(item for item in scan.params if item.name == name)
+    assert parameter.default == default
+    assert description in parameter.help

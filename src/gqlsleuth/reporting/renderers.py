@@ -13,11 +13,12 @@ from jinja2 import Environment, PackageLoader, StrictUndefined, TemplateError
 from pydantic import BaseModel, JsonValue
 
 from gqlsleuth.domain.exceptions import ReportingError
-from gqlsleuth.reporting.models import ReportContext, ReportFormat
+from gqlsleuth.reporting.differential import differential_sections
+from gqlsleuth.reporting.models import DifferentialReportContext, ReportContext, ReportFormat
 from gqlsleuth.reporting.presentation import human_sections
 
 
-def render_report(context: ReportContext, format: ReportFormat) -> str:
+def render_report(context: ReportContext | DifferentialReportContext, format: ReportFormat) -> str:
     """Render one context; bytes use explicit lossless base64 objects in canonical JSON."""
     if not isinstance(format, ReportFormat):
         raise ReportingError("Unsupported report format.")
@@ -45,7 +46,12 @@ def render_report(context: ReportContext, format: ReportFormat) -> str:
         )
         environment.filters.update(brief=_brief, markdown_text=_markdown_text, fenced=_fenced)
         name = "report.html.j2" if format is ReportFormat.HTML else "report.md.j2"
-        return environment.get_template(name).render(sections=human_sections(context))
+        sections = (
+            differential_sections(context)
+            if isinstance(context, DifferentialReportContext)
+            else human_sections(context)
+        )
+        return environment.get_template(name).render(sections=sections)
     except (TemplateError, OSError, TypeError, ValueError, RecursionError) as error:
         raise ReportingError(
             f"Could not render {format} report: {type(error).__name__}."

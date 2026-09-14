@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 14 — Target HTTP Configuration & Authentication Support**. It provides the Phase 0
+The repository is currently at **Phase 15 — Named Authentication Contexts & Differential Authorization Review**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -27,6 +27,8 @@ priority colors, grouped Mutation previews, and structured AI console tables. Ca
 evidence, scanner behavior, and AI inputs/validation remain unchanged.
 Phase 14 exposes repeated target headers, user-supplied authentication, explicit timeout/proxy,
 and target TLS verification settings, isolated from local Ollama.
+Phase 15 runs the existing SAFE workflow independently for 2–3 named HTTP contexts, then compares
+their retained observations locally. Differences are manual-review candidates, not vulnerabilities.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
@@ -366,8 +368,9 @@ Cookies. On crossing scheme, host, or port, supplied headers are removed and nev
 within that redirect chain, including a redirect back. HTTPX still handles redirect methods,
 limits, and body framing. Scanner-owned JSON headers remain valid.
 
-There is no automatic login, credential acquisition, token refresh, browser-cookie access,
-multiple-profile support, or anonymous/user/admin comparison. Target headers, proxy, timeout,
+There is no automatic login, credential acquisition, token refresh, or browser-cookie access.
+Named SAFE contexts are available as described below; no role hierarchy is inferred.
+Target headers, proxy, timeout,
 and TLS settings **do not affect Ollama**. The unchanged AI allowlist excludes these values.
 Normal/verbose console and configuration errors never display supplied header values; human
 reports add no request-header-values section. Existing server response presentation is unchanged.
@@ -380,6 +383,90 @@ generic automatic redaction. Store reports securely and never commit real creden
 
 Environment variables and configuration files are not supported yet. They remain deferred
 until the project has enough settings to justify multiple configuration sources.
+
+## Named HTTP contexts and differential review
+
+GraphQL does not imply Bearer authentication, JWT, or any particular role. A context is simply
+a tester-defined label and zero or more HTTP headers. Bearer, Cookie, API key, tenant, and
+proprietary headers use the same Phase 14 header parser and transport protections:
+
+```bash
+uv run gqlsleuth scan https://example.com/graphql --auth-context public --auth-context "cliente=Authorization: Bearer TOKEN"
+uv run gqlsleuth scan https://example.com/graphql --auth-context public --auth-context "empleado=Cookie: session=AAA" --auth-context "soporte=Cookie: session=BBB"
+uv run gqlsleuth scan https://example.com/graphql --auth-context public --auth-context "tenant-a=X-API-Key: KEY_A" --auth-context "tenant-b=X-API-Key: KEY_B" -f json,markdown,html
+```
+
+Repeat a label to accumulate multiple headers:
+
+```bash
+uv run gqlsleuth scan https://example.com/graphql --auth-context public --auth-context "cliente=Authorization: Bearer TOKEN" --auth-context "cliente=X-Tenant-ID: 123"
+```
+
+- Supply **2–3 unique labels**, in first-seen order. Names are case-sensitive opaque labels,
+  1–64 ASCII letters/digits/dots/underscores/hyphens, beginning with a letter or digit.
+  Labels never establish identity, authentication success, or a privilege hierarchy.
+- A bare label supplies no headers. Repeating it does not erase headers already accumulated.
+  The first `=` separates label from header; the header still splits at its first colon.
+- `--auth-context` cannot be combined with `-H`/`--header`, `--mode active`, or `--ai`.
+  Invalid combinations fail before scanning. Existing single-context SAFE, ACTIVE, and AI
+  behavior is unchanged. Differential scans make no Ollama calls.
+- `--timeout`, `--proxy`, and TLS options apply equally to each independent settings/client
+  instance. Headers and cookie jars are never shared between context scans. Normal redirect
+  protection, response limits, discovery defaults, and SAFE Query limits remain intact.
+- Each context runs the complete existing SAFE pipeline independently, including up to 20
+  attempted safe Queries **per context**. No Mutation document is generated or executed in
+  differential mode; Mutation-root visibility is schema information only.
+- All unique pairs are compared in order: A ↔ B, A ↔ C, B ↔ C. Exact candidate URLs and
+  root field names identify comparable observations. Discovery confidence/HTTP status,
+  introspection status, Query/Mutation visibility, and Query classifications/HTTP status are
+  compared. Raw response bodies and business data are never compared.
+- Missing observations are explicit limitations, not proof of absence. Generation failures,
+  failed contexts, and unavailable schemas do not cancel other contexts. Differing generated
+  documents/placeholders are flagged as non-equivalent requests; no values are guessed or retried.
+
+The console shows **Authorization Differential Review**, context summaries, and up to ten
+differences; `-v` shows all candidates and comparison limitations. JSON retains each named
+context's normal structured scan report/evidence plus local pair results with source evidence IDs.
+Markdown/HTML show structural context facts, Query outcomes, pairwise observations, and limitations;
+their compact candidate table matches the console summary. A single candidate endpoint appears
+above the table; multiple endpoints use a dedicated column. HTML source-evidence IDs are collapsed
+under **Evidence references**; Markdown leaves those IDs to canonical JSON. Detailed context and
+pair sections remain below the summary. Both formats preserve the recorded observations;
+these differential human views omit raw response bodies/errors and HTTP configuration. Safety
+Notice remains their final section. All formats use the existing `-f`/`-o` output behavior.
+Comparison and report generation add **zero HTTP requests** and create no new HTTP evidence.
+Retained evidence is unchanged; JSON may still contain sensitive data returned by the target.
+
+Differences can be legitimate authorization behavior. `GRAPHQL_ERROR` versus `SUCCESS` is only
+an observed difference: placeholder values, business input, validation, or other server logic
+may explain it. Manual validation is required. There are no authorization Findings, role/JWT
+analysis, automatic login/token acquisition, BOLA/IDOR tests, ID enumeration, ownership inference,
+or cross-context variable substitution. Use only against systems you are authorized to test.
+
+### Controlled local Phase 15 validation
+
+A test-only GraphQL-like fixture uses no real credentials or public service. Run the complete
+local smoke (starts a loopback server, runs three SAFE contexts, writes all formats, then stops):
+
+```bash
+uv run python tests/fixtures/phase15_target.py --smoke --output ./reports/phase15-smoke
+```
+
+For an interactive development session, start the fixture in one terminal:
+
+```bash
+uv run python tests/fixtures/phase15_target.py --port 8765
+```
+
+Then scan from another terminal:
+
+```bash
+uv run gqlsleuth scan http://127.0.0.1:8765/graphql --auth-context public --auth-context "empleado=X-Test-Context: empleado" --auth-context "soporte=X-Test-Context: soporte" -v -f json,markdown,html -o ./reports/phase15-smoke
+```
+
+The fixture denies public introspection, varies Query/Mutation visibility, and returns different
+safe Query outcomes for the other two test header values. These are fixture cases, not roles
+recognized by production code. Automated tests use the same fixture logic via MockTransport.
 
 The module entry point exposes the same CLI:
 
