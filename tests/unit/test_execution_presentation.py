@@ -158,10 +158,9 @@ def test_endpoint_grouping_preserves_indices_documents_and_priorities(execution_
         assert candidate.generated_mutation.operation_name in output
         if candidate.selectable:
             assert candidate.generated_mutation.query_text in output
-            assert (
-                "Variables: " + json.dumps(candidate.generated_mutation.variables, sort_keys=True)
-                in output
-            )
+            assert "Variables: " + json.dumps(
+                candidate.generated_mutation.variables, sort_keys=True
+            ) in " ".join(output.split())
     assert "Destructive action token(s): delete." in output
 
 

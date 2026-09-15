@@ -718,15 +718,36 @@ Generated values are placeholders and must not be assumed to be valid for the ta
 
 The initial Phase 8 implementation consumes only the project-owned Phase 6 schema and Phase 7
 operation-analysis results and sends no HTTP requests. It attempts generation for every actual
-Query-root field, omits optional arguments and non-null arguments with defaults, and creates
-variables only for outer-non-null arguments without defaults. Operations are anonymous and do not
+Query-root field, normally omits optional arguments and non-null arguments with defaults, and creates
+variables for outer-non-null arguments without defaults. Operations are anonymous and do not
 use `operationName`.
 
-Built-in placeholders are `"test"` for String, `"1"` for ID, `1` for Int, `1.0` for Float, and
+Built-in placeholders default to `"test"` for String, `"1"` for ID, `1` for Int, `1.0` for Float, and
 `false` for Boolean. Enum generation chooses the alphabetically first non-deprecated value, lists
 contain one recursively generated item, and input objects contain required fields only. Custom
 scalars receive the conservative string `"test"` plus a manual-adjustment note. Cyclic required
 input objects produce an isolated generation failure.
+
+For collection Queries only, generation may additionally populate one recognized schema quantity
+bound with `1`. The shared pure `graphql/collection_schema.py` inspection serves Phase 8 and
+Phase 16: direct composite lists or one high-signal page/connection wrapper, exact normalized
+`first`, `last`, `limit`, `take`, `size`, `pageSize`, `perPage`, `maxResults` names, and cycle-safe
+breadth-first input inspection capped at three input-object levels. Generation requires a
+non-list `Int` leaf reached through non-list input objects, populating only its path plus required
+siblings. It tries controls in deterministic discovery order and retains the original generation
+if none can be safely populated. Required business arguments remain intact. It does not inject
+optional bounds for Mutations, auto-paginate, retry, or validate runtime enforcement. Phase 16
+continues to assess schema signals independently of generated documents and response sizes.
+
+String-only semantic placeholders use exact normalized name tuples from the existing identifier
+tokenizer. Email/mail and emailAddress/mailAddress use `"test@example.com"`; password/passwd/passcode
+use `"TestPass123!"`; username/userName/loginName use `"testuser"`; name/fullName/displayName use
+`"Test User"`; firstName/lastName use `"Test"`/`"User"`; url/uri/website/websiteUrl/callbackUrl/redirectUrl
+use `"https://example.com"`; phone/phoneNumber/telephone use `"+15555550100"`. CamelCase, PascalCase
+and snake_case are supported. Unmatched names such as passwordHint retain `"test"`. Direct
+arguments, lists and nested inputs use the actual leaf input name. Type semantics take precedence;
+custom scalars retain their existing fallback and note. The shared Query/Mutation generator
+does not infer valid target data, and placeholders may require manual adjustment.
 
 For object results, generation prefers a direct non-deprecated scalar/enum `id` field, then the
 first deterministic eligible leaf, then one minimal nested child path. Nested fields requiring
@@ -1936,7 +1957,7 @@ Implemented candidates and conservative rules:
   cycles terminate, and bounds beyond the depth limit are not inferred. One candidate per root
   Query retains up to three collection paths/element types in sorted field order and the count of
   additional qualifying fields. No candidate is created when an obvious bound is found.
-  Generated Queries omit optional arguments, so Phase 16 inspects schema arguments rather than
+  Generated Queries normally omit optional arguments, except recognized quantity bounds. Phase 16 inspects schema arguments rather than
   generated documents when determining whether an obvious bounding mechanism exists.
   Pagination/bounding arguments are schema signals only; presence does not prove runtime
   enforcement, and absence does not prove unlimited results. Runtime response sizes are never input.

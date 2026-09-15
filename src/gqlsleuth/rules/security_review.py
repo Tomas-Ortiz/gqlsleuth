@@ -11,6 +11,11 @@ from gqlsleuth.domain.security_review import (
     SecurityCandidateType,
     SecurityReviewLimitation,
 )
+from gqlsleuth.graphql.collection_schema import (
+    MAX_BOUNDING_INPUT_DEPTH,
+    collection_paths,
+    find_bounding_input,
+)
 from gqlsleuth.rules.operation_analysis import normalize_terms
 from gqlsleuth.rules.schema_graph import (
     COMPOSITE_KINDS,
@@ -25,27 +30,6 @@ from gqlsleuth.rules.schema_graph import (
 )
 
 FLEXIBLE_SCALARS = frozenset({"JSON", "JSONObject", "Any", "Map"})
-BOUND_ARGUMENTS = frozenset(
-    {
-        ("first",),
-        ("last",),
-        ("limit",),
-        ("take",),
-        ("size",),
-        ("page", "size"),
-        ("per", "page"),
-        ("max", "results"),
-    }
-)
-COLLECTION_FIELDS = frozenset({"data", "items", "nodes", "edges", "results", "records", "entries"})
-COLLECTION_TYPE_SUFFIXES = (
-    ("page",),
-    ("connection",),
-    ("collection",),
-    ("results",),
-    ("result", "set"),
-)
-MAX_BOUNDING_INPUT_DEPTH = 3
 MAX_COLLECTION_PATHS = 3
 REQUIRED_INPUT_DEPTH_THRESHOLD = 4
 _RANK = {kind: index for index, kind in enumerate(SecurityCandidateType)}
@@ -274,16 +258,7 @@ def _collection_facts(
     """Direct composite lists or one high-signal wrapper level; never follow output edges."""
     if field.type.is_list:
         return (f"Return type: {field.type.render()}", f"Element type: {output.name}")
-    terms = normalize_terms(output.name)
-    hinted_type = any(terms[-len(suffix) :] == suffix for suffix in COLLECTION_TYPE_SUFFIXES)
-    collections = []
-    for child in sorted(output.fields, key=lambda child: child.name):
-        element = types.get(child.type.named_type)
-        if not child.type.is_list or element is None or element.kind not in COMPOSITE_KINDS:
-            continue
-        child_terms = normalize_terms(child.name)
-        if hinted_type or (len(child_terms) == 1 and child_terms[0] in COLLECTION_FIELDS):
-            collections.append((f"{output.name}.{child.name}", element.name))
+    collections = collection_paths(field, types)
     facts = tuple(
         fact
         for path, element in collections[:MAX_COLLECTION_PATHS]
@@ -294,48 +269,6 @@ def _collection_facts(
             f"Additional qualifying collection fields: {len(collections) - MAX_COLLECTION_PATHS}.",
         )
     return facts
-
-
-def find_bounding_input(field: SchemaField, types: dict[str, SchemaNamedType]) -> str | None:
-    """Return one deterministic schema quantity-control path, including optional inputs.
-
-    Root argument -> input object counts as level one. Breadth-first traversal visits
-    each type once at its shortest depth, capped at three levels and existing graph budgets.
-    Names indicate schema controls only; no runtime enforcement is inferred.
-    """
-    arguments = sorted(field.arguments, key=lambda argument: argument.name)
-    for argument in arguments:
-        if normalize_terms(argument.name) in BOUND_ARGUMENTS:
-            return argument.name
-    queue: deque[tuple[SchemaNamedType, str, int]] = deque()
-    seen: set[str] = set()
-
-    def enqueue(name: str, path: str, depth: int) -> None:
-        named = types.get(name)
-        if (
-            named
-            and named.kind is SchemaTypeKind.INPUT_OBJECT
-            and name not in seen
-            and len(seen) < MAX_GRAPH_TYPES
-        ):
-            seen.add(name)
-            queue.append((named, path, depth))
-
-    for argument in arguments:
-        enqueue(argument.type.named_type, argument.name, 1)
-    inspected = 0
-    while queue:
-        named, path, depth = queue.popleft()
-        for item in sorted(named.input_fields, key=lambda item: item.name):
-            if inspected >= MAX_GRAPH_RELATIONSHIPS:
-                return None
-            inspected += 1
-            child_path = f"{path}.{item.name}"
-            if normalize_terms(item.name) in BOUND_ARGUMENTS:
-                return child_path
-            if depth < MAX_BOUNDING_INPUT_DEPTH:
-                enqueue(item.type.named_type, child_path, depth + 1)
-    return None
 
 
 def _federation_facts(schema: ParsedSchema, types: dict[str, SchemaNamedType]) -> tuple[str, ...]:

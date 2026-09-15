@@ -226,7 +226,7 @@ def test_cli_adds_review_without_new_options_or_requests(phase_ten_scan, monkeyp
 
 
 def test_wrapper_decisions_use_optional_schema_arguments_and_reach_all_views(phase_ten_scan):
-    scan, _ = phase_ten_scan(SDL, mode=ScanMode.SAFE)
+    scan, requests = phase_ten_scan(SDL, mode=ScanMode.SAFE)
     review = scan.query_generation.security_review
     lists = [
         item
@@ -236,8 +236,14 @@ def test_wrapper_decisions_use_optional_schema_arguments_and_reach_all_views(pha
     assert "query albums" in {item.subject for item in lists}
     assert not {"query albumsLimited", "query albumsPaginated"} & {item.subject for item in lists}
     generated = {item.operation_name: item for item in scan.query_generation.queries}
-    assert "limit" not in generated["albumsLimited"].query_text
-    assert "options" not in generated["albumsPaginated"].query_text
+    assert generated["albumsLimited"].variables == {"limit": 1}
+    assert generated["albumsPaginated"].variables == {"options": {"paginate": {"limit": 1}}}
+    for name in ("albumsLimited", "albumsPaginated"):
+        artifact = generated[name]
+        assert requests.count({"query": artifact.query_text, "variables": artifact.variables}) == 1
+        evidence = [item for item in scan.evidence if item.query == artifact.query_text]
+        assert len(evidence) == 2  # Generation and the single attempted Query request.
+        assert all(item.variables == artifact.variables for item in evidence)
     report = build_report(scan)
     canonical = json.loads(render_report(report, ReportFormat.JSON))
     candidate = next(

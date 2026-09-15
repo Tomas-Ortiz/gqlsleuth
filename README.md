@@ -45,11 +45,28 @@ Rules explicitly declare whether they apply to primary, input, or output context
 arbitrary returned field from being treated as evidence of the operation's purpose.
 
 Phase 8 generates one anonymous minimal GraphQL query for each Query-root field when possible.
-It includes only required arguments, creates deterministic placeholder variables, and selects a
+It normally omits optional/defaulted arguments, creates deterministic placeholder variables, and selects a
 small response field path with a maximum internal depth of three and cycle protection. Custom
 scalar placeholders use the string `"test"` and are marked as potentially requiring manual
 adjustment. SAFE generates Query documents only. ACTIVE reuses this same generation algorithm
 for Mutation-root fields after completing the safe workflow. Subscriptions are never generated.
+
+For collection Queries, Phase 8 may also populate one recognized optional `Int` quantity bound
+with **1**. It shares Phase 16's schema inspection of direct composite lists, one-level
+page/connection wrappers, and up to three input-object levels (for example,
+`options.paginate.limit`). Only that path and required inputs are populated; unrelated optional
+fields stay omitted. Recognized names are `first`, `last`, `limit`, `take`, `size`, `pageSize`,
+`perPage`, and `maxResults`, including snake_case equivalents. Unsafe paths are left unchanged.
+This does not auto-paginate or validate server-side enforcement, and never adds bounds to Mutations.
+
+String placeholders use exact normalized field/argument names: email/mail names use
+`"test@example.com"`, password/passwd/passcode use `"TestPass123!"`, username/loginName use
+`"testuser"`, name/fullName/displayName use `"Test User"`, firstName uses `"Test"`, lastName uses
+`"User"`, URL names use `"https://example.com"`, and phone names use `"+15555550100"`.
+Other Strings use `"test"`. Matching supports camelCase, PascalCase and snake_case without
+substring matches (for example, `passwordHint` remains `"test"`). Nested inputs use each leaf's
+name. ID, numeric, Boolean, enum and custom-scalar behavior remains unchanged. These are
+deterministic placeholders for both Queries and Mutation previews and may require manual adjustment.
 
 By default, discovery gives the preferred candidate an eight-second GET timeout and immediately applies the
 existing GraphQL detection logic. A confirmed or probable preferred candidate stops discovery;
@@ -230,7 +247,7 @@ are inspected breadth-first, up to **three input-object levels** (the root argum
 is level one), with cycle protection and the existing type/relationship budgets. For example,
 `options.paginate.limit` is a schema signal even when both inputs are optional.
 
-Generated Queries omit optional arguments, so Phase 16 inspects schema arguments rather than
+Generated Queries normally omit optional arguments, except recognized quantity bounds. Phase 16 inspects schema arguments rather than
 generated documents when determining whether an obvious bounding mechanism exists.
 Pagination/bounding arguments are schema signals only; their presence does not prove runtime
 enforcement. Returned item counts never influence this static rule.

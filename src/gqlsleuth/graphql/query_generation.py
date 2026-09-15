@@ -17,6 +17,8 @@ from gqlsleuth.domain.schema import (
     TypeReference,
     TypeReferenceKind,
 )
+from gqlsleuth.graphql.collection_schema import collection_paths, iter_bounding_inputs
+from gqlsleuth.rules.operation_analysis import normalize_terms
 
 DEFAULT_MAX_SELECTION_DEPTH = 3
 _BUILTIN_PLACEHOLDERS: dict[str, JsonValue] = {
@@ -25,6 +27,32 @@ _BUILTIN_PLACEHOLDERS: dict[str, JsonValue] = {
     "Int": 1,
     "Float": 1.0,
     "Boolean": False,
+}
+_STRING_PLACEHOLDERS = {
+    ("email",): "test@example.com",
+    ("email", "address"): "test@example.com",
+    ("mail",): "test@example.com",
+    ("mail", "address"): "test@example.com",
+    ("password",): "TestPass123!",
+    ("passwd",): "TestPass123!",
+    ("passcode",): "TestPass123!",
+    ("username",): "testuser",
+    ("user", "name"): "testuser",
+    ("login", "name"): "testuser",
+    ("name",): "Test User",
+    ("first", "name"): "Test",
+    ("last", "name"): "User",
+    ("full", "name"): "Test User",
+    ("display", "name"): "Test User",
+    ("url",): "https://example.com",
+    ("uri",): "https://example.com",
+    ("website",): "https://example.com",
+    ("website", "url"): "https://example.com",
+    ("callback", "url"): "https://example.com",
+    ("redirect", "url"): "https://example.com",
+    ("phone",): "+15555550100",
+    ("phone", "number"): "+15555550100",
+    ("telephone",): "+15555550100",
 }
 
 
@@ -78,11 +106,24 @@ def _generate_document(
             value, argument_adjustments = _placeholder(
                 schema,
                 argument.type,
+                input_name=argument.name,
                 active_input_types=frozenset(),
             )
             variables[argument.name] = value
             adjustments.extend(argument_adjustments)
 
+        if operation.kind is OperationKind.QUERY:
+            bound = _collection_bound(schema, field)
+            if bound is not None:
+                argument, value, bound_adjustments = bound
+                variables[argument.name] = value
+                adjustments.extend(bound_adjustments)
+        arguments = tuple(
+            sorted(
+                (argument for argument in field.arguments if argument.name in variables),
+                key=lambda argument: argument.name,
+            )
+        )
         selection = _response_selection(
             schema,
             field.type,
@@ -90,7 +131,7 @@ def _generate_document(
             max_depth=max_selection_depth,
             active_types=frozenset(),
         )
-        query_text = _render_query(field, required_arguments, selection, operation.kind)
+        query_text = _render_query(field, arguments, selection, operation.kind)
         parse(query_text)
     except QueryGenerationError:
         raise
@@ -118,11 +159,39 @@ def _is_required(argument: SchemaArgument | SchemaInputField) -> bool:
     return argument.type.outer_non_null and argument.default_value is None
 
 
+def _collection_bound(
+    schema: ParsedSchema, field: SchemaField
+) -> tuple[SchemaArgument, JsonValue, tuple[str, ...]] | None:
+    """Populate at most one Int quantity control; unsafe optional paths stay omitted."""
+    types = {item.name: item for item in schema.types}
+    if not collection_paths(field, types):
+        return None
+    arguments = {argument.name: argument for argument in field.arguments}
+    for path in iter_bounding_inputs(field, types):
+        argument_name, *children = path.split(".")
+        argument = arguments[argument_name]
+        try:
+            value, adjustments = _placeholder(
+                schema,
+                argument.type,
+                input_name=argument.name,
+                active_input_types=frozenset(),
+                bound_path=tuple(children),
+            )
+        except QueryGenerationError:
+            # Optional bounds must not break an otherwise generatable Query.
+            continue
+        return argument, value, adjustments
+    return None
+
+
 def _placeholder(
     schema: ParsedSchema,
     reference: TypeReference,
     *,
+    input_name: str,
     active_input_types: frozenset[str],
+    bound_path: tuple[str, ...] | None = None,
 ) -> tuple[JsonValue, tuple[str, ...]]:
     if reference.kind is TypeReferenceKind.NON_NULL:
         if reference.of_type is None:
@@ -130,19 +199,30 @@ def _placeholder(
         return _placeholder(
             schema,
             reference.of_type,
+            input_name=input_name,
             active_input_types=active_input_types,
+            bound_path=bound_path,
         )
     if reference.kind is TypeReferenceKind.LIST:
+        if bound_path is not None:
+            raise QueryGenerationError("Quantity bounds cannot traverse list inputs.")
         if reference.of_type is None:
             raise QueryGenerationError("List input type is missing its item type.")
         item, adjustments = _placeholder(
             schema,
             reference.of_type,
+            input_name=input_name,
             active_input_types=active_input_types,
         )
         return [item], adjustments
 
     type_name = reference.named_type
+    if bound_path == ():
+        if type_name != "Int":
+            raise QueryGenerationError("Generated quantity bounds require an Int input.")
+        return 1, ()
+    if type_name == "String":
+        return _STRING_PLACEHOLDERS.get(normalize_terms(input_name), "test"), ()
     if type_name in _BUILTIN_PLACEHOLDERS:
         return _BUILTIN_PLACEHOLDERS[type_name], ()
     named_type = schema.type_named(type_name)
@@ -164,12 +244,17 @@ def _placeholder(
         input_adjustments: list[str] = []
         next_active = active_input_types | {type_name}
         for input_field in sorted(named_type.input_fields, key=lambda item: item.name):
-            if not _is_required(input_field):
+            on_bound_path = (
+                bound_path is not None and len(bound_path) > 0 and input_field.name == bound_path[0]
+            )
+            if not _is_required(input_field) and not on_bound_path:
                 continue
             value, field_adjustments = _placeholder(
                 schema,
                 input_field.type,
+                input_name=input_field.name,
                 active_input_types=next_active,
+                bound_path=bound_path[1:] if on_bound_path and bound_path else None,
             )
             fields[input_field.name] = value
             input_adjustments.extend(field_adjustments)
