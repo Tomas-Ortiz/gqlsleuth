@@ -1,0 +1,33 @@
+scalar Upload
+scalar JSON
+scalar _Any
+interface Node { id: ID! }
+type User implements Node { id: ID! friends: [User!]! }
+type Token { token: String }
+type _Service { sdl: String }
+union _Entity = User
+input Attachment { file: Upload! }
+input RecursiveFilter { next: RecursiveFilter data: JSON }
+type Album { id: ID! }
+type AlbumsPage { data: [Album!]! }
+input PageQueryOptions { paginate: PaginateOptions }
+input PaginateOptions { page: Int limit: Int }
+type Query {
+  albums: AlbumsPage
+  albumsLimited(limit: Int): AlbumsPage
+  albumsPaginated(options: PageQueryOptions): AlbumsPage
+  node(id: ID!): Node
+  nodes(ids: [ID!]!): [Node]
+  user(id: ID!): User
+  users: [User!]!
+  search(filter: RecursiveFilter): [User]
+  bounded(first: Int): [User]
+  _service: _Service!
+  _entities(representations: [_Any!]!): [_Entity]!
+}
+type Mutation {
+  attach(input: Attachment!): User
+  updateSettings(data: JSON!): User
+  login(password: String!): Token @deprecated(reason: "Use signIn")
+}
+type Subscription { userChanged: User }

@@ -6,10 +6,12 @@ from gqlsleuth.application.operation_analysis import (
     OperationAnalysisScanResult,
     run_operation_analysis_scan,
 )
+from gqlsleuth.application.security_review import review_analyzed_schemas
 from gqlsleuth.domain.analysis import OperationKind
 from gqlsleuth.domain.exceptions import QueryGenerationError
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode
 from gqlsleuth.domain.query_generation import QueryGenerationResult
+from gqlsleuth.domain.security_review import GraphQLSecurityReviewResult
 from gqlsleuth.graphql.query_generation import DEFAULT_MAX_SELECTION_DEPTH, generate_query
 from gqlsleuth.infrastructure.http import HttpClientSettings
 
@@ -23,6 +25,7 @@ class QueryGenerationScanResult:
     operation_analysis: OperationAnalysisScanResult
     queries: tuple[QueryGenerationResult, ...]
     query_evidence: tuple[Evidence, ...]
+    security_review: GraphQLSecurityReviewResult | None = None
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:
@@ -48,6 +51,7 @@ def generate_analyzed_queries(
     max_selection_depth: int = DEFAULT_MAX_SELECTION_DEPTH,
 ) -> QueryGenerationScanResult:
     """Generate each analyzed Query while isolating per-operation failures."""
+    security_review = review_analyzed_schemas(operation_analysis)
     schemas = {
         result.endpoint: result.schema
         for result in operation_analysis.schema_scan.schemas
@@ -87,6 +91,7 @@ def generate_analyzed_queries(
         operation_analysis=operation_analysis,
         queries=tuple(results),
         query_evidence=tuple(evidence),
+        security_review=security_review,
     )
 
 

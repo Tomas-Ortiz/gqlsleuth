@@ -23,10 +23,16 @@ from gqlsleuth.domain.active import MutationDecision, MutationPreview
 from gqlsleuth.domain.differential import DIFFERENTIAL_NOTICE
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.query_generation import QueryGenerationResult
+from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
 from gqlsleuth.infrastructure.http import HttpResponse
 from gqlsleuth.presentation.differential import present_differential
 from gqlsleuth.presentation.priorities import priority_label, style_priority_terms
 from gqlsleuth.presentation.responses import present_response, present_response_body
+from gqlsleuth.presentation.security_review import (
+    candidate_facts,
+    candidate_label,
+    candidate_summary,
+)
 
 CONSOLE_THEME = Theme(
     {
@@ -207,6 +213,13 @@ def render_scan(
         endpoint_analysis = analyses.get(detected.candidate_url)
         if endpoint_analysis:
             _render_analysis(console, endpoint_analysis, verbose=verbose)
+        if generation.security_review is not None:
+            render_security_review(
+                console,
+                generation.security_review,
+                endpoint=detected.candidate_url,
+                verbose=verbose,
+            )
         queries = tuple(
             item for item in generation.queries if item.endpoint == detected.candidate_url
         )
@@ -632,3 +645,64 @@ def render_differential(
                 Text(f"{pair.context_a} <-> {pair.context_b}: {item.stage}: {item.reason}")
             )
     console.print("Zero differential Mutations executed. Comparison added zero HTTP requests.")
+    for context in result.contexts:
+        if context.scan and context.scan.query_generation.security_review is not None:
+            render_security_review(
+                console,
+                context.scan.query_generation.security_review,
+                context=context.name,
+                verbose=verbose,
+            )
+
+
+def render_security_review(
+    console: Console,
+    review: GraphQLSecurityReviewResult,
+    *,
+    endpoint: str | None = None,
+    context: str | None = None,
+    verbose: bool = False,
+) -> None:
+    candidates = tuple(
+        item for item in review.candidates if endpoint is None or item.endpoint == endpoint
+    )
+    limitations = tuple(
+        item for item in review.limitations if endpoint is None or item.endpoint == endpoint
+    )
+    # Missing-schema information is already prominent in compact scan output.
+    if not candidates and (not limitations or not review.analyzed_endpoints):
+        return
+    _section(console, "GraphQL Security Review")
+    if context:
+        console.print(Text("Context: " + context, style="gql.metadata"))
+    console.print(f"{len(candidates)} structural review candidate(s).")
+    console.print(SECURITY_REVIEW_NOTICE, markup=False, style="gql.secondary")
+    visible = candidates if verbose else candidates[:10]
+    table = _table("Type", "Subject", "Review")
+    for item in visible:
+        table.add_row(
+            candidate_label(item.candidate_type),
+            Text(item.subject),
+            Text(candidate_summary(item)),
+        )
+    if visible:
+        _render_table(console, table)
+    if len(candidates) > len(visible):
+        console.print("Additional structural candidates are available with --verbose or reports.")
+    if verbose:
+        for item in visible:
+            console.print()
+            console.print(Text(item.endpoint + " / " + item.subject, style="gql.metadata"))
+            console.print(item.deterministic_reason, markup=False)
+            if item.related_operation:
+                console.print(priority_label(item.related_operation.priority))
+                console.print(
+                    "Categories: "
+                    + ", ".join(category.value for category in item.related_operation.categories),
+                    markup=False,
+                )
+            for fact in candidate_facts(item):
+                console.print(fact, markup=False)
+            console.print("Manual review: " + item.review_guidance, markup=False)
+    for limitation in limitations[:3] if not verbose else limitations:
+        console.print(Text(limitation.endpoint + ": " + limitation.reason), style="gql.secondary")

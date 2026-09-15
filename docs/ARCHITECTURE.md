@@ -1896,6 +1896,91 @@ Implemented:
 No dependencies, AI differential interpretation, hierarchy inference, automatic authentication,
 BOLA/IDOR automation, variable substitution, business-data comparison, or Phase 16+ behavior added.
 
+### Phase 16 — Deterministic GraphQL Security Analysis
+
+Implemented as a local stage in `generate_analyzed_queries`, after retained Phase 6/7 data exists
+and before the unchanged generation loop. `QueryGenerationScanResult.security_review` composes
+a `GraphQLSecurityReviewResult` with immutable candidates, limitations, and analyzed endpoints.
+`application.security_review` coordinates retained schemas and schema-evidence references;
+`rules.security_review` and `rules.schema_graph` consume project-owned metadata only. Neither
+analysis module depends on HTTPX, Rich, Typer, Jinja2, or Ollama. No new Evidence or Finding type
+is created. Schema artifact IDs remain source references; related `OperationAnalysis` preserves
+its existing priority, categories, score, and matches without modification.
+
+Implemented candidates and conservative rules:
+
+- `FILE_UPLOAD_SURFACE`: exact custom scalar `Upload`; one Mutation candidate when reachable
+  directly or through input objects, otherwise one declaration-only candidate. String filenames
+  or upload terminology alone do not qualify; runtime support remains unverified.
+- `FEDERATION_SURFACE`: `_service` returning an object `_Service` with `sdl: String`, or a list
+  `_entities(representations: [_Any])` returning union `_Entity` with scalar `_Any`. Coherent
+  structures qualify, not arbitrary underscore names. No vendor inference or new probes.
+- `SUBSCRIPTION_SURFACE`: a retained Subscription root with exposed fields. No WebSockets or
+  subscription requests are introduced.
+- `OBJECT_LOOKUP_REVIEW`: top-level Query returns object/interface/union (possibly list-wrapped),
+  with an argument typed `ID` and normalized final identifier token `id` or `ids`. No substring
+  matching, guessed identifier scalar semantics, ID changes, ownership inference or exploitation.
+- `LIST_BOUNDING_REVIEW`: top-level Query returns a composite list directly or through one
+  high-signal wrapper level, with no obvious quantity control in its schema inputs. A wrapper
+  qualifies through an exact normalized direct list-field name (`data`, `items`, `nodes`, `edges`,
+  `results`, `records`, `entries`) OR a normalized type suffix (`Page`, `Connection`, `Collection`,
+  `Results`, `ResultSet`). List elements must be objects, interfaces or unions. There is no
+  arbitrary substring matching, deeper output traversal, scalar-list detection or generic
+  incidental-list rule (for example, `User.roles` alone does not qualify).
+  Quantity names are exactly normalized `first`, `last`, `limit`, `take`, `size`, `pageSize`,
+  `perPage`, and `maxResults`, including snake-case equivalents. Position/filter/sort names
+  (`page`, `offset`, `after`, `before`, `cursor`, `search`, `filter`, `sort`) alone do not qualify.
+  Inspect root arguments first, then input objects breadth-first at up to three levels, counting
+  the root argument's object as level one. Visit each type once at its shortest depth, with the
+  existing 512-type/4,096-relationship budgets. Optional/defaulted inputs count as exposed controls;
+  cycles terminate, and bounds beyond the depth limit are not inferred. One candidate per root
+  Query retains up to three collection paths/element types in sorted field order and the count of
+  additional qualifying fields. No candidate is created when an obvious bound is found.
+  Generated Queries omit optional arguments, so Phase 16 inspects schema arguments rather than
+  generated documents when determining whether an obvious bounding mechanism exists.
+  Pagination/bounding arguments are schema signals only; presence does not prove runtime
+  enforcement, and absence does not prove unlimited results. Runtime response sizes are never input.
+- `RECURSIVE_GRAPH_REVIEW`: Query-reachable output cycle containing a list-valued composite
+  edge. Object/interface fields and abstract possible-type relationships are represented. One
+  deterministic cycle witness per strongly connected component avoids equivalent-path noise.
+- `FLEXIBLE_SCALAR_INPUT_REVIEW`: exact `JSON`, `JSONObject`, `Any`, or `Map` used directly or
+  indirectly as Query/Mutation input. Other custom scalars and output-only uses do not qualify.
+- `COMPLEX_INPUT_REVIEW`: reachable recursive input-object relationships, or more than four
+  required input objects starting at a required root argument. Defaults/optional edges break
+  required chains; ordinary nesting alone does not qualify. One candidate per root operation.
+- `DEPRECATED_SECURITY_RELEVANT_OPERATION`: deprecated root Query/Mutation with existing
+  non-zero Phase 7 interest. Retains deprecation reason; no new score or priority.
+
+Each input/output graph admits at most 512 relevant types and inspects at most 4,096 relationships
+(including leaf fields). Truncation records a partial-analysis limitation. Graph construction and
+iterative strongly connected component passes avoid recursive Python traversal and exponential
+path enumeration. Breadth-first witnesses visit each type once; required-depth states are capped
+at five input objects. Scalar paths retain the first deterministic witness per scalar and operation.
+Candidate identity is type/endpoint/subject, ordered by enum declaration rank (the list above),
+then exact endpoint and subject. Sets never determine output ordering. No parsed schema produces
+an explicit unassessed result, not an empty-schema or absence-of-risk conclusion.
+
+SAFE/ACTIVE and named-context scans retain identical generation, request order/counts, validation,
+execution limits and classifications. Phase 15 compares the same original observations, without
+new pairwise candidate-set comparisons. AI allowlisting and single-context inference counts are
+unchanged; differential AI remains unsupported. Phase 16 adds zero HTTP requests and zero GraphQL
+operations. It does not generate payloads, test IDOR/BOLA, perform cost/depth/DoS attacks, upload
+files, execute subscriptions, or add federation/subgraph probes.
+
+Console adds **GraphQL Security Review** for observed candidates/partial analysis, bounded to ten
+rows by default, with supporting facts and manual guidance in verbose output. Canonical JSON adds
+`graphql_security_review` to each existing scan report (additive schema version 1). Human reports
+use shared projections, bounded supporting facts and collapsed HTML source references; named
+contexts retain their own review sections. Safety Notice remains final. Review candidates are
+not vulnerabilities; schema absence of a control is not proof of absent runtime enforcement.
+
+`tests/fixtures/phase16_schema.graphql` and the metadata-only command
+`uv run python tests/fixtures/phase16_smoke.py --output ./reports/phase16-smoke` demonstrate all
+nine types with no target requests, no executed operations, and JSON/Markdown/HTML output.
+Offline tests also compare complete SAFE/ACTIVE request sequences with local review omitted,
+verify immutable evidence/Phase 7/AI input, and retain all Phase 14/15 regression checks.
+No runtime dependencies or Phase 17+ functionality were added.
+
 ## 35. MVP definition
 
 The first meaningful MVP should be able to:
@@ -1925,12 +2010,12 @@ Potential future improvements include:
 - Persisted authentication context profiles (CLI-only named contexts are implemented in Phase 15).
 - Batch query analysis.
 - Alias abuse detection.
-- Query depth and complexity analysis.
+- Active query-depth/complexity checks (local structural review is implemented in Phase 16).
 - Rate-limit observation.
 - GraphQL subscription support.
-- File upload operation analysis.
+- Active file-upload checks (local schema indicators are implemented in Phase 16).
 - JWT inspection.
-- Federation support.
+- Active federation checks (local schema indicators are implemented in Phase 16).
 - Apollo-specific checks.
 - GraphQL over WebSocket.
 - Burp Suite integration.

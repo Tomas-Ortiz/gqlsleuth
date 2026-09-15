@@ -10,7 +10,7 @@ from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.presentation.differential import present_differential
 from gqlsleuth.reporting.builder import SAFETY_NOTICE, build_report
 from gqlsleuth.reporting.models import DifferentialReportContext, NamedContextReport
-from gqlsleuth.reporting.presentation import ReportEntry, ReportSection
+from gqlsleuth.reporting.presentation import ReportEntry, ReportSection, security_review_section
 
 
 def build_differential_report(
@@ -150,6 +150,10 @@ def differential_sections(report: DifferentialReportContext) -> tuple[ReportSect
                 else (),
             )
         )
+        if scan and scan.graphql_security_review is not None:
+            sections.append(
+                security_review_section(scan.graphql_security_review, context=context.name)
+            )
     for pair in report.pairs:
         entries = []
         for candidate in pair.candidates:

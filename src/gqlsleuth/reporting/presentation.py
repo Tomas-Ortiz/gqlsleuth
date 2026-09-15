@@ -5,7 +5,9 @@ from dataclasses import dataclass, fields
 
 from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult, AIStatement
 from gqlsleuth.domain.models import Evidence
+from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
 from gqlsleuth.presentation.responses import ResponsePresentation, present_response
+from gqlsleuth.presentation.security_review import candidate_facts, candidate_label
 from gqlsleuth.reporting.models import OperationReport, ReportContext
 
 
@@ -120,6 +122,11 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 for item in report.review_candidates
             ),
         ),
+        *(
+            [security_review_section(report.graphql_security_review)]
+            if report.graphql_security_review is not None
+            else []
+        ),
         ReportSection(
             "Generated Queries", entries=tuple(_artifact_entry(item) for item in report.queries)
         ),
@@ -210,6 +217,61 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
         )
     )
     return tuple(sections)
+
+
+def security_review_section(
+    review: GraphQLSecurityReviewResult,
+    *,
+    context: str | None = None,
+) -> ReportSection:
+    entries = tuple(
+        ReportEntry(
+            candidate_label(item.candidate_type) + ": " + item.subject,
+            details=(("Endpoint", item.endpoint),)
+            + (
+                (
+                    (
+                        "Review interest",
+                        item.related_operation.priority.value.replace("_", " ").upper(),
+                    ),
+                    (
+                        "Categories",
+                        ", ".join(value.value for value in item.related_operation.categories),
+                    ),
+                )
+                if item.related_operation
+                else ()
+            ),
+            paragraphs=(
+                item.deterministic_reason,
+                *candidate_facts(item),
+                "Manual review: " + item.review_guidance,
+            ),
+            evidence_references=(
+                ("Schema evidence", ", ".join(map(str, item.source_evidence_ids))),
+            )
+            if item.source_evidence_ids
+            else (),
+        )
+        for item in review.candidates
+    )
+    return ReportSection(
+        "GraphQL Security Review" + (f" — Context: {context}" if context else ""),
+        paragraphs=(SECURITY_REVIEW_NOTICE,)
+        + (
+            ()
+            if review.candidates
+            else (
+                "No structural candidates were identified in the inspected metadata. "
+                "This is not an absence-of-risk conclusion."
+                if review.analyzed_endpoints
+                else "Structural review was not performed: no parsed schema.",
+            )
+        )
+        + tuple(item.endpoint + ": " + item.reason for item in review.limitations),
+        rows=(("Structural review candidates", str(len(review.candidates))),),
+        entries=entries,
+    )
 
 
 def ai_section(result: AIInterpretationResult) -> ReportSection:

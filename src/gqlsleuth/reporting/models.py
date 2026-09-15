@@ -11,6 +11,7 @@ from gqlsleuth.domain.differential import ContextPairReview
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, ScanMode, Target
 from gqlsleuth.domain.query_generation import OperationGenerationResult
 from gqlsleuth.domain.schema import SchemaSummary
+from gqlsleuth.domain.security_review import GraphQLSecurityReviewResult
 from gqlsleuth.infrastructure.http import HttpResponse
 
 
@@ -96,6 +97,7 @@ class ReportContext:
     recommendations: tuple[str, ...]
     safety_notice: str
     ai_interpretation: AIInterpretationResult | None = None
+    graphql_security_review: GraphQLSecurityReviewResult | None = None
 
 
 @dataclass(frozen=True)

@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 15 — Named Authentication Contexts & Differential Authorization Review**. It provides the Phase 0
+The repository is currently at **Phase 16 — Deterministic GraphQL Security Analysis**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -29,6 +29,8 @@ Phase 14 exposes repeated target headers, user-supplied authentication, explicit
 and target TLS verification settings, isolated from local Ollama.
 Phase 15 runs the existing SAFE workflow independently for 2–3 named HTTP contexts, then compares
 their retained observations locally. Differences are manual-review candidates, not vulnerabilities.
+Phase 16 adds local structural security review of retained schema metadata, without additional
+requests, operations, or changes to generation/execution decisions.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
@@ -192,6 +194,85 @@ The execution summary distinguishes successful responses, GraphQL/application er
 failures, and operations skipped for safety or because of the 20-request limit. Generated
 placeholder values may be rejected by application-level validation; such responses are expected
 possible outcomes.
+
+## GraphQL structural security review
+
+**GraphQL Security Review** complements Phase 7 semantic interest ranking with deterministic
+schema analysis. It runs after schema/operation analysis and before existing Query generation,
+in SAFE and ACTIVE scans and independently within each Phase 15 named context. It needs no AI,
+adds **zero HTTP requests or GraphQL operations**, and preserves all existing Query/Mutation
+generation, safety, selection, limits, ordering, and execution classifications.
+
+The implemented review candidates are:
+
+| Candidate | Structural observation |
+| --- | --- |
+| `FILE_UPLOAD_SURFACE` | Exact `Upload` scalar declaration or reachable Mutation input. |
+| `FEDERATION_SURFACE` | Coherent `_service`/`_Service.sdl` or `_entities`/`_Any`/`_Entity` structures. |
+| `SUBSCRIPTION_SURFACE` | A Subscription root exposes fields. |
+| `OBJECT_LOOKUP_REVIEW` | Query returns composite objects and accepts an `ID` argument with an exact `id`/`ids` identifier token suffix. |
+| `LIST_BOUNDING_REVIEW` | Query exposes a composite list directly or through a one-level collection wrapper, without an obvious quantity control in schema inputs. |
+| `RECURSIVE_GRAPH_REVIEW` | Query-reachable output cycle includes a list-valued composite relationship. |
+| `FLEXIBLE_SCALAR_INPUT_REVIEW` | Root Query/Mutation input directly or indirectly reaches `JSON`, `JSONObject`, `Any`, or `Map`. |
+| `COMPLEX_INPUT_REVIEW` | Root input reaches a recursive input-object relationship or more than four consecutively required input objects. |
+| `DEPRECATED_SECURITY_RELEVANT_OPERATION` | Deprecated Query/Mutation already has non-zero Phase 7 interest. |
+
+These are **manual-review candidates, not vulnerability findings**. Absence of an obvious schema
+control does not prove absence of runtime enforcement. Pagination arguments do not prove correct
+limits either. No new priority or severity score is introduced; related Phase 7 interest remains
+unchanged. No IDs are varied, no upload/subscription/federation probes or depth/cost attacks are
+introduced, and no server vendor is inferred. Existing SAFE Query behavior remains unchanged.
+
+Bounding names use exact normalized identifiers: `first`, `last`, `limit`, `take`, `size`, `pageSize`,
+`perPage`, `maxResults` (including snake-case equivalents). Position-only names such as `page`,
+`offset`, `after`, `before`, and `cursor` do not qualify. Root arguments and nested input objects
+are inspected breadth-first, up to **three input-object levels** (the root argument's input object
+is level one), with cycle protection and the existing type/relationship budgets. For example,
+`options.paginate.limit` is a schema signal even when both inputs are optional.
+
+Generated Queries omit optional arguments, so Phase 16 inspects schema arguments rather than
+generated documents when determining whether an obvious bounding mechanism exists.
+Pagination/bounding arguments are schema signals only; their presence does not prove runtime
+enforcement. Returned item counts never influence this static rule.
+
+The list rule covers direct composite lists and one-level wrappers with a direct composite list
+field. Exact field hints are `data`, `items`, `nodes`, `edges`, `results`, `records`, and `entries`;
+alternatively, normalized type suffixes `Page`, `Connection`, `Collection`, `Results`, or `ResultSet`
+qualify. One strong hint suffices; arbitrary substrings and incidental lists such as `User.roles`
+do not. It never follows deeper output wrappers or flags scalar lists. Each root Query has at most
+one candidate, retaining up to three collection paths in stable field-name order, plus an omitted
+field count when necessary. Object Lookup candidates remain structural, with guidance contextualized
+to objects that are access-controlled; public reference-data names do not suppress detection.
+
+Arbitrary scalar inputs such as `DateTime`, `UUID`, `Email`, and `URL`
+are not flexible-input candidates. Ordinary finite object chains and singular-only cycles are
+not recursive-list candidates.
+
+Input and output graph traversal each has hard limits of **512 types and 4,096 inspected
+relationships**. Iterative cycle analysis emits one representative per strongly connected
+component; paths are cycle-safe and deterministic. Required input depth counts a required root
+argument plus required nested input objects; defaults break the required chain. Truncation or
+missing schema is retained as a limitation, never an absence-of-risk conclusion. Candidates are
+deduplicated by type, endpoint, and subject, ordered by the candidate types above, then endpoint
+and subject. Multiple paths to the same scalar/input cycle do not duplicate candidates.
+
+Console output is compact (up to ten candidates); verbose output includes supporting facts and
+manual guidance. JSON adds `graphql_security_review` with complete facts, related Phase 7
+metadata, limitations, and existing schema-evidence IDs. Markdown/HTML add the same review with
+bounded supporting paths, and keep Safety Notice last. Named-context reports present each
+context's review separately; Phase 15 pairwise comparisons do not compare Phase 16 candidate sets.
+AI input and the one-inference behavior are unchanged; no Phase 16 data is sent to Ollama.
+
+Run the test-only metadata fixture and generate all report formats locally:
+
+```bash
+uv run python tests/fixtures/phase16_smoke.py --output ./reports/phase16-smoke
+```
+
+This loads `tests/fixtures/phase16_schema.graphql` locally and verifies all nine candidate types.
+It includes page collections with no bound, a direct `limit`, and nested `options.paginate.limit`.
+Network/operation guards prevent target requests or execution; no credentials or public target
+are needed. Full SAFE/ACTIVE request equivalence is separately checked with offline transports.
 
 ## Reports
 
