@@ -30,6 +30,7 @@ class EvidenceType(StrEnum):
     QUERY_EXECUTION = "query_execution"
     MUTATION_EXECUTION = "mutation_execution"
     GRAPHQL_BEHAVIOR_PROBE = "graphql_behavior_probe"
+    NESTED_AUTHORIZATION_PROBE = "nested_authorization_probe"
     HTTP_ERROR = "http_error"
     PARSER_ERROR = "parser_error"
 

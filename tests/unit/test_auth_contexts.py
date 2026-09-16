@@ -102,4 +102,6 @@ def test_scan_help_exposes_context_syntax():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
     assert result.exit_code == 0
     assert "--auth-context" in result.output
-    assert "SAFE" in result.output and "privilege order" in " ".join(result.output.split())
+    output = " ".join(result.output.replace("│", " ").replace("|", " ").split())
+    assert "SAFE" in output and "privilege order" in output
+    assert "--nested-auth-review" in output

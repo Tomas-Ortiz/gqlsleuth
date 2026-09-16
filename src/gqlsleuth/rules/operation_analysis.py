@@ -37,6 +37,18 @@ def normalize_terms(value: str) -> tuple[str, ...]:
     return tuple(part.casefold() for part in separated.split() if part)
 
 
+def match_output_field(field: SchemaField, rules: RuleSet) -> tuple[RuleMatch, ...]:
+    """Apply the existing OUTPUT semantics to one terminal field, without rescoring a root."""
+    surfaces: list[_AnalysisSurface] = []
+    for location, value in (
+        (f"return_field.{field.name}", field.name),
+        (f"return_field_description.{field.name}", field.description),
+        (f"return_field_type.{field.type.named_type}", field.type.named_type),
+    ):
+        _add_surface(surfaces, RuleSurface.OUTPUT, location, value)
+    return tuple(match for rule in rules.rules if (match := _match_rule(rule, tuple(surfaces))))
+
+
 def analyze_schema_operations(
     endpoint: str,
     schema: ParsedSchema,

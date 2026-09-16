@@ -1,6 +1,6 @@
 """Run independent SAFE scans, then compare retained facts without issuing requests."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import combinations
 from uuid import UUID
 
@@ -24,6 +24,7 @@ from gqlsleuth.domain.differential import (
 )
 from gqlsleuth.domain.exceptions import GQLSleuthError, HttpConfigurationError
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode, Target
+from gqlsleuth.domain.nested_authorization import NestedAuthorizationResult
 from gqlsleuth.domain.schema import ParsedSchema
 from gqlsleuth.infrastructure.http import HttpClientSettings
 
@@ -40,12 +41,34 @@ class DifferentialScanResult:
     target: Target
     contexts: tuple[ContextScanResult, ...]
     pairs: tuple[ContextPairReview, ...]
+    nested_authorization_review: NestedAuthorizationResult | None = None
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:
-        return tuple(
+        previous = tuple(
             item for context in self.contexts if context.scan for item in context.scan.evidence
         )
+        return previous + (
+            self.nested_authorization_review.evidence if self.nested_authorization_review else ()
+        )
+
+
+def context_http_settings(
+    contexts: tuple[NamedAuthContext, ...], base: HttpClientSettings
+) -> tuple[HttpClientSettings, ...]:
+    """Independent validated settings shared by normal and opt-in nested context workflows."""
+    validate_context_names(tuple(context.name for context in contexts))
+    if base.custom_headers:
+        raise HttpConfigurationError("Common headers cannot be mixed with named contexts.")
+    try:
+        return tuple(
+            HttpClientSettings(
+                **base.model_dump(exclude={"custom_headers"}), custom_headers=context.headers
+            )
+            for context in contexts
+        )
+    except ValidationError:
+        raise HttpConfigurationError("Invalid named context HTTP settings.") from None
 
 
 def run_differential_scan(
@@ -54,6 +77,7 @@ def run_differential_scan(
     contexts: tuple[NamedAuthContext, ...],
     http_settings: HttpClientSettings | None = None,
     mode: ScanMode = ScanMode.SAFE,
+    nested_auth_review: bool = False,
 ) -> DifferentialScanResult:
     """Validate all configuration before scanning; never share clients or cookie jars."""
     target = Target.parse(target_url)
@@ -61,17 +85,7 @@ def run_differential_scan(
     base = http_settings or HttpClientSettings()
     if mode is not ScanMode.SAFE:
         raise HttpConfigurationError("Differential scans support SAFE mode only.")
-    if base.custom_headers:
-        raise HttpConfigurationError("Common headers cannot be mixed with named contexts.")
-    try:
-        settings = tuple(
-            HttpClientSettings(
-                **base.model_dump(exclude={"custom_headers"}), custom_headers=context.headers
-            )
-            for context in contexts
-        )
-    except ValidationError:
-        raise HttpConfigurationError("Invalid named context HTTP settings.") from None
+    settings = context_http_settings(contexts, base)
     results = []
     for context, configured in zip(contexts, settings, strict=True):
         try:
@@ -81,7 +95,17 @@ def run_differential_scan(
             results.append(ContextScanResult(context.name, None, type(error).__name__))
         else:
             results.append(ContextScanResult(context.name, scan))
-    return compare_context_scans(target, tuple(results))
+    result = compare_context_scans(target, tuple(results))
+    if nested_auth_review is True:
+        from gqlsleuth.application.nested_authorization import execute_nested_authorization
+
+        result = replace(
+            result,
+            nested_authorization_review=execute_nested_authorization(
+                result, contexts=contexts, enabled=True, http_settings=base
+            ),
+        )
+    return result
 
 
 def compare_context_scans(

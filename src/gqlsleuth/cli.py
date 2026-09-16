@@ -232,6 +232,15 @@ def scan(
             show_default=False,
         ),
     ] = True,
+    nested_auth_review: Annotated[
+        bool,
+        typer.Option(
+            "--nested-auth-review",
+            rich_help_panel="Authorization Differential Review",
+            help="Opt-in SAFE nested-path review across named contexts. Default: disabled.",
+            show_default=False,
+        ),
+    ] = False,
 ) -> None:
     """Discover and analyze GraphQL; safely execute validated Query operations."""
     report_formats = _parse_formats(formats)
@@ -239,6 +248,10 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        if nested_auth_review and auth_context is None:
+            raise GQLSleuthError(
+                "--nested-auth-review requires --auth-context (2–3 SAFE contexts)."
+            )
         contexts = (
             map_auth_context_inputs(auth_context, headers=headers, mode=mode, ai=ai)
             if auth_context is not None
@@ -258,17 +271,34 @@ def scan(
                 "WARNING: TLS certificate verification is disabled for target requests.",
                 style="gql.warning",
             )
-        result = (
-            run_differential_scan(target, contexts=contexts, http_settings=http_settings, mode=mode)
-            if contexts is not None
-            else run_safe_execution_scan(target, mode=mode, http_settings=http_settings)
-        )
+        result: DifferentialScanResult | SafeExecutionScanResult
+        if contexts is not None:
+            if nested_auth_review:
+                result = run_differential_scan(
+                    target,
+                    contexts=contexts,
+                    http_settings=http_settings,
+                    mode=mode,
+                    nested_auth_review=True,
+                )
+            else:
+                result = run_differential_scan(
+                    target, contexts=contexts, http_settings=http_settings, mode=mode
+                )
+        else:
+            result = run_safe_execution_scan(target, mode=mode, http_settings=http_settings)
     except GQLSleuthError as error:
         render_error(error_console, str(error))
         raise typer.Exit(code=2) from None
 
     if isinstance(result, DifferentialScanResult):
         render_differential(console, result, verbose=verbose)
+        if result.nested_authorization_review is not None:
+            from gqlsleuth.presentation.nested_authorization import render_nested_authorization
+
+            render_nested_authorization(
+                console, result.nested_authorization_review, verbose=verbose
+            )
         _finish_reports(result, report_formats, output)
         return
     render_scan(console, result, verbose=verbose)

@@ -10,6 +10,7 @@ from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.presentation.differential import present_differential
 from gqlsleuth.reporting.builder import SAFETY_NOTICE, build_report
 from gqlsleuth.reporting.models import DifferentialReportContext, NamedContextReport
+from gqlsleuth.reporting.nested_authorization import nested_authorization_section
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection, security_review_section
 
 
@@ -36,6 +37,7 @@ def build_differential_report(
         ),
         deepcopy(result.pairs),
         SAFETY_NOTICE,
+        deepcopy(result.nested_authorization_review),
     )
 
 
@@ -231,4 +233,6 @@ def differential_sections(report: DifferentialReportContext) -> tuple[ReportSect
             ReportSection("Safety Notice", paragraphs=(report.safety_notice,)),
         )
     )
+    if report.nested_authorization_review is not None:
+        sections.insert(-1, nested_authorization_section(report.nested_authorization_review))
     return tuple(sections)

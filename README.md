@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 18 — Controlled Query Depth Validation**. It provides the Phase 0
+The repository is currently at **Phase 19 — Nested Authorization Review**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -34,6 +34,66 @@ requests, operations, or changes to generation/execution decisions.
 Phase 17 adds separately selected ACTIVE Query-Shape checks. Phase 18 follows with a separately
 selected bounded Query-depth check, before the existing Mutation stage. SAFE scanning and
 Phase 16 remain unchanged.
+
+## Phase 19 — Nested Authorization Review
+
+This optional capability belongs to **SAFE named-context scanning**, independently of the ACTIVE
+Phase 17/18 workflow. Run the usual independent SAFE scans and Phase 15 comparison, then opt in
+to bounded nested-path requests with `--nested-auth-review`:
+
+```bash
+gqlsleuth scan https://example.com/graphql --auth-context "client=Authorization: Bearer TOKEN_A" --auth-context "support=Cookie: session=TOKEN_B" --nested-auth-review
+```
+
+The same one-line syntax works in PowerShell. The flag requires 2–3 named contexts, cannot be
+combined with ACTIVE, `--header`, or `--ai`, and works non-interactively without confirmation.
+Without the flag, existing Phase 15 requests, results and report fields are unchanged.
+
+Runtime eligibility requires an actually attempted SUCCESS baseline Query in every context,
+structurally equivalent baseline documents and exactly identical variables. No new baseline is
+sent. Existing Phase 7 OUTPUT rules identify scalar/enum terminal fields after at least one
+composite relationship, for example `project.owner.email`. Input-only rules remain input-only.
+Traversal is local, deterministic, breadth-first and cycle-safe; unsupported abstract resolution,
+required nested business inputs, incompatible schemas and unsafe paths produce limitations.
+
+At most **three candidate paths globally**, **selection depth five** (root through terminal field),
+and **one composite list edge in the entire Query** are allowed. Existing root selections,
+arguments, placeholders and variables are preserved. The shared bound helper may supply only a
+minimal optional quantity control of **1**. Unbounded new lists are skipped. One AST-built Query
+is validated against all retained schemas and sent unchanged to every context, sequentially,
+using fresh isolated clients/cookie jars and the existing Phase 14 transport policy. The hard
+maximum is **nine additional read-only requests** (three paths × three contexts), including
+transport failures, with no retries or fallback requests.
+
+Outcomes are RETURNED (a non-null terminal occurrence, including false/zero/empty string),
+EXPLICIT_DENIAL (HTTP 401/403 or an explicit GraphQL authorization error applicable to the path),
+INDETERMINATE (null, empty parent collection, generic errors or ambiguous partial data), and
+NETWORK_FAILURE. Only RETURNED ↔ EXPLICIT_DENIAL creates a runtime NESTED_ACCESS_DIFFERENCE.
+Compatible nested schema visibility differences are local-only review candidates. Missing schemas
+are limitations, never evidence of absent fields.
+
+Context names imply no privilege order. No IDs are substituted or enumerated, no ownership is
+inferred, and no business values or list sizes are compared. Differences may reflect intended
+policy and require manual validation; they do not establish BOLA, IDOR, or a vulnerability.
+No Mutations, Subscriptions, aliases, batching, ACTIVE probes or Ollama calls are added.
+
+Console and human reports show structural outcomes, categories and policy-review guidance;
+verbose output includes exact Queries/variables, never returned business bodies. Canonical JSON
+adds `nested_authorization_review` with per-context outcomes, source references and exact
+`NESTED_AUTHORIZATION_PROBE` evidence only for attempted requests. Authentication configuration
+is never stored in these result models. Reports remain potentially sensitive pentest artifacts,
+and Safety Notice remains the final Markdown/HTML section.
+
+Run the test-only loopback fixture with fake contexts:
+
+```bash
+uv run python tests/fixtures/phase19_target.py --smoke
+```
+
+Without `--smoke`, it prints a local URL; use `X-Test-Context: alpha`, `beta`, or `gamma` to exercise
+returned, denied and ambiguous observations. A `hidden` context provides reduced nested schema
+visibility. No public target or real credentials are needed. Object substitution and automated
+BOLA/IDOR validation remain outside this phase.
 
 ## Phase 18 — Controlled Query Depth Validation
 

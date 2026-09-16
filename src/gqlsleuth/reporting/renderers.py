@@ -77,8 +77,14 @@ def _json_value(value: object) -> JsonValue:
             field.name: _json_value(getattr(value, field.name))
             for field in fields(value)
             if not (
-                isinstance(value, ReportContext)
-                and field.name in {"ai_interpretation", "multiplicity", "query_depth"}
+                isinstance(value, (ReportContext, DifferentialReportContext))
+                and field.name
+                in {
+                    "ai_interpretation",
+                    "multiplicity",
+                    "query_depth",
+                    "nested_authorization_review",
+                }
                 and getattr(value, field.name) is None
             )
         }

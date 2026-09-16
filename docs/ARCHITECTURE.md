@@ -2132,7 +2132,83 @@ Phase 18 data is excluded from AI. Phase 9, Mutation controls and the Phase 17 t
 remain independent. `tests/fixtures/phase18_target.py --smoke` provides deterministic loopback
 accepted/rejected/indeterminate and unselected runs; MockTransport covers network failure and
 request isolation. No dependencies were added. General cost analysis, rate limits, uploads,
-subscriptions, federation and Phase 19+ functionality remain unimplemented.
+subscriptions and federation remain unimplemented. Phase 19's separate SAFE named-context
+workflow is described below.
+
+### Phase 19 — Nested Authorization Review
+
+Implemented as an explicit `--nested-auth-review` extension to the SAFE named-context workflow:
+independent Phase 15 scans → unchanged Phase 15 pair comparisons → optional nested review →
+differential reports. It does not follow Phase 18 at runtime. The flag requires 2–3 named contexts
+and preserves all existing pre-network rejection of ACTIVE, common headers and differential AI.
+No flag means the previous request sequence, comparisons, evidence and serialized fields remain
+unchanged. The flag itself opts in; no interactive prompts are added.
+
+`application/nested_authorization.py` consumes retained per-context SAFE results. Runtime paths
+require the root in every schema, attempted SUCCESS baselines everywhere, structurally equivalent
+generated documents and type-sensitive identical variables. It sends no new baseline. Candidate
+preparation and pairwise comparison perform zero HTTP. Missing schemas or unsuccessful/different
+baselines produce limitations; missing introspection never implies absent nested fields.
+
+`graphql/nested_authorization.py` performs deterministic breadth-first inspection of project-owned
+Phase 6 output types. A path must include a composite relationship before its terminal scalar/enum.
+The small `match_output_field` API reuses Phase 7's existing tokenizer, OUTPUT applicability,
+keyword matching and bundled rules without changing root scores/priorities or allowing input-only
+rules on output. Candidate ordering is root Phase 7 priority rank, strongest applicable output-rule
+weight, endpoint, root name and nested path. Traversal avoids revisiting a type within a path,
+stops at constructed depth five, and shares the 4,096-relationship work cap; skipped paths are
+recorded. Abstract type resolution is deliberately unsupported rather than guessed.
+
+`graphql/selection_paths.py` extracts the existing Phase 18 AST path extension and structural
+helpers without changing its six-level wrapper API or behavior. Phase 19 uses the same extension,
+Phase 9 Query validation and Phase 8 quantity-bound helper. One Query is constructed once from
+compatible retained data and validated against every context's retained native schema. Coerced
+inputs, including input defaults, must agree. Root arguments, exact variables, placeholders and
+existing selections/bounds remain intact; only the selected path is added. Required nested
+business inputs, deprecated/unsafe names, aliases, fragments, multiple roots and unbounded new
+lists are rejected. A new optional bound must be a minimal single input path ending at integer 1,
+without unrelated optional inputs. No IDs are learned or substituted.
+
+Hard bounds are `MAX_PHASE19_CANDIDATES=3` globally, `MAX_NESTED_AUTH_SELECTION_DEPTH=5`,
+`MAX_NESTED_AUTH_LIST_EDGES=1` across the complete document, and `MAX_PHASE19_REQUESTS=9`.
+Each candidate/context attempt is revalidated against locally rebuilt candidates, strict explicit
+enablement, SAFE source mode, context identity/count/order, exact document/variables and all
+structural bounds. Execution is candidate order then context input order. Every attempt uses a
+fresh HttpClient/session/cookie jar with independently validated context settings and unchanged
+Phase 14 timeout/TLS/proxy/redirect/header policy. Transport failures count and do not cancel later
+contexts. No retries, concurrency, fallback values, response-derived requests or new baseline.
+
+Immutable `domain/nested_authorization.py` models retain candidate paths, matched rules, source
+references, exact documents/variables, attempted state, per-context outcomes, pair reviews and
+limitations. RETURNED means a non-null terminal occurrence was reached, respecting JSON presence
+semantics rather than truthiness. Empty parent collections and null terminals are INDETERMINATE.
+EXPLICIT_DENIAL requires HTTP 401/403 or exact normalized authorization codes/phrases applicable
+to the tested path (numeric list indices are removed for structural matching). Unrelated error
+paths, generic errors and ambiguous partial data are INDETERMINATE. NETWORK_FAILURE preserves
+normalized transport state. Human reasons do not echo raw server messages.
+
+Local comparison uses outcome enums and source IDs only. RETURNED ↔ EXPLICIT_DENIAL produces
+NESTED_ACCESS_DIFFERENCE. Other outcome combinations never imply an authorization weakness.
+Compatible missing nested paths may produce NESTED_FIELD_VISIBILITY_DIFFERENCE without requests,
+linked to existing schema evidence. Contexts are symmetric opaque labels. No returned scalar
+values, IDs, list sizes, hashes or ownership assumptions enter comparison logic. All candidates
+require manual validation against intended policy and are not Findings.
+
+Only attempted requests produce SAFE `NESTED_AUTHORIZATION_PROBE` evidence with context label,
+root/path/rules/categories, timestamp, exact Query/variables, POST, response status/headers/bytes,
+duration, normalized transport error and outcome. No outgoing authentication headers, proxy
+credentials or settings objects are stored. The additive optional `nested_authorization_review`
+field on DifferentialScanResult and DifferentialReportContext follows schema version 1, omitted
+when disabled. JSON retains exact response evidence; console/Markdown/HTML present structural
+outcomes and never raw business responses from these probes. Safety Notice remains final once.
+
+The loopback-only `tests/fixtures/phase19_target.py` provides successful common baselines, returned,
+explicitly forbidden, null/empty-list and nested-visibility cases using fake headers. Its smoke
+compares opt-in and ordinary request sequences and validates all report formats. Offline tests
+cover transport failure, canaries, client/cookie isolation, redirect scope, candidate tampering,
+exact input preservation and prior-phase regressions. No dependencies, differential AI, Mutation
+execution, role hierarchy, ownership inference, object substitution, ID enumeration or Phase 20+
+functionality are introduced. Phases 16/17/18 and existing single-context AI remain independent.
 
 ## 35. MVP definition
 

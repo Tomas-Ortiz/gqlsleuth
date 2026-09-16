@@ -182,7 +182,8 @@ def test_scan_help_documents_defaults_without_duplicate_metadata():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
     assert result.exit_code == 0
     output = " ".join(result.stdout.replace("│", " ").replace("|", " ").split())
-    assert output.lower().count("default:") == 10
+    assert output.lower().count("default:") == 11
+    assert "--nested-auth-review" in output
     assert "[default:" not in output.lower()
     for text in (
         "Default: safe.",
