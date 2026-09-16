@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 17 — Controlled GraphQL Multiplicity Validation**. It provides the Phase 0
+The repository is currently at **Phase 18 — Controlled Query Depth Validation**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -31,8 +31,53 @@ Phase 15 runs the existing SAFE workflow independently for 2–3 named HTTP cont
 their retained observations locally. Differences are manual-review candidates, not vulnerabilities.
 Phase 16 adds local structural security review of retained schema metadata, without additional
 requests, operations, or changes to generation/execution decisions.
-Phase 17 adds separately selected ACTIVE Query-Shape checks before the existing Mutation stage.
-SAFE scanning and Phase 16 remain unchanged.
+Phase 17 adds separately selected ACTIVE Query-Shape checks. Phase 18 follows with a separately
+selected bounded Query-depth check, before the existing Mutation stage. SAFE scanning and
+Phase 16 remain unchanged.
+
+## Phase 18 — Controlled Query Depth Validation
+
+The ACTIVE workflow is: ordinary Phase 9 Queries → Phase 17 multiplicity checks → Phase 18
+bounded Query-depth check → Mutation interaction. Each active stage has its own explicit
+selection and default-NO confirmation. Enter selects none. SAFE, ACTIVE alone and
+non-interactive scans send zero depth probes. Named authentication contexts remain SAFE-only.
+
+At most one candidate per endpoint is constructed locally from a retained Phase 16 recursive
+witness and an already-attempted safe Query, preferring SUCCESS. A GRAPHQL_ERROR baseline may
+be used when structurally suitable; no new baseline request is sent. The AST transformation
+preserves the root arguments, exact variables, placeholders, anonymity and existing bounds. It
+traverses one retained cycle once, ending with `__typename`, and may reuse the Phase 8 optional
+quantity-bound helper to introduce only a minimal nested `limit=1` (or equivalent) path.
+Required nested business inputs, unsupported abstract paths, unsafe field names and new
+unbounded list expansion produce limitations instead of executable candidates.
+
+Hard limits: **one Phase 18 request per scan**, **constructed selection depth at most 6**, and
+**one composite list expansion in the complete document, including the root**. GQLSleuth counts
+field nodes from root through terminal leaf/`__typename`; this metric need not match a server's
+own depth calculation. No cycle repetition, progressive depth search, retries, concurrency,
+aliases, batching, cost-threshold discovery or DoS testing is performed.
+
+Select one displayed index, inspect the exact deeper Query and variables, and confirm separately.
+ACCEPTED means only that this concrete Query shape was processed. REJECTED requires an explicit
+depth/complexity/query-cost rule response. Generic errors are INDETERMINATE; transport failures
+remain NETWORK_FAILURE. Neither acceptance nor rejection establishes a vulnerability, missing
+controls, global protection or an exhaustion risk. No business values or timings are compared.
+
+Only attempted depth requests create `GRAPHQL_BEHAVIOR_PROBE` evidence, retaining source IDs,
+baseline/probe depths, path, exact Query/variables, response bytes and transport facts. Reports
+add **Controlled Query Depth Validation**, with bounded human response display and lossless JSON.
+Safety Notice remains last. Phase 18 adds nothing to AIContext and makes no Ollama call.
+
+Run the test-only loopback smoke (accepted, rejected, indeterminate and unselected scenarios):
+
+```bash
+uv run python tests/fixtures/phase18_target.py --smoke
+```
+
+Without `--smoke`, it prints a loopback URL for manual testing. Select no Phase 17 checks, select
+and confirm the depth candidate, then press Enter for no Mutations. No public target or real
+credentials are needed. General query-cost analysis and other future runtime checks remain out
+of scope.
 
 ## Phase 17 — Controlled GraphQL Multiplicity Validation
 
@@ -49,7 +94,7 @@ selection are preserved. If none qualifies, the stage records a limitation witho
 Explicitly select individual comma-separated indices (maximum two), inspect the selected requests,
 and provide one final confirmation, default NO. Enter selects none; non-interactive runs execute
 none. ACTIVE alone authorizes no probes. The existing Mutation selection and confirmation remain
-independent and follow this stage. At most one Alias request and one Batch request may be attempted
+independent and follow the separate Phase 18 depth stage. At most one Alias request and one Batch request may be attempted
 per scan; there are no retries, concurrency, threshold searches or configurable multiplicities.
 
 ACCEPTED, REJECTED and INDETERMINATE describe only this request shape and representative Query.
@@ -73,8 +118,8 @@ uv run python tests/fixtures/phase17_target.py --smoke
 ```
 
 Without `--smoke`, the test-only server prints a loopback URL for manual CLI testing. No real
-credentials or public services are needed. Depth/complexity, rate-limit, upload, subscription,
-federation, Mutation multiplicity and other Phase 18+ runtime checks are not implemented.
+credentials or public services are needed. General complexity, rate-limit, upload, subscription,
+federation and Mutation multiplicity runtime checks are not implemented.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST

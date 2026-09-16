@@ -10,6 +10,7 @@ from gqlsleuth.domain.analysis import OperationAnalysis
 from gqlsleuth.domain.differential import ContextPairReview
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, ScanMode, Target
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
+from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.query_generation import OperationGenerationResult
 from gqlsleuth.domain.schema import SchemaSummary
 from gqlsleuth.domain.security_review import GraphQLSecurityReviewResult
@@ -100,6 +101,7 @@ class ReportContext:
     ai_interpretation: AIInterpretationResult | None = None
     graphql_security_review: GraphQLSecurityReviewResult | None = None
     multiplicity: MultiplicityValidationResult | None = None
+    query_depth: QueryDepthValidationResult | None = None
 
 
 @dataclass(frozen=True)

@@ -6,8 +6,10 @@ from dataclasses import dataclass, fields
 from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult, AIStatement
 from gqlsleuth.domain.models import Evidence
 from gqlsleuth.domain.multiplicity import MULTIPLICITY_NOTICE
+from gqlsleuth.domain.query_depth import DEPTH_NOTICE
 from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
 from gqlsleuth.presentation.multiplicity import probe_guidance, probe_label, probe_response
+from gqlsleuth.presentation.query_depth import depth_response
 from gqlsleuth.presentation.responses import ResponsePresentation, present_response
 from gqlsleuth.presentation.security_review import candidate_facts, candidate_label
 from gqlsleuth.reporting.models import OperationReport, ReportContext
@@ -243,6 +245,50 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                         response=probe_response(item.evidence) if item.evidence else None,
                     )
                     for item in result.executions
+                ),
+            )
+        )
+    if report.query_depth is not None:
+        depth = report.query_depth
+        sections.append(
+            ReportSection(
+                "Controlled Query Depth Validation",
+                paragraphs=(DEPTH_NOTICE, *depth.limitations),
+                rows=(
+                    ("Available probes", str(len(depth.candidates))),
+                    ("Selected indices", ", ".join(map(str, depth.selected_indices)) or "None"),
+                    ("Confirmed", str(depth.confirmed)),
+                    ("Attempted requests", str(len(depth.evidence))),
+                ),
+                entries=tuple(
+                    ReportEntry(
+                        "Controlled Query Depth / query " + item.candidate.base.operation_name,
+                        details=(
+                            ("Endpoint", item.candidate.base.endpoint),
+                            ("Baseline depth", str(item.candidate.baseline_depth)),
+                            ("Baseline outcome", item.candidate.baseline_status.value.upper()),
+                            ("Probe depth", str(item.candidate.probe_depth)),
+                            ("Composite list edges", str(item.candidate.list_edges)),
+                            ("Recursive path", " -> ".join(item.candidate.recursive_path)),
+                            ("Decision", item.decision.value.upper()),
+                            (
+                                "Observation",
+                                item.evidence.observation.value.upper()
+                                if item.evidence
+                                else "Not executed",
+                            ),
+                        ),
+                        paragraphs=(item.reason,),
+                        request_blocks=(
+                            ("graphql", item.candidate.query),
+                            (
+                                "json",
+                                json.dumps(item.candidate.base.variables, indent=2, sort_keys=True),
+                            ),
+                        ),
+                        response=depth_response(item.evidence) if item.evidence else None,
+                    )
+                    for item in depth.executions
                 ),
             )
         )

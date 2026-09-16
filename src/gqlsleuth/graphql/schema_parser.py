@@ -50,11 +50,21 @@ BUILTIN_SCALAR_NAMES = frozenset({"Boolean", "Float", "ID", "Int", "String"})
 
 def parse_introspection_response(body: bytes) -> ParsedSchema:
     """Validate and map a complete GraphQL introspection HTTP response body."""
+    try:
+        return _map_schema(load_introspection_schema(body))
+    except (GraphQLError, KeyError, TypeError, ValueError) as error:
+        raise SchemaParsingError(
+            f"Invalid or incomplete introspection schema: {_short_error(error)}"
+        ) from error
+
+
+def load_introspection_schema(body: bytes) -> GraphQLSchema:
+    """Rebuild a validated graphql-core schema locally from retained introspection bytes."""
     data = _introspection_data(body)
     try:
         schema = build_client_schema(cast(IntrospectionQuery, data))
         assert_valid_schema(schema)
-        return _map_schema(schema)
+        return schema
     except (GraphQLError, KeyError, TypeError, ValueError) as error:
         raise SchemaParsingError(
             f"Invalid or incomplete introspection schema: {_short_error(error)}"

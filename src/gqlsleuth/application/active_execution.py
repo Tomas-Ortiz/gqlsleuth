@@ -18,6 +18,7 @@ from gqlsleuth.domain.exceptions import GQLSleuthError, HttpError, QueryGenerati
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.models import Evidence, ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
+from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.schema import ParsedSchema
 from gqlsleuth.graphql.active_execution import assess_mutation
 from gqlsleuth.graphql.query_generation import DEFAULT_MAX_SELECTION_DEPTH, generate_mutation
@@ -70,6 +71,7 @@ class ActiveExecutionScanResult:
     executions: tuple[MutationExecutionResult, ...]
     execution_evidence: tuple[MutationExecutionEvidence, ...]
     multiplicity: MultiplicityValidationResult | None = None
+    query_depth: QueryDepthValidationResult | None = None
 
     @property
     def safe_execution(self) -> SafeExecutionScanResult:
@@ -78,7 +80,8 @@ class ActiveExecutionScanResult:
     @property
     def evidence(self) -> tuple[Evidence, ...]:
         probes = self.multiplicity.evidence if self.multiplicity else ()
-        return self.preview.evidence + probes + self.execution_evidence
+        depth = self.query_depth.evidence if self.query_depth else ()
+        return self.preview.evidence + probes + depth + self.execution_evidence
 
 
 def prepare_active_mutations(

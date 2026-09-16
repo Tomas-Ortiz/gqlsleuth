@@ -23,6 +23,7 @@ from gqlsleuth.application.active_execution import (
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
 from gqlsleuth.application.multiplicity import execute_multiplicity, prepare_multiplicity
+from gqlsleuth.application.query_depth import execute_query_depth, prepare_query_depth
 from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
 from gqlsleuth.application.scan_configuration import map_auth_context_inputs, map_target_http_inputs
@@ -30,6 +31,7 @@ from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
+from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.infrastructure.http import HttpClientSettings
 from gqlsleuth.presentation.console import (
     CONSOLE_THEME,
@@ -45,6 +47,7 @@ from gqlsleuth.presentation.console import (
     render_state_warning,
 )
 from gqlsleuth.presentation.multiplicity import render_multiplicity, render_probe_previews
+from gqlsleuth.presentation.query_depth import render_depth_previews, render_query_depth
 from gqlsleuth.reporting.models import ReportFormat
 
 
@@ -126,7 +129,8 @@ def scan(
             help=(
                 "Scan mode: safe | active. Default: safe. "
                 "ACTIVE acknowledges active capabilities for an authorized "
-                "target; Query-Shape checks and Mutations each require separate explicit "
+                "target; Query-Shape checks, Query-Depth checks and Mutations "
+                "require separate explicit "
                 "selection and one final batch confirmation."
             ),
             case_sensitive=False,
@@ -273,8 +277,11 @@ def scan(
     report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result
     if mode is ScanMode.ACTIVE:
         multiplicity = _run_multiplicity_stage(result, http_settings=http_settings, verbose=verbose)
+        query_depth = _run_depth_stage(result, http_settings=http_settings, verbose=verbose)
         report_result = replace(
-            _run_active_stage(result, http_settings=http_settings), multiplicity=multiplicity
+            _run_active_stage(result, http_settings=http_settings),
+            multiplicity=multiplicity,
+            query_depth=query_depth,
         )
     ai_result = None
     if ai:
@@ -406,6 +413,65 @@ def _run_active_stage(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
     render_active_execution(console, result)
+    return result
+
+
+def _run_depth_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    http_settings: HttpClientSettings | None = None,
+    verbose: bool = False,
+) -> QueryDepthValidationResult:
+    preview = prepare_query_depth(safe)
+    render_depth_previews(
+        console, tuple(enumerate(preview.candidates, 1)), title="Active Query-Depth candidates"
+    )
+    selected: tuple[int, ...] = ()
+    confirmed = False
+    if not preview.candidates:
+        console.print("No eligible Query-Depth candidates.")
+    elif not _interactive_stdin():
+        console.print(
+            "Interactive selection and confirmation are required; zero Query-Depth checks execute."
+        )
+    else:
+        try:
+            while True:
+                value = typer.prompt(
+                    "Select active Query-Depth checks to execute (max 1, Enter for none)",
+                    default="",
+                    show_default=False,
+                ).strip()
+                if not value:
+                    selected = ()
+                    break
+                indices = {str(index): index for index in range(1, len(preview.candidates) + 1)}
+                tokens = tuple(token.strip().lstrip("0") or "0" for token in value.split(","))
+                if re.fullmatch(r"[0-9]+(?:\s*,\s*[0-9]+)*", value) is None or any(
+                    token not in indices for token in tokens
+                ):
+                    console.print("Choose an individual Query-Depth candidate index.")
+                    continue
+                selected = tuple(sorted({indices[token] for token in tokens}))
+                if len(selected) > 1:
+                    console.print("Select at most 1 Query-Depth check.")
+                    continue
+                render_depth_previews(
+                    console,
+                    tuple((index, preview.candidates[index - 1]) for index in selected),
+                    title="Selected Query-Depth check",
+                )
+                confirmed = typer.confirm(
+                    "Execute this selected active Query-Depth check?", default=False
+                )
+                break
+        except (typer.Abort, EOFError, KeyboardInterrupt):
+            selected, confirmed = (), False
+            console.print("Query-Depth selection/confirmation cancelled.")
+    result = execute_query_depth(
+        preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
+    )
+    render_query_depth(console, result, verbose=verbose)
     return result
 
 

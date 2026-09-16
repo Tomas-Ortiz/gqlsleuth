@@ -113,7 +113,7 @@ def _generate_document(
             adjustments.extend(argument_adjustments)
 
         if operation.kind is OperationKind.QUERY:
-            bound = _collection_bound(schema, field)
+            bound = generate_collection_bound(schema, field)
             if bound is not None:
                 argument, value, bound_adjustments = bound
                 variables[argument.name] = value
@@ -159,7 +159,7 @@ def _is_required(argument: SchemaArgument | SchemaInputField) -> bool:
     return argument.type.outer_non_null and argument.default_value is None
 
 
-def _collection_bound(
+def generate_collection_bound(
     schema: ParsedSchema, field: SchemaField
 ) -> tuple[SchemaArgument, JsonValue, tuple[str, ...]] | None:
     """Populate at most one Int quantity control; unsafe optional paths stay omitted."""

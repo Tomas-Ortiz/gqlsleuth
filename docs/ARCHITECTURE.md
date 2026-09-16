@@ -2062,8 +2062,77 @@ accepted/rejected/ambiguous handlers with offline MockTransport tests. Its `--sm
 real local HTTP and CLI confirmation with exactly two probes per run and no Mutations. No public
 target is required for testing or CI, and no runtime dependency was added.
 
-Future phases may address active depth/complexity validation, rate limiting, subscriptions,
-uploads or federation runtime behavior. Phase 17 implements none of those capabilities.
+Phase 18 adds the separate bounded depth check below. General cost/complexity analysis, rate
+limiting, subscriptions, uploads and federation runtime behavior remain future possibilities.
+
+### Phase 18 — Controlled Query Depth Validation
+
+Implemented as an independent ACTIVE stage: Phase 9 → Phase 17 → Phase 18 → Phase 10 Mutation
+interaction. Each active stage has separate selections, default-NO confirmations, results and
+budgets. SAFE, unselected, declined and non-interactive scans issue no Phase 18 requests. Named
+contexts remain SAFE-only. No public target is needed for development or acceptance.
+
+`application/query_depth.py` composes a retained safe scan with immutable previews. Preparation
+is local: recover the same typed cycle witnesses using the existing Phase 16 `schema_graph`
+helpers, requiring a matching retained RECURSIVE_GRAPH_REVIEW subject and cycle fact. No second
+recursion detector is introduced and Phase 16 candidate semantics remain unchanged. Per endpoint,
+choose at most one attempted representative in retained Query order, preferring SUCCESS, with a
+structurally valid GRAPHQL_ERROR attempt as a conservative fallback. Unsupported schemas, missing
+retained introspection, missing attempts and unsafe paths become structured limitations.
+
+`graphql/query_depth.py` parses and validates the baseline, rotates one retained cycle to its
+closest reachable entry, and extends only that path using graphql-core AST nodes. It keeps the
+original root, arguments, variables, semantic placeholders and collection bounds intact, and
+ends with `__typename`. The validated native schema is rebuilt locally from already-retained
+introspection via the shared Phase 6 loader; no native objects enter domain models or reports.
+Phase 8's existing bound-generation helper is exposed for reuse without changing its algorithm.
+New optional bounds must be a minimal input-object path ending in integer 1, without unrelated
+inputs or adjustment notes. Existing bound values are never changed. Required nested business
+arguments, deprecated/unsafe field names, unsupported abstract edges and new unbounded composite
+lists decline generation. No HTTP occurs during preparation.
+
+Internal constants are `MAX_PHASE18_REQUESTS=1`, `MAX_LIST_EDGES=1`, and
+`MAX_CONSTRUCTED_SELECTION_DEPTH=6`. Selection depth counts every root-to-leaf field node,
+including the terminal scalar/`__typename`. This is GQLSleuth's metric, not a claim about a server
+framework's depth metric. The list budget conservatively counts the entire constructed document,
+including a list root, and distinguishes nested list wrappers from non-null wrappers. One cycle
+is traversed once: no repeated fan-out, added collection branches, progressive-depth search,
+threshold discovery, retries, batching, aliases or concurrency. No additional baseline is sent.
+
+Before any request, the application rebuilds candidates and independently verifies ACTIVE mode,
+explicit valid indices, `confirmed is True`, exact candidate/source/variables/path identity and
+all AST bounds. Duplicate indices are deduplicated. Selections execute in retained order, and
+only one attempted request (including transport failures) consumes the separate global Phase 18
+budget; remaining eligible selections are SKIPPED_LIMIT. The existing synchronous HttpClient
+retains target headers, timeouts, proxy/TLS, trust_env=False, redirect protection and response
+limits. No HTTP or Mutation execution logic changes are introduced.
+
+`domain/query_depth.py` contains preview, decision, observation, execution and aggregate models.
+Decisions distinguish NOT_SELECTED, DECLINED, MODE_DISABLED, INVALID_ARTIFACT, SKIPPED_LIMIT and
+EXECUTED. ACCEPTED requires successful GraphQL-shaped data containing the expected root key.
+REJECTED requires explicit normalized depth/complexity/query-cost rule language and no partial
+data. Generic validation/business/HTTP errors and malformed responses are INDETERMINATE;
+normalized transport failures are NETWORK_FAILURE. Neither observation establishes a target-wide
+policy, vulnerability, absence of controls or resource-exhaustion risk. No response business
+values, durations or thresholds are compared.
+
+Only attempts produce typed GRAPHQL_BEHAVIOR_PROBE evidence with probe type
+`controlled_query_depth`: ACTIVE mode, source evidence IDs, representative operation, baseline
+outcome/depth, constructed depth/path/list count, exact Query/variables, POST, timestamp,
+response status/headers/bytes/duration, normalized error and observation.
+`ActiveExecutionScanResult.query_depth` composes this result; all previous evidence is preserved
+in workflow order. JSON schema version 1 gains an optional `query_depth` field (omitted when
+absent), preserving exact bytes through the existing serializer. Markdown/HTML add Controlled
+Query Depth Validation and reuse bounded human response rendering only for attempts. Safety
+Notice is still the final section exactly once. Console previews use neutral headings and cyan
+references; verbose results include bounded responses. No Findings are created.
+
+AIContext, prompt, schema, allowlist, transport and the single optional inference remain untouched.
+Phase 18 data is excluded from AI. Phase 9, Mutation controls and the Phase 17 two-request budget
+remain independent. `tests/fixtures/phase18_target.py --smoke` provides deterministic loopback
+accepted/rejected/indeterminate and unselected runs; MockTransport covers network failure and
+request isolation. No dependencies were added. General cost analysis, rate limits, uploads,
+subscriptions, federation and Phase 19+ functionality remain unimplemented.
 
 ## 35. MVP definition
 
@@ -2094,7 +2163,7 @@ Potential future improvements include:
 - Persisted authentication context profiles (CLI-only named contexts are implemented in Phase 15).
 - Batch query analysis.
 - Alias abuse detection.
-- Active query-depth/complexity checks (local structural review is implemented in Phase 16).
+- General query-cost/complexity analysis beyond the single bounded Phase 18 depth probe.
 - Rate-limit observation.
 - GraphQL subscription support.
 - Active file-upload checks (local schema indicators are implemented in Phase 16).

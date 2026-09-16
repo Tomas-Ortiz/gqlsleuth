@@ -145,6 +145,7 @@ def build_report(
         ai_interpretation=ai_interpretation,
         graphql_security_review=safe.query_generation.security_review,
         multiplicity=result.multiplicity if isinstance(result, ActiveExecutionScanResult) else None,
+        query_depth=result.query_depth if isinstance(result, ActiveExecutionScanResult) else None,
     )
     return deepcopy(replace(context, recommendations=_recommendations(context)))
 
