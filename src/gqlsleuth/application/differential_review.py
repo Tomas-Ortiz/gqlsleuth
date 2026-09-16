@@ -25,6 +25,7 @@ from gqlsleuth.domain.differential import (
 from gqlsleuth.domain.exceptions import GQLSleuthError, HttpConfigurationError
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode, Target
 from gqlsleuth.domain.nested_authorization import NestedAuthorizationResult
+from gqlsleuth.domain.object_authorization import ObjectAuthorizationResult
 from gqlsleuth.domain.schema import ParsedSchema
 from gqlsleuth.infrastructure.http import HttpClientSettings
 
@@ -42,14 +43,25 @@ class DifferentialScanResult:
     contexts: tuple[ContextScanResult, ...]
     pairs: tuple[ContextPairReview, ...]
     nested_authorization_review: NestedAuthorizationResult | None = None
+    object_authorization_review: ObjectAuthorizationResult | None = None
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:
         previous = tuple(
             item for context in self.contexts if context.scan for item in context.scan.evidence
         )
-        return previous + (
-            self.nested_authorization_review.evidence if self.nested_authorization_review else ()
+        return (
+            previous
+            + (
+                self.nested_authorization_review.evidence
+                if self.nested_authorization_review
+                else ()
+            )
+            + (
+                self.object_authorization_review.evidence
+                if self.object_authorization_review
+                else ()
+            )
         )
 
 

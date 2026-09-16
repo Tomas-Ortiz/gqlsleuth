@@ -67,6 +67,7 @@ def map_auth_context_inputs(
     headers: list[str] | None = None,
     mode: ScanMode = ScanMode.SAFE,
     ai: bool = False,
+    object_review: bool = False,
 ) -> tuple[NamedAuthContext, ...]:
     """Accumulate first-seen labels, reusing Phase 14 header syntax and validation."""
     if headers:
@@ -84,7 +85,8 @@ def map_auth_context_inputs(
         grouped.setdefault(name, [])
         if separator:
             grouped[name].append(header)
-    validate_context_names(tuple(grouped))
+    single_bare = object_review is True and len(grouped) == 1 and not next(iter(grouped.values()))
+    validate_context_names(tuple(grouped), check_count=not single_bare)
     return tuple(
         NamedAuthContext(name, map_target_http_inputs(headers=values).custom_headers)
         for name, values in grouped.items()

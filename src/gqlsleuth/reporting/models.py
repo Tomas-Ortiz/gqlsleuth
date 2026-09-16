@@ -11,6 +11,7 @@ from gqlsleuth.domain.differential import ContextPairReview
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, ScanMode, Target
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
 from gqlsleuth.domain.nested_authorization import NestedAuthorizationResult
+from gqlsleuth.domain.object_authorization import ObjectAuthorizationResult
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.query_generation import OperationGenerationResult
 from gqlsleuth.domain.schema import SchemaSummary
@@ -103,6 +104,7 @@ class ReportContext:
     graphql_security_review: GraphQLSecurityReviewResult | None = None
     multiplicity: MultiplicityValidationResult | None = None
     query_depth: QueryDepthValidationResult | None = None
+    object_authorization_review: ObjectAuthorizationResult | None = None
 
 
 @dataclass(frozen=True)
@@ -123,3 +125,4 @@ class DifferentialReportContext:
     pairs: tuple[ContextPairReview, ...]
     safety_notice: str
     nested_authorization_review: NestedAuthorizationResult | None = None
+    object_authorization_review: ObjectAuthorizationResult | None = None

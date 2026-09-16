@@ -2210,6 +2210,100 @@ exact input preservation and prior-phase regressions. No dependencies, different
 execution, role hierarchy, ownership inference, object substitution, ID enumeration or Phase 20+
 functionality are introduced. Phases 16/17/18 and existing single-context AI remain independent.
 
+### Phase 20 ? Controlled Object Authorization Validation
+
+Implemented as a separate opt-in SAFE stage, never as a Phase 17/18 ACTIVE probe:
+
+- Single SAFE scan ? Phase 16 local analysis ? optional object review ? optional existing AI ? reports.
+- Named SAFE scans ? Phase 15 comparison ? optional Phase 19 ? optional object review ? reports.
+
+`--object-auth-review` requires repeated `--object-auth-case` values. Anonymous-only syntax is
+`OPERATION:ARGUMENT=VALUE`, with no named contexts or common headers. Exactly one bare context is
+also accepted only through the Phase 20 entry point; ordinary Phase 15 cardinality remains 2?3.
+Differential syntax requires `DECLARED_CONTEXT:OPERATION:ARGUMENT=VALUE` for 2?3 named contexts.
+That label is an operator declaration of expected legitimate access, not discovered ownership.
+Context names are opaque; only a safe `has_supplied_context_headers` Boolean describes supplied
+material. Bare labels never imply server policy, and no anonymous context is added automatically.
+
+Examples (only authorized targets and exact known IDs):
+
+```bash
+gqlsleuth scan https://example.com/graphql --object-auth-review --object-auth-case "order:id=123"
+gqlsleuth scan https://example.com/graphql --auth-context public --object-auth-review --object-auth-case "order:id=123"
+gqlsleuth scan https://example.com/graphql --auth-context "clienteA=Authorization: Bearer TOKEN_A" --auth-context "clienteB=Cookie: session=TOKEN_B" --auth-context public --object-auth-review --object-auth-case "clienteA:order:id=123"
+```
+
+`domain/object_authorization.py` owns frozen cases/probes/executions/candidates, outcome enums and
+hard limits: `MAX_PHASE20_CASES=3`, `MAX_PHASE20_CONTEXTS=3`, `MAX_PHASE20_REQUESTS=9`. Anonymous-only
+maximum is three requests. Parsing partitions on the first `=` before splitting the left side;
+values remain textual, non-empty, at most 256 UTF-8 bytes, without unsafe controls. Exact duplicates
+are deduplicated in first-seen order. Invalid input errors identify the argument index without
+echoing IDs. CLI and application independently validate operating forms and limits before HTTP.
+ACTIVE, common headers and missing flag/case combinations are rejected. Existing named-context AI
+restrictions remain. Single anonymous SAFE AI remains unchanged and excludes all Phase 20 data.
+
+`application/object_authorization.py` composes existing SAFE/DifferentialScanResult instances with
+an optional `object_authorization_review`; it does not implement another scanner. Preparation is
+local and requires a retained OBJECT_LOOKUP_REVIEW source, the exact Query root/argument, direct
+ID or ID! input, one concrete non-list object, and direct scalar id:ID/ID! output. Nested ID inputs,
+ID lists, abstract output resolution, unsafe Query names and alternate identity fields are skipped.
+Missing/incompatible schemas and ambiguous endpoints produce structured limitations. An artifact
+at the exact normalized target URL is preferred; otherwise one unambiguous artifact is required.
+No Phase 9 placeholder SUCCESS is required; unsuccessful/null synthetic IDs are not evidence about
+operator-supplied objects. Phase 16 detection, rankings and zero-request semantics are unchanged.
+
+`graphql/object_authorization.py` builds the Query once using graphql-core AST nodes. It resolves
+the selected root argument's actual variable name and changes only that value. Shared variable
+uses are rejected to avoid changing unrelated inputs. Literal/omitted optional IDs receive one
+deterministic collision-free variable with the schema ID type. Existing inputs, bounds, selections
+and directives remain; only a missing direct id selection may be appended. Conditional identity
+fields are unsupported. Final documents must validate locally against every participating schema,
+including compatible effective coerced inputs, with exactly one anonymous Query/root, no aliases,
+fragments, unexpected definitions or unsafe fields. No operationName is sent.
+
+Anonymous-only execution makes one POST per eligible case. Differential execution first attempts
+the operator-declared context; only TARGET_RETURNED permits remaining contexts in their original
+order. The exact same Query and variables are reused. Owner denial/ambiguity/transport failure
+records skipped outcomes and a limitation, never an ownership claim. Later non-owner failures do
+not prevent remaining contexts. Every attempt rebuilds/compares the canonical probe, rechecks
+SAFE inputs, explicit enablement, exact variables/case identity and the independent hard budget.
+Clients/cookie jars are fresh per request, with immutable independent Phase 14 settings, existing
+TLS/proxy/timeouts/trust_env=False and same-/cross-origin header protections. No retries or fallbacks.
+
+TARGET_RETURNED requires a GraphQL data object with the tested root object and direct id matching
+the supplied text. Only strings and integers (decimal text) qualify; Boolean, float, null, missing
+or mismatched IDs are indeterminate. No whitespace, leading-zero, case or Unicode normalization.
+The unchanged Phase 19 exact code/phrase/path denial helper is extracted into
+`graphql/authorization_response.py`. HTTP 401/403 or unambiguous applicable authorization errors
+produce EXPLICIT_DENIAL; generic errors, 404, malformed responses and ambiguous partial data remain
+INDETERMINATE. Normalized transport errors are NETWORK_FAILURE. No unrelated business values,
+list lengths, response sizes/hashes, roles or ownership claims enter classification.
+
+Only confirmed matching access creates UNAUTHENTICATED_OBJECT_ACCESS for a context without supplied
+headers, or CROSS_CONTEXT_OBJECT_ACCESS for an additional header-bearing context after the declared
+context returns the object. Supplied material does not prove authentication. Candidates require
+manual validation against intended policy; they are not Findings, BOLA/IDOR or vulnerability proof.
+Denial does not establish global protection. The sole business-value comparison is returned root ID
+against the exact operator input. Cases are never derived from responses, Phase 9/19 evidence or
+other cases: no ID discovery, harvesting, enumeration, increment/decrement, randomization, UUID
+mutation, automatic swapping, nested ID substitution, tenant/role/ownership inference or threshold
+search. No Mutation, Subscription, alias, batching, concurrency, AI extension or Phase 21+ behavior.
+
+Actual attempts alone create SAFE OBJECT_AUTHORIZATION_PROBE evidence with context labels, safe
+supplied-material metadata, operator declarations, exact ID/Query/variables, source IDs, timestamp,
+POST, response status/headers/bytes/duration, normalized error and identity/outcome state. Outgoing
+authentication settings are not stored. Raw target responses remain potentially sensitive canonical
+evidence. Optional report fields are omitted when disabled, preserving existing JSON semantics.
+Human reports add Controlled Object Authorization Validation after nested review when present,
+without dumping business response bodies. Safety Notice remains final exactly once. AIContext,
+prompts, model calls and transport are untouched.
+
+`tests/fixtures/phase20_target.py --smoke` provides anonymous returns/denials, shared exact objects,
+enforced policy, owner-null short circuit, mismatched IDs and unrelated varying business data on
+loopback only. Offline tests cover parsing, AST identity, compatibility, tampering, isolation,
+redirects, lossless evidence, report privacy and separate Phase 19/20 request budgets. No dependency
+is added. The default-off path retains previous scanner, request, evidence and presentation behavior.
+
 ## 35. MVP definition
 
 The first meaningful MVP should be able to:

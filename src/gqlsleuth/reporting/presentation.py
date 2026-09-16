@@ -292,6 +292,10 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 ),
             )
         )
+    if report.object_authorization_review is not None:
+        from gqlsleuth.reporting.object_authorization import object_authorization_section
+
+        sections.append(object_authorization_section(report.object_authorization_review))
     if report.ai_interpretation is not None:
         sections.append(ai_section(report.ai_interpretation))
     sections.append(

@@ -9,6 +9,7 @@ from gqlsleuth.application.query_generation import (
 from gqlsleuth.domain.exceptions import HttpError, SafeExecutionValidationError
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode
+from gqlsleuth.domain.object_authorization import ObjectAuthorizationResult
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.graphql.safe_execution import (
     classify_execution_response,
@@ -49,11 +50,20 @@ class SafeExecutionScanResult:
     query_generation: QueryGenerationScanResult
     executions: tuple[QueryExecutionResult, ...]
     execution_evidence: tuple[Evidence, ...]
+    object_authorization_review: ObjectAuthorizationResult | None = None
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:
         """Return Phase 3 through Phase 9 evidence in production order."""
-        return self.query_generation.evidence + self.execution_evidence
+        return (
+            self.query_generation.evidence
+            + self.execution_evidence
+            + (
+                self.object_authorization_review.evidence
+                if self.object_authorization_review
+                else ()
+            )
+        )
 
 
 def run_safe_execution_scan(

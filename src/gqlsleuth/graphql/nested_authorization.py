@@ -25,13 +25,14 @@ from gqlsleuth.domain.nested_authorization import (
 )
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.domain.schema import ParsedSchema, SchemaField, SchemaTypeKind
+from gqlsleuth.graphql.authorization_response import explicit_authorization_error
 from gqlsleuth.graphql.selection_paths import (
     composite_list_edges,
     extend_selection_path,
     schema_field,
     selection_depth,
 )
-from gqlsleuth.rules.operation_analysis import match_output_field, normalize_terms
+from gqlsleuth.rules.operation_analysis import match_output_field
 from gqlsleuth.rules.schema_graph import MAX_GRAPH_RELATIONSHIPS, TypeEdge
 
 
@@ -161,43 +162,6 @@ def build_nested_query(
     return query, depth, lists
 
 
-_DENIAL_CODES = {("unauthenticated",), ("unauthorized",), ("forbidden",), ("access", "denied")}
-_DENIAL_PHRASES = {
-    ("unauthenticated",),
-    ("unauthorized",),
-    ("forbidden",),
-    ("access", "denied"),
-    ("permission", "denied"),
-    ("not", "authorized"),
-    ("authentication", "required"),
-}
-
-
-def _explicit_error(error: object, path: tuple[str, ...]) -> bool:
-    if not isinstance(error, dict):
-        return False
-    runtime = error.get("path")
-    if runtime is not None:
-        if (
-            not isinstance(runtime, list)
-            or not runtime
-            or any(
-                not isinstance(part, str) and (type(part) is not int or part < 0)
-                for part in runtime
-            )
-        ):
-            return False
-        normalized = tuple(part for part in runtime if isinstance(part, str))
-        if not normalized or path[: len(normalized)] != normalized:
-            return False
-    extensions = error.get("extensions")
-    code = extensions.get("code") if isinstance(extensions, dict) else None
-    if isinstance(code, str) and normalize_terms(code) in _DENIAL_CODES:
-        return True
-    message = error.get("message")
-    return isinstance(message, str) and normalize_terms(message) in _DENIAL_PHRASES
-
-
 def _terminal_present(data: object, path: tuple[str, ...]) -> bool:
     pending = [(data, 0)]
     while pending:
@@ -234,7 +198,7 @@ def classify_nested_response(
         if (
             not returned
             and isinstance(errors, list)
-            and all(_explicit_error(error, path) for error in errors)
+            and all(explicit_authorization_error(error, path) for error in errors)
         ):
             return (
                 NestedOutcome.EXPLICIT_DENIAL,

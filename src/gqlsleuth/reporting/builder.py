@@ -144,6 +144,7 @@ def build_report(
         safety_notice=SAFETY_NOTICE,
         ai_interpretation=ai_interpretation,
         graphql_security_review=safe.query_generation.security_review,
+        object_authorization_review=safe.object_authorization_review,
         multiplicity=result.multiplicity if isinstance(result, ActiveExecutionScanResult) else None,
         query_depth=result.query_depth if isinstance(result, ActiveExecutionScanResult) else None,
     )

@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 19 — Nested Authorization Review**. It provides the Phase 0
+The repository is currently at **Phase 20 — Controlled Object Authorization Validation**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -34,6 +34,94 @@ requests, operations, or changes to generation/execution decisions.
 Phase 17 adds separately selected ACTIVE Query-Shape checks. Phase 18 follows with a separately
 selected bounded Query-depth check, before the existing Mutation stage. SAFE scanning and
 Phase 16 remain unchanged.
+
+## Phase 20 — Controlled Object Authorization Validation
+
+Use this opt-in **SAFE** stage only for authorized testing of exact, known identifiers you supply.
+It runs after normal SAFE scanning and local Phase 16 analysis; in named-context scans it follows
+Phase 15 comparison and any optional Phase 19 nested review. It is unrelated to ACTIVE stages.
+
+Anonymous-only testing needs no token, named context or common `--header`:
+
+```bash
+gqlsleuth scan https://example.com/graphql --object-auth-review --object-auth-case "order:id=123"
+```
+
+Each case sends exactly one additional Query if structurally eligible, with no extra baseline or
+retry. At most three cases are accepted. A matching returned object creates an
+`UNAUTHENTICATED_OBJECT_ACCESS` **review candidate**: validate whether public access is intended.
+It does not establish that the object should be private or that a vulnerability exists.
+
+You may retain a tester-defined label with one **bare** context:
+
+```bash
+gqlsleuth scan https://example.com/graphql --auth-context public --object-auth-review --object-auth-case "order:id=123"
+```
+
+This single-context convenience applies only with Phase 20 enabled. A single context containing
+headers remains invalid; normal Phase 15 still requires 2–3 contexts. Labels such as `public`,
+`anonymous` or `foo` have identical semantics when bare: no user-supplied request/authentication
+headers. This does not rule out other server authentication mechanisms.
+
+For differential validation, explicitly declare the expected authorized context in each case:
+
+```bash
+gqlsleuth scan https://example.com/graphql --auth-context "clienteA=Authorization: Bearer TOKEN_A" --auth-context "clienteB=Cookie: session=TOKEN_B" --auth-context public --object-auth-review --object-auth-case "clienteA:order:id=123"
+```
+
+The operator-declared authorized context runs first. Only if its response returns that exact
+object does the same Query and variables run in the other supplied contexts, in input order.
+Matching access through another header-bearing context creates `CROSS_CONTEXT_OBJECT_ACCESS`;
+through an explicitly supplied bare context it creates `UNAUTHENTICATED_OBJECT_ACCESS`.
+These observations require manual policy validation. Supplied headers do not prove authentication;
+labels imply no ownership, role hierarchy or tenant membership. No anonymous context is added
+automatically. If the declared context fails to return the object, remaining contexts are skipped.
+
+Repeat `--object-auth-case` for up to **3 unique cases**, across at most **3 contexts**, with a hard
+maximum of **9 additional requests** (anonymous-only: **3**). Exact duplicate cases are deduplicated
+in first-seen order. Values preserve everything after the first `=`, including `:` and additional
+`=` characters; they must be non-empty, at most 256 UTF-8 bytes and contain no control characters.
+Cases without the flag, the flag without cases, ACTIVE, and common `--header` combinations fail
+before scanning. Named-context AI remains unsupported; ordinary single-context AI remains optional
+and receives no Phase 20 data.
+
+Eligibility is local: a retained Phase 16 object-lookup surface, direct `ID`/`ID!` root argument,
+concrete non-list object return, and direct `id: ID`/`ID!` output are required. No nested ID inputs,
+ID lists, abstract runtime guessing or alternate identity-field names are supported. Phase 9
+placeholder SUCCESS is **not required**. AST construction changes only the selected ID input,
+preserves other inputs/selections, and may add an omitted optional ID argument or direct `id`
+selection. One document is validated against all participating schemas. An exact target-URL
+artifact is preferred; otherwise multiple possible endpoints are skipped as ambiguous.
+
+`TARGET_RETURNED` requires exact returned ID equality: JSON strings are unchanged, integers use
+decimal text, and Booleans/floats are rejected. Leading zeroes, whitespace, Unicode and casing are
+not normalized. Explicit HTTP/GraphQL authorization signals produce `EXPLICIT_DENIAL`; null,
+mismatched IDs, generic errors and ambiguous partial data are `INDETERMINATE`. Transport failures
+are `NETWORK_FAILURE`. Neither denial nor return proves a general security policy.
+
+Every attempt uses a fresh isolated client/cookie jar and existing Phase 14 HTTP protections.
+There is no ID enumeration, increment/decrement, randomization, response harvesting, ownership
+inference, automatic BOLA/IDOR conclusion, Mutation, Subscription, alias, batch, concurrency or retry.
+Only direct returned ID equality is compared; unrelated business values never decide outcomes.
+Phase 19 never supplies cases to Phase 20 and retains its independent budget.
+
+Console, Markdown and HTML show cases, declarations, outcomes and manual-review guidance without
+dumping unrelated business responses. JSON adds optional `object_authorization_review`, including
+exact requests, outcomes, source references and lossless `OBJECT_AUTHORIZATION_PROBE` evidence
+only for actual attempts. No outgoing authentication configuration is recorded. Treat raw evidence
+as potentially sensitive. Safety Notice remains the final human-report section. With Phase 20
+disabled, existing request sequences and report fields remain unchanged.
+
+Run the dedicated test-only loopback fixture and combined Phase 19/20 smoke:
+
+```bash
+uv run python tests/fixtures/phase20_target.py --smoke
+```
+
+Without `--smoke`, it prints a local URL. Fake `X-Test-Context: clienteA` and `clienteB` headers
+exercise shared object `123`, enforced object `456`, null `999`, and identity `mismatch`;
+object `100` is returned without supplied credentials. No real credentials or public targets are
+needed. Phase 21+ is not implemented.
 
 ## Phase 19 — Nested Authorization Review
 

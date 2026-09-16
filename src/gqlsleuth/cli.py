@@ -23,6 +23,7 @@ from gqlsleuth.application.active_execution import (
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
 from gqlsleuth.application.multiplicity import execute_multiplicity, prepare_multiplicity
+from gqlsleuth.application.object_authorization import run_object_authorization_scan
 from gqlsleuth.application.query_depth import execute_query_depth, prepare_query_depth
 from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
@@ -31,6 +32,7 @@ from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
+from gqlsleuth.domain.object_authorization import parse_object_cases
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.infrastructure.http import HttpClientSettings
 from gqlsleuth.presentation.console import (
@@ -241,6 +243,24 @@ def scan(
             show_default=False,
         ),
     ] = False,
+    object_auth_review: Annotated[
+        bool,
+        typer.Option(
+            "--object-auth-review",
+            rich_help_panel="Authorization Differential Review",
+            help="SAFE validation of exact operator-supplied objects. Default: disabled.",
+            show_default=False,
+        ),
+    ] = False,
+    object_auth_case: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--object-auth-case",
+            rich_help_panel="Authorization Differential Review",
+            metavar="[CONTEXT:]OPERATION:ARGUMENT=ID",
+            help="Exact object case; repeat up to three. Requires --object-auth-review.",
+        ),
+    ] = None,
 ) -> None:
     """Discover and analyze GraphQL; safely execute validated Query operations."""
     report_formats = _parse_formats(formats)
@@ -248,15 +268,30 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        if object_auth_case and not object_auth_review:
+            raise GQLSleuthError("--object-auth-case requires --object-auth-review.")
+        if object_auth_review and (mode is not ScanMode.SAFE or headers):
+            raise GQLSleuthError(
+                "Object authorization review requires SAFE mode without common --header values."
+            )
         if nested_auth_review and auth_context is None:
             raise GQLSleuthError(
                 "--nested-auth-review requires --auth-context (2–3 SAFE contexts)."
             )
         contexts = (
-            map_auth_context_inputs(auth_context, headers=headers, mode=mode, ai=ai)
+            map_auth_context_inputs(
+                auth_context, headers=headers, mode=mode, ai=ai, object_review=object_auth_review
+            )
             if auth_context is not None
             else None
         )
+        object_cases = (
+            parse_object_cases(object_auth_case or [], tuple(item.name for item in contexts or ()))
+            if object_auth_review
+            else ()
+        )
+        if nested_auth_review and len(contexts or ()) < 2:
+            raise GQLSleuthError("Nested review requires 2–3 named contexts.")
     except GQLSleuthError as error:
         render_error(error_console, str(error))
         raise typer.Exit(code=2) from None
@@ -272,7 +307,16 @@ def scan(
                 style="gql.warning",
             )
         result: DifferentialScanResult | SafeExecutionScanResult
-        if contexts is not None:
+        if object_auth_review:
+            result = run_object_authorization_scan(
+                target,
+                cases=object_cases,
+                contexts=contexts or (),
+                mode=mode,
+                http_settings=http_settings,
+                nested_auth_review=nested_auth_review,
+            )
+        elif contexts is not None:
             if nested_auth_review:
                 result = run_differential_scan(
                     target,
@@ -299,9 +343,19 @@ def scan(
             render_nested_authorization(
                 console, result.nested_authorization_review, verbose=verbose
             )
+        if result.object_authorization_review is not None:
+            from gqlsleuth.presentation.object_authorization import render_object_authorization
+
+            render_object_authorization(
+                console, result.object_authorization_review, verbose=verbose
+            )
         _finish_reports(result, report_formats, output)
         return
     render_scan(console, result, verbose=verbose)
+    if result.object_authorization_review is not None:
+        from gqlsleuth.presentation.object_authorization import render_object_authorization
+
+        render_object_authorization(console, result.object_authorization_review, verbose=verbose)
     schema_scan = result.query_generation.operation_analysis.schema_scan
     mode = schema_scan.introspection.detection.discovery.mode
     report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result

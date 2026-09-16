@@ -38,6 +38,7 @@ def build_differential_report(
         deepcopy(result.pairs),
         SAFETY_NOTICE,
         deepcopy(result.nested_authorization_review),
+        deepcopy(result.object_authorization_review),
     )
 
 
@@ -235,4 +236,8 @@ def differential_sections(report: DifferentialReportContext) -> tuple[ReportSect
     )
     if report.nested_authorization_review is not None:
         sections.insert(-1, nested_authorization_section(report.nested_authorization_review))
+    if report.object_authorization_review is not None:
+        from gqlsleuth.reporting.object_authorization import object_authorization_section
+
+        sections.insert(-1, object_authorization_section(report.object_authorization_review))
     return tuple(sections)
