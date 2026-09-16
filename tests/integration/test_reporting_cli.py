@@ -43,7 +43,9 @@ def report_cli(phase_ten_scan, monkeypatch, tmp_path):
 
 
 def invoke(*options, input=""):
-    return CliRunner().invoke(cli.app, ["scan", "https://example.com", *options], input=input)
+    return CliRunner().invoke(
+        cli.app, ["scan", "https://example.com", *options], input="\n" + input
+    )
 
 
 def test_no_format_creates_nothing_and_preserves_safe_console_output(report_cli, tmp_path):

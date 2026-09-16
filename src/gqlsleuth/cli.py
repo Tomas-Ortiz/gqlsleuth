@@ -3,6 +3,7 @@
 import re
 import sys
 from copy import copy
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated
 
@@ -21,12 +22,14 @@ from gqlsleuth.application.active_execution import (
 )
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
+from gqlsleuth.application.multiplicity import execute_multiplicity, prepare_multiplicity
 from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
 from gqlsleuth.application.scan_configuration import map_auth_context_inputs, map_target_http_inputs
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
 from gqlsleuth.domain.models import ScanMode
+from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
 from gqlsleuth.infrastructure.http import HttpClientSettings
 from gqlsleuth.presentation.console import (
     CONSOLE_THEME,
@@ -41,6 +44,7 @@ from gqlsleuth.presentation.console import (
     render_scan,
     render_state_warning,
 )
+from gqlsleuth.presentation.multiplicity import render_multiplicity, render_probe_previews
 from gqlsleuth.reporting.models import ReportFormat
 
 
@@ -122,7 +126,8 @@ def scan(
             help=(
                 "Scan mode: safe | active. Default: safe. "
                 "ACTIVE acknowledges active capabilities for an authorized "
-                "target; Mutations require explicit selection and one final batch confirmation."
+                "target; Query-Shape checks and Mutations each require separate explicit "
+                "selection and one final batch confirmation."
             ),
             case_sensitive=False,
             show_default=False,
@@ -267,7 +272,10 @@ def scan(
     mode = schema_scan.introspection.detection.discovery.mode
     report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result
     if mode is ScanMode.ACTIVE:
-        report_result = _run_active_stage(result, http_settings=http_settings)
+        multiplicity = _run_multiplicity_stage(result, http_settings=http_settings, verbose=verbose)
+        report_result = replace(
+            _run_active_stage(result, http_settings=http_settings), multiplicity=multiplicity
+        )
     ai_result = None
     if ai:
         console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
@@ -298,6 +306,68 @@ def _finish_reports(
 
 def _interactive_stdin() -> bool:
     return sys.stdin is not None and sys.stdin.isatty()
+
+
+def _run_multiplicity_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    http_settings: HttpClientSettings | None = None,
+    verbose: bool = False,
+) -> MultiplicityValidationResult:
+    preview = prepare_multiplicity(safe)
+    render_probe_previews(
+        console, tuple(enumerate(preview.candidates, 1)), title="Active Query-Shape candidates"
+    )
+    selected: tuple[int, ...] = ()
+    confirmed = False
+    if not preview.candidates:
+        console.print("No eligible Query-Shape candidates.")
+    elif not _interactive_stdin():
+        console.print(
+            "Interactive selection and confirmation are required; zero Query-Shape checks execute."
+        )
+    else:
+        try:
+            while True:
+                value = typer.prompt(
+                    "Select active Query-Shape checks to execute (max 2, Enter for none)",
+                    default="",
+                    show_default=False,
+                ).strip()
+                if not value:
+                    selected = ()
+                    break
+                indices = {str(index): index for index in range(1, len(preview.candidates) + 1)}
+                tokens = tuple(token.strip().lstrip("0") or "0" for token in value.split(","))
+                if re.fullmatch(r"[0-9]+(?:\s*,\s*[0-9]+)*", value) is None or any(
+                    token not in indices for token in tokens
+                ):
+                    console.print(
+                        "Choose individual comma-separated Query-Shape candidate indices."
+                    )
+                    continue
+                selected = tuple(sorted({indices[token] for token in tokens}))
+                if len(selected) > 2:
+                    console.print("Select at most 2 Query-Shape checks.")
+                    continue
+                render_probe_previews(
+                    console,
+                    tuple((index, preview.candidates[index - 1]) for index in selected),
+                    title="Selected Query-Shape checks",
+                )
+                confirmed = typer.confirm(
+                    f"Execute these {len(selected)} selected active Query-Shape checks?",
+                    default=False,
+                )
+                break
+        except (typer.Abort, EOFError, KeyboardInterrupt):
+            selected, confirmed = (), False
+            console.print("Query-Shape selection/confirmation cancelled.")
+    result = execute_multiplicity(
+        preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
+    )
+    render_multiplicity(console, result, verbose=verbose)
+    return result
 
 
 def _run_active_stage(

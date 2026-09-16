@@ -89,7 +89,7 @@ def configured_cli(monkeypatch, tmp_path):
 
 
 def invoke(*options, input="\n", target=TARGET):
-    return CliRunner().invoke(cli.app, ["scan", target, *options], input=input)
+    return CliRunner().invoke(cli.app, ["scan", target, *options], input="\n" + input)
 
 
 @pytest.mark.parametrize("mode,input", [("safe", "\n"), ("active", "\n"), ("active", "1\ny\n")])

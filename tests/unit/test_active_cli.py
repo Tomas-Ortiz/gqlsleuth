@@ -40,7 +40,9 @@ def active_cli(phase_ten_scan, monkeypatch):
 
 
 def _invoke(input="", mode="active"):
-    return CliRunner().invoke(cli.app, ["scan", "https://example.com", "--mode", mode], input=input)
+    return CliRunner().invoke(
+        cli.app, ["scan", "https://example.com", "--mode", mode], input="\n" + input
+    )
 
 
 def test_safe_never_enters_mutation_stage_or_prompts(active_cli, monkeypatch):

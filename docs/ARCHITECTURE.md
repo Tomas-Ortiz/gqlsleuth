@@ -217,6 +217,8 @@ Minimal query generation
     ↓
 Safe execution
     ↓
+ACTIVE only: Query-Shape preview → explicit selection → default-NO confirmation → bounded probes
+    ↓
 ACTIVE only: Mutation generation → validation → safety classification → preview
     ↓
 ACTIVE only: explicit batch selection → one final confirmation → sequential execution
@@ -2000,7 +2002,68 @@ not vulnerabilities; schema absence of a control is not proof of absent runtime 
 nine types with no target requests, no executed operations, and JSON/Markdown/HTML output.
 Offline tests also compare complete SAFE/ACTIVE request sequences with local review omitted,
 verify immutable evidence/Phase 7/AI input, and retain all Phase 14/15 regression checks.
-No runtime dependencies or Phase 17+ functionality were added.
+Phase 16 itself adds no runtime requests or dependencies.
+
+### Phase 17 — Controlled GraphQL Multiplicity Validation
+
+Implemented as a separate ACTIVE-only stage after ordinary Phase 9 Queries and before the
+unchanged Phase 10 Mutation interaction. SAFE and ACTIVE without explicit selection/confirmation
+send no Phase 17 requests. Non-interactive scans may show previews but cannot select or confirm.
+Named HTTP contexts remain SAFE-only, with no differential multiplicity analysis.
+
+`application/multiplicity.py` composes the retained safe scan with local previews, selects one
+representative attempted valid Query per endpoint (SUCCESS first, then retained Phase 7 order),
+and coordinates sequential requests through the existing `HttpClient`. No new interest scoring
+is introduced. Missing eligible Queries produce structured limitations.
+
+`graphql/multiplicity.py` reuses Phase 9 structural/name-only safety validation and graphql-core
+ASTs. It rejects ambiguous existing aliases, named operations and extra definitions. Alias
+generation deep-copies the exact top-level field three times as `gqlsleuthAlias1` through
+`gqlsleuthAlias3`, preserving arguments, directives, nested selections and variable definitions.
+Batching sends two exact existing Query/variables objects in one JSON array. Neither operation
+regenerates inputs, removes bounds, changes business values, or increases nested selection depth.
+The central HTTP model already supports top-level JSON arrays; transport settings and redirect
+credential protection remain unchanged.
+
+Hard constants are `ALIAS_COUNT=3`, `BATCH_SIZE=2`, and `MAX_PHASE17_REQUESTS=2`. The execution
+service independently checks ACTIVE, selected indices, strict `confirmed is True`, exact candidate
+identity against locally rebuilt previews, and at most one attempt per type across all endpoints.
+Duplicate selected indices are deduplicated; excess requests are skipped deterministically. There
+are no retries, concurrency, count options, threshold searches or Mutation probes. CLI interaction
+uses explicit comma-separated indices, Enter for none, and one final default-NO batch confirmation
+separate from the existing Mutation batch confirmation.
+
+Immutable project-owned preview, decision, observation and validation models live in
+`domain/multiplicity.py`. Decisions distinguish NOT_SELECTED, DECLINED, MODE_DISABLED,
+INVALID_ARTIFACT, SKIPPED_LIMIT and EXECUTED. Observations distinguish ACCEPTED, REJECTED,
+INDETERMINATE and NETWORK_FAILURE. Alias acceptance requires a successful GraphQL-shaped data
+object containing all three alias keys. Batch acceptance requires exactly two GraphQL-shaped
+objects in a successful HTTP array response, allowing per-entry GraphQL errors. Explicit
+shape-related rejection messages establish REJECTED; generic errors or incomplete shapes are
+INDETERMINATE. No business response values are compared. Normal Phase 9/10 object-response
+classification remains unchanged.
+
+Every attempted request creates `GRAPHQL_BEHAVIOR_PROBE` evidence: ACTIVE mode, representative
+operation, probe type/count, timestamp, POST, exact document/variables/JSON request, response status,
+headers/bytes/duration, normalized error and observation. No unexecuted decision creates evidence.
+`ActiveExecutionScanResult.multiplicity` retains the new result without duplicating the safe scan;
+its evidence property preserves safe, probe and Mutation evidence in stage order.
+
+Console previews/results use neutral headings and cyan references. An additive `multiplicity`
+report field follows report schema version 1's optional-field convention, absent when irrelevant.
+Markdown/HTML show Controlled GraphQL Multiplicity Validation and reuse bounded response display;
+Safety Notice remains final. Evidence is canonical and lossless in JSON. These observations are
+not Findings or vulnerability claims and cannot establish higher limits or global resolver policy.
+AIContext, prompts, schema, validation and the single optional Ollama inference remain unchanged;
+Phase 17 data is deliberately excluded. Phase 16 remains solely schema-derived.
+
+`tests/fixtures/phase17_target.py` is a loopback-only development target sharing deterministic
+accepted/rejected/ambiguous handlers with offline MockTransport tests. Its `--smoke` exercises
+real local HTTP and CLI confirmation with exactly two probes per run and no Mutations. No public
+target is required for testing or CI, and no runtime dependency was added.
+
+Future phases may address active depth/complexity validation, rate limiting, subscriptions,
+uploads or federation runtime behavior. Phase 17 implements none of those capabilities.
 
 ## 35. MVP definition
 

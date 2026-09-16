@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 16 — Deterministic GraphQL Security Analysis**. It provides the Phase 0
+The repository is currently at **Phase 17 — Controlled GraphQL Multiplicity Validation**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -31,6 +31,50 @@ Phase 15 runs the existing SAFE workflow independently for 2–3 named HTTP cont
 their retained observations locally. Differences are manual-review candidates, not vulnerabilities.
 Phase 16 adds local structural security review of retained schema metadata, without additional
 requests, operations, or changes to generation/execution decisions.
+Phase 17 adds separately selected ACTIVE Query-Shape checks before the existing Mutation stage.
+SAFE scanning and Phase 16 remain unchanged.
+
+## Phase 17 — Controlled GraphQL Multiplicity Validation
+
+Use `gqlsleuth scan https://example.com/graphql --mode active` only against an authorized target.
+After ordinary safe Query execution, ACTIVE previews two probe types per eligible endpoint:
+
+- **Alias Multiplicity:** exactly three deterministic aliases of one existing safe Query field.
+- **HTTP Batching:** exactly two identical Query/variables request objects in a JSON array.
+
+The representative Query is chosen from attempted Phase 9 results, preferring SUCCESS and then
+the existing retained Query order. Its exact arguments, variables, `limit=1` bounds and minimal
+selection are preserved. If none qualifies, the stage records a limitation without probing.
+
+Explicitly select individual comma-separated indices (maximum two), inspect the selected requests,
+and provide one final confirmation, default NO. Enter selects none; non-interactive runs execute
+none. ACTIVE alone authorizes no probes. The existing Mutation selection and confirmation remain
+independent and follow this stage. At most one Alias request and one Batch request may be attempted
+per scan; there are no retries, concurrency, threshold searches or configurable multiplicities.
+
+ACCEPTED, REJECTED and INDETERMINATE describe only this request shape and representative Query.
+Alias acceptance requires all three expected response keys without an execution error. Batch
+acceptance requires two GraphQL-shaped response entries; individual entries may contain GraphQL
+errors. Explicit shape rejections are distinguished from ambiguous failures. Neither acceptance
+nor rejection establishes vulnerabilities, global resolver policy, higher thresholds or missing
+cost/rate controls.
+
+JSON, Markdown and HTML add **Controlled GraphQL Multiplicity Validation**, preserving selection,
+confirmation, decisions and observations. Attempted requests alone create `GRAPHQL_BEHAVIOR_PROBE`
+evidence with exact requests, response bytes and normalized transport errors. Human responses use
+the existing bounded renderer; canonical JSON preserves complete evidence. Safety Notice remains
+last. Phase 17 is excluded from AIContext and adds no Ollama call. Named authentication-context
+scans remain SAFE-only and do not perform these probes.
+
+Run the controlled loopback acceptance/rejection/ambiguous smoke without public targets:
+
+```bash
+uv run python tests/fixtures/phase17_target.py --smoke
+```
+
+Without `--smoke`, the test-only server prints a loopback URL for manual CLI testing. No real
+credentials or public services are needed. Depth/complexity, rate-limit, upload, subscription,
+federation, Mutation multiplicity and other Phase 18+ runtime checks are not implemented.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST

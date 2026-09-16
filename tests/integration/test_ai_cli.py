@@ -94,7 +94,7 @@ def invoke(mode, *, ai=False, reports=False, input="\n", verbose=False):
     if reports:
         for format in ("json", "markdown", "html"):
             options.extend(["--format", format])
-    return CliRunner().invoke(cli.app, options, input=input)
+    return CliRunner().invoke(cli.app, options, input="\n" + input)
 
 
 @pytest.mark.parametrize("mode", ["safe", "active"])

@@ -5,7 +5,9 @@ from dataclasses import dataclass, fields
 
 from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult, AIStatement
 from gqlsleuth.domain.models import Evidence
+from gqlsleuth.domain.multiplicity import MULTIPLICITY_NOTICE
 from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
+from gqlsleuth.presentation.multiplicity import probe_guidance, probe_label, probe_response
 from gqlsleuth.presentation.responses import ResponsePresentation, present_response
 from gqlsleuth.presentation.security_review import candidate_facts, candidate_label
 from gqlsleuth.reporting.models import OperationReport, ReportContext
@@ -204,6 +206,46 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             ReportSection("Manual Review Recommendations", paragraphs=report.recommendations),
         )
     )
+    if report.multiplicity is not None:
+        result = report.multiplicity
+        sections.append(
+            ReportSection(
+                "Controlled GraphQL Multiplicity Validation",
+                paragraphs=(MULTIPLICITY_NOTICE, *result.limitations),
+                rows=(
+                    ("Available probes", str(len(result.candidates))),
+                    ("Selected indices", ", ".join(map(str, result.selected_indices)) or "None"),
+                    ("Confirmed", str(result.confirmed)),
+                    ("Attempted requests", str(len(result.evidence))),
+                ),
+                entries=tuple(
+                    ReportEntry(
+                        probe_label(item.candidate.probe_type),
+                        details=(
+                            ("Endpoint", item.candidate.base.endpoint),
+                            ("Operation", "query " + item.candidate.base.operation_name),
+                            ("Decision", item.decision.value.upper()),
+                            (
+                                "Observation",
+                                item.evidence.observation.value.upper()
+                                if item.evidence
+                                else "Not executed",
+                            ),
+                        ),
+                        paragraphs=(item.reason, probe_guidance(item.candidate.probe_type)),
+                        request_blocks=(
+                            ("graphql", item.candidate.query),
+                            (
+                                "json",
+                                json.dumps(item.candidate.base.variables, indent=2, sort_keys=True),
+                            ),
+                        ),
+                        response=probe_response(item.evidence) if item.evidence else None,
+                    )
+                    for item in result.executions
+                ),
+            )
+        )
     if report.ai_interpretation is not None:
         sections.append(ai_section(report.ai_interpretation))
     sections.append(
