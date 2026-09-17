@@ -7,6 +7,7 @@ from uuid import UUID
 
 from gqlsleuth.ai.models import AIInterpretationResult
 from gqlsleuth.domain.analysis import OperationAnalysis
+from gqlsleuth.domain.authorization_policy import AuthorizationPolicyResult
 from gqlsleuth.domain.differential import ContextPairReview
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, ScanMode, Target
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
@@ -105,6 +106,7 @@ class ReportContext:
     multiplicity: MultiplicityValidationResult | None = None
     query_depth: QueryDepthValidationResult | None = None
     object_authorization_review: ObjectAuthorizationResult | None = None
+    authorization_policy_validation: AuthorizationPolicyResult | None = None
 
 
 @dataclass(frozen=True)
@@ -126,3 +128,4 @@ class DifferentialReportContext:
     safety_notice: str
     nested_authorization_review: NestedAuthorizationResult | None = None
     object_authorization_review: ObjectAuthorizationResult | None = None
+    authorization_policy_validation: AuthorizationPolicyResult | None = None

@@ -13,6 +13,7 @@ from gqlsleuth.application.safe_execution import (
     run_safe_execution_scan,
 )
 from gqlsleuth.domain.analysis import OperationKind
+from gqlsleuth.domain.authorization_policy import AuthorizationPolicyResult
 from gqlsleuth.domain.differential import (
     ComparisonLimitation,
     ContextObservation,
@@ -44,6 +45,7 @@ class DifferentialScanResult:
     pairs: tuple[ContextPairReview, ...]
     nested_authorization_review: NestedAuthorizationResult | None = None
     object_authorization_review: ObjectAuthorizationResult | None = None
+    authorization_policy_validation: AuthorizationPolicyResult | None = None
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:

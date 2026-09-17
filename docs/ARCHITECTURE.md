@@ -2304,6 +2304,79 @@ loopback only. Offline tests cover parsing, AST identity, compatibility, tamperi
 redirects, lossless evidence, report privacy and separate Phase 19/20 request budgets. No dependency
 is added. The default-off path retains previous scanner, request, evidence and presentation behavior.
 
+### Phase 21 — Explicit Authorization Policy Validation
+
+Implemented as an opt-in **local-only** stage over retained Phase 20 outcomes:
+
+- Anonymous: normal SAFE scan → Phase 16 → optional Phase 20 → optional Phase 21 → reports.
+- Named: independent SAFE scans → Phase 15 → optional Phase 19 → optional Phase 20 →
+  optional Phase 21 local evaluation → reports.
+
+**Phase 21 target request count = 0.** It creates no operations, retries or Evidence objects,
+does not rerun Phase 20, and never changes/discovers identifiers. The exact target request
+sequence remains identical with and without policy evaluation for identical Phase 20 inputs.
+Phase 19/20 budgets and all Phase 20 classifications, candidates and source evidence stay intact.
+
+`--auth-policy-review` requires `--object-auth-review` plus at least one repeated `--expect-deny`.
+Anonymous syntax is `CASE_INDEX`; named syntax is `CASE_INDEX:CONTEXT_LABEL`. A sole bare context
+also accepts the unambiguous compact index. Zero-context mode rejects explicit label syntax.
+References use Phase 20's normalized 1-based case order, including existing duplicate-case
+normalization, and exact case-sensitive Phase 15 labels. They do not repeat object identifiers.
+
+```bash
+gqlsleuth scan https://example.com/graphql --object-auth-review --object-auth-case "order:id=123" --auth-policy-review --expect-deny "1"
+gqlsleuth scan https://example.com/graphql --auth-context "clienteA=Authorization: Bearer TOKEN_A" --auth-context "clienteB=Cookie: session=TOKEN_B" --object-auth-review --object-auth-case "clienteA:order:id=123" --auth-policy-review --expect-deny "1:clienteB"
+```
+
+`domain/authorization_policy.py` owns frozen assertion, evaluation, violation and aggregate models
+and input normalization. Assertions record stable index, case reference, target context, explicit
+implicit-anonymous metadata, expected DENY and OPERATOR_SUPPLIED provenance. The hard ceiling is
+`MAX_PHASE21_ASSERTIONS=9`; duplicates are rejected, including equivalent decimal spellings or
+compact/explicit sole-context references. Zero/negative/nondecimal indices, ranges, wildcards,
+comma-packed lists, missing cases/contexts, absent required flags and DENY against the same case's
+operator-declared authorized context fail before scanning. Errors never echo raw supplied values.
+
+`application/authorization_policy.py` is a pure evaluator with only standard-library and domain
+dependencies. It independently checks explicit Phase 20/21 enablement, SAFE mode, typed DENY and
+OPERATOR_SUPPLIED fields, limits, normalized case/assertion identity and contradiction rules.
+For each assertion it verifies retained probe/context identity, execution accounting, unique
+Phase 20 evidence association, SAFE evidence type, exact case/operation/identifier, request
+association and normalized outcome agreement. Differential attempts also require a valid retained
+declared-context TARGET_RETURNED baseline. Missing/inconsistent retained sources produce controlled
+UNRESOLVED limitations without fabricated outcomes or requests. It does not read raw response
+bodies, recalculate authorization denial, regenerate documents or compare business values.
+
+The complete local outcome matrix is:
+
+- DENY + TARGET_RETURNED: VIOLATED, with AUTHORIZATION_POLICY_VIOLATION.
+- DENY + EXPLICIT_DENIAL: SATISFIED for that exact object/context/request only.
+- DENY + INDETERMINATE or NETWORK_FAILURE: UNRESOLVED.
+- DENY + unattempted context (including owner short-circuit): UNRESOLVED, no evidence reference.
+- Missing/inconsistent source: UNRESOLVED with a limitation, never a new target request.
+
+Violations compose the evaluation's case identity, target context, expected policy, observed
+outcome, source IDs and deterministic wording. Their precise meaning is that observed access
+contradicts **operator-supplied DENY policy**, whose correctness is not independently established.
+Phase 20 CROSS_CONTEXT_OBJECT_ACCESS/UNAUTHENTICATED_OBJECT_ACCESS results are preserved alongside
+the stronger explicit-policy result. Neither violations nor satisfaction introduce vulnerability
+Findings, taxonomy, severity, CVSS/CWE, BOLA/IDOR confirmation or global enforcement conclusions.
+No ownership, privilege order, role, tenant or intended-policy inference occurs.
+
+SAFE and differential results/report contexts gain optional `authorization_policy_validation`,
+omitted from canonical JSON when disabled. Existing evidence properties remain unchanged. Policy
+JSON retains references rather than copying Phase 20 response bytes. Console and shared human
+report presentation add Authorization Policy Validation immediately after object review; reports
+keep Safety Notice final exactly once. Authentication values/configuration and raw business bodies
+are absent from policy projections. AIContext, prompts, transport, validation and call counts are
+untouched, and named-context AI stays unsupported. The disabled path retains previous behavior.
+
+`tests/fixtures/phase21_smoke.py` reuses the existing Phase 20 loopback server. Offline tests and
+local smoke compare exact request sequences for anonymous, single bare, two/three named contexts,
+owner short-circuit and combined Phase 19/20/21. They cover the outcome matrix, source tampering,
+duplicate/owner assertions, privacy, raw-body independence and all report formats. No dependency
+is added. ALLOW, policy files/DSLs, role/tenant matrices, nested-path or Mutation policies,
+enumeration/harvesting, automatic remediation and Phase 22+ remain outside scope.
+
 ## 35. MVP definition
 
 The first meaningful MVP should be able to:

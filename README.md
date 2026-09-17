@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 20 — Controlled Object Authorization Validation**. It provides the Phase 0
+The repository is currently at **Phase 21 — Explicit Authorization Policy Validation**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -34,6 +34,71 @@ requests, operations, or changes to generation/execution decisions.
 Phase 17 adds separately selected ACTIVE Query-Shape checks. Phase 18 follows with a separately
 selected bounded Query-depth check, before the existing Mutation stage. SAFE scanning and
 Phase 16 remain unchanged.
+
+## Phase 21 — Explicit Authorization Policy Validation
+
+This opt-in local stage evaluates **operator-supplied DENY policy** against already-observed
+Phase 20 object-access outcomes. **Phase 21 adds zero HTTP or GraphQL requests.** It never reruns
+Phase 20, changes an identifier, discovers an object, or infers intended permissions.
+
+For anonymous-only object review, reference the existing normalized case index:
+
+```bash
+gqlsleuth scan https://example.com/graphql --object-auth-review --object-auth-case "order:id=123" --auth-policy-review --expect-deny "1"
+```
+
+For named contexts, also specify the exact context label:
+
+```bash
+gqlsleuth scan https://example.com/graphql --auth-context "clienteA=Authorization: Bearer TOKEN_A" --auth-context "clienteB=Cookie: session=TOKEN_B" --object-auth-review --object-auth-case "clienteA:order:id=123" --auth-policy-review --expect-deny "1:clienteB"
+```
+
+A single bare context such as `--auth-context foo` accepts `--expect-deny "1:foo"` or the
+unambiguous compact `"1"`. Differential bare contexts are targeted by label, for example
+`--expect-deny "1:public"` when that label was explicitly supplied. No meaning is inferred from
+the label. With no named contexts, only the compact index is accepted.
+
+`--expect-deny` is repeatable, with a hard maximum of **9 assertions**. Indices are 1-based and
+refer to Phase 20's existing deduplicated case order; policy syntax never repeats an identifier.
+Duplicate references, missing cases/contexts, wildcards, ranges, comma-packed values, and DENY
+against a case's operator-declared authorized context are rejected before scanning.
+`--auth-policy-review` requires both Phase 20 and at least one assertion; `--expect-deny` requires
+the policy flag. Existing SAFE, named-context and AI restrictions remain unchanged.
+
+| Operator policy | Retained Phase 20 observation | Policy result |
+| --- | --- | --- |
+| DENY | TARGET_RETURNED | VIOLATED — AUTHORIZATION_POLICY_VIOLATION |
+| DENY | EXPLICIT_DENIAL | SATISFIED for this exact request only |
+| DENY | INDETERMINATE or NETWORK_FAILURE | UNRESOLVED |
+| DENY | Context not attempted or valid source unavailable | UNRESOLVED |
+
+Phase 20's access review candidates remain intact. Phase 21 is stronger and more precise:
+**observed behavior contradicted an explicit operator-supplied DENY assertion**. GQLSleuth does
+not independently verify that assertion, infer ownership/roles/tenants, assign severity/CVSS/CWE,
+or automatically confirm BOLA, IDOR or a vulnerability. SATISFIED establishes no global policy
+enforcement. Null/mismatched objects and network failures never satisfy DENY.
+
+The workflow is SAFE scanning → Phase 16 → optional Phase 20 → optional local Phase 21 → reports.
+Named scans retain Phase 15 comparison and optional Phase 19 before Phase 20. Phase 21 never
+evaluates nested Phase 19 paths or adds requests for unattempted contexts. Its evaluator consumes
+normalized outcomes and verifies source associations without reopening raw business responses.
+
+Console and JSON/Markdown/HTML add **Authorization Policy Validation** after the Phase 20 section.
+JSON's optional `authorization_policy_validation` contains assertions, evaluations, violations and
+references to existing Phase 20 evidence; no network evidence is duplicated or invented. Policy
+models contain no authentication configuration. Human reports show no raw business bodies, and
+Safety Notice remains final exactly once. Policy data stays outside AIContext; AI behavior and
+call counts are unchanged. With the policy flag absent, previous behavior and report fields remain
+unchanged. ALLOW policies, policy files/matrices and formal Findings are outside this phase.
+
+Run local acceptance and exact request-invariance smoke coverage using the existing Phase 20 server:
+
+```bash
+uv run python tests/fixtures/phase21_smoke.py
+```
+
+It checks anonymous, single bare, two/three named contexts, owner short-circuit and combined
+Phase 19/20/21 workflows using fake contexts. No public target or real credentials are required.
 
 ## Phase 20 — Controlled Object Authorization Validation
 
@@ -121,7 +186,7 @@ uv run python tests/fixtures/phase20_target.py --smoke
 Without `--smoke`, it prints a local URL. Fake `X-Test-Context: clienteA` and `clienteB` headers
 exercise shared object `123`, enforced object `456`, null `999`, and identity `mismatch`;
 object `100` is returned without supplied credentials. No real credentials or public targets are
-needed. Phase 21+ is not implemented.
+needed. Phase 21 adds only optional local policy evaluation; Phase 22+ is not implemented.
 
 ## Phase 19 — Nested Authorization Review
 

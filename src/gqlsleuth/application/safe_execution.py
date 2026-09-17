@@ -6,6 +6,7 @@ from gqlsleuth.application.query_generation import (
     QueryGenerationScanResult,
     run_query_generation_scan,
 )
+from gqlsleuth.domain.authorization_policy import AuthorizationPolicyResult
 from gqlsleuth.domain.exceptions import HttpError, SafeExecutionValidationError
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode
@@ -51,6 +52,7 @@ class SafeExecutionScanResult:
     executions: tuple[QueryExecutionResult, ...]
     execution_evidence: tuple[Evidence, ...]
     object_authorization_review: ObjectAuthorizationResult | None = None
+    authorization_policy_validation: AuthorizationPolicyResult | None = None
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:

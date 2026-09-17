@@ -21,6 +21,7 @@ from gqlsleuth.application.active_execution import (
     prepare_active_mutations,
 )
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
+from gqlsleuth.application.authorization_policy import evaluate_authorization_policy
 from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
 from gqlsleuth.application.multiplicity import execute_multiplicity, prepare_multiplicity
 from gqlsleuth.application.object_authorization import run_object_authorization_scan
@@ -29,12 +30,14 @@ from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
 from gqlsleuth.application.scan_configuration import map_auth_context_inputs, map_target_http_inputs
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
+from gqlsleuth.domain.authorization_policy import parse_policy_assertions
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
 from gqlsleuth.domain.object_authorization import parse_object_cases
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.infrastructure.http import HttpClientSettings
+from gqlsleuth.presentation.authorization_policy import render_authorization_policy
 from gqlsleuth.presentation.console import (
     CONSOLE_THEME,
     render_active_execution,
@@ -261,6 +264,27 @@ def scan(
             help="Exact object case; repeat up to three. Requires --object-auth-review.",
         ),
     ] = None,
+    auth_policy_review: Annotated[
+        bool,
+        typer.Option(
+            "--auth-policy-review",
+            rich_help_panel="Authorization Differential Review",
+            help="Local DENY policy validation; requires --object-auth-review. Default: disabled.",
+            show_default=False,
+        ),
+    ] = False,
+    expect_deny: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--expect-deny",
+            metavar="CASE[:CONTEXT]",
+            rich_help_panel="Authorization Differential Review",
+            help=(
+                "Operator-supplied DENY for a Phase 20 case; repeat up to nine. "
+                "Requires --auth-policy-review."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Discover and analyze GraphQL; safely execute validated Query operations."""
     report_formats = _parse_formats(formats)
@@ -268,6 +292,10 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        if expect_deny is not None and not auth_policy_review:
+            raise GQLSleuthError("--expect-deny requires --auth-policy-review.")
+        if auth_policy_review and not object_auth_review:
+            raise GQLSleuthError("--auth-policy-review requires --object-auth-review.")
         if object_auth_case and not object_auth_review:
             raise GQLSleuthError("--object-auth-case requires --object-auth-review.")
         if object_auth_review and (mode is not ScanMode.SAFE or headers):
@@ -288,6 +316,15 @@ def scan(
         object_cases = (
             parse_object_cases(object_auth_case or [], tuple(item.name for item in contexts or ()))
             if object_auth_review
+            else ()
+        )
+        policy_assertions = (
+            parse_policy_assertions(
+                expect_deny or [],
+                cases=object_cases,
+                context_names=tuple(item.name for item in contexts or ()),
+            )
+            if auth_policy_review
             else ()
         )
         if nested_auth_review and len(contexts or ()) < 2:
@@ -331,6 +368,19 @@ def scan(
                 )
         else:
             result = run_safe_execution_scan(target, mode=mode, http_settings=http_settings)
+        if auth_policy_review:
+            result = replace(
+                result,
+                authorization_policy_validation=evaluate_authorization_policy(
+                    result.object_authorization_review,
+                    assertions=policy_assertions,
+                    cases=object_cases,
+                    context_names=tuple(item.name for item in contexts or ()),
+                    enabled=True,
+                    object_review_enabled=object_auth_review,
+                    mode=mode,
+                ),
+            )
     except GQLSleuthError as error:
         render_error(error_console, str(error))
         raise typer.Exit(code=2) from None
@@ -349,6 +399,10 @@ def scan(
             render_object_authorization(
                 console, result.object_authorization_review, verbose=verbose
             )
+        if result.authorization_policy_validation is not None:
+            render_authorization_policy(
+                console, result.authorization_policy_validation, verbose=verbose
+            )
         _finish_reports(result, report_formats, output)
         return
     render_scan(console, result, verbose=verbose)
@@ -356,6 +410,10 @@ def scan(
         from gqlsleuth.presentation.object_authorization import render_object_authorization
 
         render_object_authorization(console, result.object_authorization_review, verbose=verbose)
+    if result.authorization_policy_validation is not None:
+        render_authorization_policy(
+            console, result.authorization_policy_validation, verbose=verbose
+        )
     schema_scan = result.query_generation.operation_analysis.schema_scan
     mode = schema_scan.introspection.detection.discovery.mode
     report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result
