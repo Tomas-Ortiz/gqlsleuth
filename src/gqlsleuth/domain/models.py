@@ -32,6 +32,7 @@ class EvidenceType(StrEnum):
     GRAPHQL_BEHAVIOR_PROBE = "graphql_behavior_probe"
     NESTED_AUTHORIZATION_PROBE = "nested_authorization_probe"
     OBJECT_AUTHORIZATION_PROBE = "object_authorization_probe"
+    SEQUENTIAL_OBJECT_PROBE = "sequential_object_probe"
     HTTP_ERROR = "http_error"
     PARSER_ERROR = "parser_error"
 

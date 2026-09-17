@@ -182,7 +182,9 @@ def test_scan_help_documents_defaults_without_duplicate_metadata():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
     assert result.exit_code == 0
     output = " ".join(result.stdout.replace("│", " ").replace("|", " ").split())
-    assert output.lower().count("default:") == 13
+    assert output.lower().count("default:") == 14
+    assert "--idor-discovery" in output
+    assert "--idor-seed" in output
     assert "--nested-auth-review" in output
     assert "--auth-policy-review" in output
     assert "--expect-deny" in output

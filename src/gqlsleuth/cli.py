@@ -29,6 +29,10 @@ from gqlsleuth.application.query_depth import execute_query_depth, prepare_query
 from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
 from gqlsleuth.application.scan_configuration import map_auth_context_inputs, map_target_http_inputs
+from gqlsleuth.application.sequential_discovery import (
+    execute_sequential_discovery,
+    prepare_sequential_discovery,
+)
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.authorization_policy import parse_policy_assertions
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
@@ -36,6 +40,11 @@ from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
 from gqlsleuth.domain.object_authorization import parse_object_cases
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
+from gqlsleuth.domain.sequential_discovery import (
+    SequentialDiscoveryResult,
+    SequentialDiscoverySeed,
+    parse_discovery_seeds,
+)
 from gqlsleuth.infrastructure.http import HttpClientSettings
 from gqlsleuth.presentation.authorization_policy import render_authorization_policy
 from gqlsleuth.presentation.console import (
@@ -53,6 +62,7 @@ from gqlsleuth.presentation.console import (
 )
 from gqlsleuth.presentation.multiplicity import render_multiplicity, render_probe_previews
 from gqlsleuth.presentation.query_depth import render_depth_previews, render_query_depth
+from gqlsleuth.presentation.sequential_discovery import render_sequential_discovery
 from gqlsleuth.reporting.models import ReportFormat
 
 
@@ -285,6 +295,27 @@ def scan(
             ),
         ),
     ] = None,
+    idor_discovery: Annotated[
+        bool,
+        typer.Option(
+            "--idor-discovery",
+            rich_help_panel="Active Object Discovery",
+            help=(
+                "Bounded adjacent numeric object discovery; ACTIVE and separate confirmation "
+                "required. Default: disabled."
+            ),
+            show_default=False,
+        ),
+    ] = False,
+    idor_seed: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--idor-seed",
+            metavar="OPERATION:ARGUMENT=ID",
+            rich_help_panel="Active Object Discovery",
+            help="Canonical unsigned decimal seed; repeat up to two. Requires --idor-discovery.",
+        ),
+    ] = None,
 ) -> None:
     """Discover and analyze GraphQL; safely execute validated Query operations."""
     report_formats = _parse_formats(formats)
@@ -292,6 +323,13 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        if idor_seed is not None and not idor_discovery:
+            raise GQLSleuthError("--idor-seed requires --idor-discovery.")
+        if idor_discovery and (mode is not ScanMode.ACTIVE or auth_context is not None):
+            raise GQLSleuthError(
+                "--idor-discovery requires ACTIVE single-context mode without --auth-context."
+            )
+        discovery_seeds = parse_discovery_seeds(idor_seed or []) if idor_discovery else ()
         if expect_deny is not None and not auth_policy_review:
             raise GQLSleuthError("--expect-deny requires --auth-policy-review.")
         if auth_policy_review and not object_auth_review:
@@ -420,10 +458,18 @@ def scan(
     if mode is ScanMode.ACTIVE:
         multiplicity = _run_multiplicity_stage(result, http_settings=http_settings, verbose=verbose)
         query_depth = _run_depth_stage(result, http_settings=http_settings, verbose=verbose)
+        sequential = (
+            _run_sequential_stage(
+                result, seeds=discovery_seeds, http_settings=http_settings, verbose=verbose
+            )
+            if idor_discovery
+            else None
+        )
         report_result = replace(
             _run_active_stage(result, http_settings=http_settings),
             multiplicity=multiplicity,
             query_depth=query_depth,
+            sequential_object_discovery=sequential,
         )
     ai_result = None
     if ai:
@@ -516,6 +562,41 @@ def _run_multiplicity_stage(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
     render_multiplicity(console, result, verbose=verbose)
+    return result
+
+
+def _run_sequential_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    seeds: tuple[SequentialDiscoverySeed, ...],
+    http_settings: HttpClientSettings,
+    verbose: bool = False,
+) -> SequentialDiscoveryResult:
+    preview = prepare_sequential_discovery(
+        safe, seeds=seeds, enabled=True, http_settings=http_settings
+    )
+    render_sequential_discovery(console, preview, preview=True, verbose=verbose)
+    confirmed = False
+    if not preview.probes:
+        console.print("No eligible sequential-discovery requests.")
+    elif not _interactive_stdin():
+        console.print(
+            "Interactive confirmation is required; zero sequential-discovery requests execute."
+        )
+    else:
+        try:
+            confirmed = typer.confirm("Execute bounded sequential object discovery?", default=False)
+        except (typer.Abort, EOFError, KeyboardInterrupt):
+            console.print("Sequential-discovery confirmation cancelled.")
+    result = execute_sequential_discovery(
+        safe,
+        seeds=seeds,
+        enabled=True,
+        confirmed=confirmed,
+        preview=preview,
+        http_settings=http_settings,
+    )
+    render_sequential_discovery(console, result, verbose=verbose)
     return result
 
 

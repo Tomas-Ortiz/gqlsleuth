@@ -20,6 +20,7 @@ from gqlsleuth.domain.models import Evidence, ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.schema import ParsedSchema
+from gqlsleuth.domain.sequential_discovery import SequentialDiscoveryResult
 from gqlsleuth.graphql.active_execution import assess_mutation
 from gqlsleuth.graphql.query_generation import DEFAULT_MAX_SELECTION_DEPTH, generate_mutation
 from gqlsleuth.graphql.safe_execution import classify_execution_response
@@ -72,6 +73,7 @@ class ActiveExecutionScanResult:
     execution_evidence: tuple[MutationExecutionEvidence, ...]
     multiplicity: MultiplicityValidationResult | None = None
     query_depth: QueryDepthValidationResult | None = None
+    sequential_object_discovery: SequentialDiscoveryResult | None = None
 
     @property
     def safe_execution(self) -> SafeExecutionScanResult:
@@ -81,7 +83,10 @@ class ActiveExecutionScanResult:
     def evidence(self) -> tuple[Evidence, ...]:
         probes = self.multiplicity.evidence if self.multiplicity else ()
         depth = self.query_depth.evidence if self.query_depth else ()
-        return self.preview.evidence + probes + depth + self.execution_evidence
+        sequential = (
+            self.sequential_object_discovery.evidence if self.sequential_object_discovery else ()
+        )
+        return self.preview.evidence + probes + depth + sequential + self.execution_evidence
 
 
 def prepare_active_mutations(

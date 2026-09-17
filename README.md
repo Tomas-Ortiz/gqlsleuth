@@ -12,7 +12,7 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 21 — Explicit Authorization Policy Validation**. It provides the Phase 0
+The repository is currently at **Phase 22 — Bounded Sequential Object Discovery**. It provides the Phase 0
 and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
 GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
 parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
@@ -34,6 +34,81 @@ requests, operations, or changes to generation/execution decisions.
 Phase 17 adds separately selected ACTIVE Query-Shape checks. Phase 18 follows with a separately
 selected bounded Query-depth check, before the existing Mutation stage. SAFE scanning and
 Phase 16 remain unchanged.
+
+## Phase 22 — Bounded Sequential Object Discovery
+
+This opt-in, read-only **ACTIVE** stage tests only the immediate numeric neighbors of an exact
+operator-supplied seed. Use it only against an authorized target:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --idor-discovery --idor-seed "order:id=123"
+gqlsleuth scan https://example.com/graphql --mode active -H "Authorization: Bearer TOKEN" --idor-discovery --idor-seed "order:id=123"
+```
+
+Repeat `--idor-seed OPERATION:ARGUMENT=ID` for at most **two seeds**, in input order. Identifiers
+must be canonical unsigned ASCII decimal text in **0–9223372036854775807**: no whitespace,
+leading zeroes (except `0`), signs, decimals, UUIDs, prefixes or encoded IDs. Invalid input fails
+before scanning without echoing its value. No configurable range, radius, offsets or count exists.
+
+Preparation is local and sends no requests. The preview displays each exact planned ID. One
+separate **default-NO** confirmation authorizes this stage only. ACTIVE, the flag, or supplied
+seeds alone do not authorize its requests. Non-interactive scans retain previews and execute zero
+Phase 22 requests. Declining this stage still permits the existing Mutation interaction.
+
+```text
+operator seed 123 → baseline 123 → only if TARGET_RETURNED
+                                  ├─ 122 (offset -1)
+                                  └─ 124 (offset +1)
+                                     observe only; no further expansion
+```
+
+Hard limits are **2 seeds × (1 baseline + at most 2 neighbors) = 6 additional requests**.
+Only fixed offsets **−1/+1** are used; `0` has only neighbor `1`, and the maximum has only a lower
+neighbor. A baseline denial, ambiguity or transport failure skips its neighbors. A neighbor
+failure does not stop the other neighbor or a later seed. Requests are sequential, without
+retries, fallback identifiers, randomization, range scanning, recursive discovery or response-ID
+harvesting. Returned business values and response sizes do not determine subsequent requests.
+
+Eligibility reuses Phase 20: a retained Phase 16 object-lookup surface, direct root Query
+argument `ID`/`ID!`, concrete non-list object return and direct output `id: ID`/`ID!`. Nested ID
+inputs, abstract types, guessed scalars, aliases, batching, Mutations and Subscriptions are
+unsupported. AST rewriting preserves other arguments, variable mappings, directives, selections
+and placeholders, adding a direct `id` selection when necessary. Every attempt rechecks the
+rebuilt plan, exact inputs, ACTIVE enablement, confirmation and budget.
+
+Outcomes reuse Phase 20: **TARGET_RETURNED**, **EXPLICIT_DENIAL**, **INDETERMINATE** and
+**NETWORK_FAILURE**. TARGET_RETURNED requires the returned root `id` to match the requested ID
+exactly; integer JSON IDs use decimal text, while Boolean, missing, null or mismatched IDs do not
+confirm identity. A confirmed adjacent return creates **ADJACENT_OBJECT_ACCESS**, a manual-review
+candidate. It is **not automatic BOLA/IDOR confirmation**: ownership, roles, tenants and intended
+policy remain unknown; predictable identifiers alone do not establish a weakness.
+
+The current single Phase 14 HTTP context is reused, either without supplied headers or with
+repeated `-H` headers (Bearer, Cookie, API key or custom mechanisms). Supplied headers do not prove
+authentication. Existing timeout/TLS/proxy/redirect protections remain. Named `--auth-context`
+scans remain SAFE-only and cannot be used here. Phase 22 does not run Phase 20 or Phase 21:
+the tester must explicitly supply a discovered ID to a **separate SAFE Phase 20 scan**, then
+optionally add Phase 21 DENY assertions. No case/policy creation or cross-context follow-up occurs.
+
+The ACTIVE order is normal Queries → Phase 17 → Phase 18 → optional Phase 22 → Mutations →
+optional AI/reports. Each ACTIVE capability keeps its own confirmation and request budget.
+Phase 22 data is excluded from AIContext; prompts and model-call counts are unchanged.
+Console and JSON/Markdown/HTML distinguish supplied seeds, generated IDs, plans, actual attempts,
+outcomes and limitations. Only attempts create `SEQUENTIAL_OBJECT_PROBE` evidence with exact
+Query/variables, response bytes and source references. Outgoing header values are never stored
+in the new models or presentation. Canonical response evidence remains potentially sensitive.
+Safety Notice remains the final human-report section; the optional JSON field
+`sequential_object_discovery` is absent when disabled.
+
+Run deterministic local validation with fake headers and no public target:
+
+```bash
+uv run python tests/fixtures/phase22_target.py --smoke
+```
+
+Without `--smoke`, the fixture prints a loopback URL for manual preview/confirmation testing.
+Phase 23+, general enumeration, response harvesting, automatic authorization Findings and
+severity assignment are not implemented.
 
 ## Phase 21 — Explicit Authorization Policy Validation
 
@@ -186,7 +261,8 @@ uv run python tests/fixtures/phase20_target.py --smoke
 Without `--smoke`, it prints a local URL. Fake `X-Test-Context: clienteA` and `clienteB` headers
 exercise shared object `123`, enforced object `456`, null `999`, and identity `mismatch`;
 object `100` is returned without supplied credentials. No real credentials or public targets are
-needed. Phase 21 adds only optional local policy evaluation; Phase 22+ is not implemented.
+needed. Phase 21 adds optional local policy evaluation. Phase 22 is a separate ACTIVE capability;
+it never supplies cases or assertions to these SAFE stages automatically.
 
 ## Phase 19 — Nested Authorization Review
 

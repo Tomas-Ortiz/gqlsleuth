@@ -148,6 +148,11 @@ def build_report(
         authorization_policy_validation=safe.authorization_policy_validation,
         multiplicity=result.multiplicity if isinstance(result, ActiveExecutionScanResult) else None,
         query_depth=result.query_depth if isinstance(result, ActiveExecutionScanResult) else None,
+        sequential_object_discovery=(
+            result.sequential_object_discovery
+            if isinstance(result, ActiveExecutionScanResult)
+            else None
+        ),
     )
     return deepcopy(replace(context, recommendations=_recommendations(context)))
 

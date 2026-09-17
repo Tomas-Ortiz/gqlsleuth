@@ -83,6 +83,7 @@ def _json_value(value: object) -> JsonValue:
                     "ai_interpretation",
                     "multiplicity",
                     "query_depth",
+                    "sequential_object_discovery",
                     "nested_authorization_review",
                     "object_authorization_review",
                     "authorization_policy_validation",

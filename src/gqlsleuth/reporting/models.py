@@ -17,6 +17,7 @@ from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.query_generation import OperationGenerationResult
 from gqlsleuth.domain.schema import SchemaSummary
 from gqlsleuth.domain.security_review import GraphQLSecurityReviewResult
+from gqlsleuth.domain.sequential_discovery import SequentialDiscoveryResult
 from gqlsleuth.infrastructure.http import HttpResponse
 
 
@@ -105,6 +106,7 @@ class ReportContext:
     graphql_security_review: GraphQLSecurityReviewResult | None = None
     multiplicity: MultiplicityValidationResult | None = None
     query_depth: QueryDepthValidationResult | None = None
+    sequential_object_discovery: SequentialDiscoveryResult | None = None
     object_authorization_review: ObjectAuthorizationResult | None = None
     authorization_policy_validation: AuthorizationPolicyResult | None = None
 

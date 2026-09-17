@@ -167,6 +167,11 @@ There are no per-Mutation confirmation prompts. Non-interactive stdin never prom
 or confirms: previews are retained, a clear message is printed, and zero Mutations execute.
 The hard limit is five attempted Mutation requests per scan. Subscriptions remain out of scope.
 
+Phase 22 adds a separate read-only ACTIVE capability behind `--idor-discovery` and explicit
+numeric `--idor-seed` values. Its own default-NO confirmation permits only a seed baseline and
+fixed immediate neighbors, with a six-request hard budget. It does not alter Mutation gates or
+SAFE named-context restrictions. See the Phase 22 roadmap entry for exact bounds and semantics.
+
 ## 7. Accepted input
 
 GQLSleuth accepts either:
@@ -218,6 +223,10 @@ Minimal query generation
 Safe execution
     ↓
 ACTIVE only: Query-Shape preview → explicit selection → default-NO confirmation → bounded probes
+    ↓
+ACTIVE only: Query-Depth preview → explicit selection → separate confirmation → bounded probe
+    ↓
+Optional ACTIVE Phase 22: supplied seeds → local preview → separate confirmation → baseline/adjacent probes
     ↓
 ACTIVE only: Mutation generation → validation → safety classification → preview
     ↓
@@ -2375,7 +2384,104 @@ local smoke compare exact request sequences for anonymous, single bare, two/thre
 owner short-circuit and combined Phase 19/20/21. They cover the outcome matrix, source tampering,
 duplicate/owner assertions, privacy, raw-body independence and all report formats. No dependency
 is added. ALLOW, policy files/DSLs, role/tenant matrices, nested-path or Mutation policies,
-enumeration/harvesting, automatic remediation and Phase 22+ remain outside scope.
+enumeration/harvesting and automatic remediation remain outside Phase 21. Phase 22 is independent;
+it never creates Phase 20 cases or Phase 21 assertions automatically.
+
+### Phase 22 — Bounded Sequential Object Discovery
+
+Implemented as a separate, default-off, read-only ACTIVE stage:
+
+`Phase 9 → Phase 17 → Phase 18 → optional Phase 22 → Phase 10 Mutations → optional AI/reports`.
+
+CLI requires `--mode active --idor-discovery` and one or two repeated
+`--idor-seed OPERATION:ARGUMENT=VALUE` entries. Names are GraphQL identifiers. Parsing splits on
+the first `=`, with exactly two colon components on the left and the complete remainder as the
+value. Only canonical unsigned ASCII decimals `0` or `[1-9][0-9]*`, in `0..2^63-1`, are accepted.
+This range is below the 64-byte input ceiling. Whitespace is never trimmed; signs, leading zeroes,
+controls, UUIDs, encoded/prefixed IDs, decimals and overflow fail before scanning with indexed
+errors that do not echo values. Original seed order is preserved; no configurable range or radius.
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --idor-discovery --idor-seed "order:id=123"
+gqlsleuth scan https://example.com/graphql --mode active -H "Authorization: Bearer TOKEN" --idor-discovery --idor-seed "order:id=123"
+```
+
+`domain/sequential_discovery.py` contains frozen seed, prepared probe, execution, candidate and
+aggregate models, plus dedicated ACTIVE `SequentialDiscoveryEvidence`. Hard constants are
+`MAX_PHASE22_SEEDS=2`, `MAX_PHASE22_NEIGHBORS_PER_SEED=2`, `MAX_PHASE22_REQUESTS=6`,
+`MAX_PHASE22_IDENTIFIER=2**63-1`, and `PHASE22_OFFSETS=(-1, 1)`. Numeric boundaries omit invalid
+neighbors without wraparound: zero plans only `0,1`, the maximum only `max,max-1`.
+
+`application/sequential_discovery.py` prepares locally from retained Phase 8/schema/Phase 16
+data. Shared `application/object_lookup.py` selects the exact target artifact or one unambiguous
+endpoint and its OBJECT_LOOKUP_REVIEW source, preserving Phase 20 selection semantics.
+The existing pure `graphql/object_authorization.py` helpers supply structural eligibility,
+AST substitution, schema/input validation and response classification. No Phase 20 scan is run
+or result manufactured; only its pure helper input shape is adapted internally.
+
+Eligibility requires one safe Query root, the requested direct ID/ID! argument, a concrete
+non-list object and direct output id:ID/ID!. ID lists, nested inputs, custom scalars, abstract
+type guessing, Mutation/Subscription roots and missing identity fields produce limitations.
+The actual argument-to-variable mapping is recovered from the AST. Other variables, arguments,
+directives, selections, placeholders and bounds remain unchanged; an omitted ID input or direct
+id selection may be added by the existing helper. All variants validate locally, with one
+anonymous Query/root and no aliases, fragments, batching or unexpected definitions. Preparation
+sends zero requests; SAFE/disabled callers derive no adjacent identifiers.
+
+Console previews show operator seed, root/argument, baseline and generated IDs, offsets and
+maximum planned requests. ONE separate `Execute bounded sequential object discovery? [y/N]`
+confirmation is required. Non-interactive runs retain previews but send zero Phase 22 requests.
+Phase 17/18 and Mutation consent/budgets are independent. Declining or a normalized failure in
+this stage does not cancel later Mutation interaction.
+
+For each seed, the baseline runs first. Only TARGET_RETURNED permits seed−1 then seed+1; denial,
+ambiguity or network failure skips neighbors with structured reasons and no HTTP evidence. A
+neighbor failure does not cancel the other neighbor or a later seed. Every request independently
+rebuilds the complete local plan and checks strict ACTIVE enablement/confirmation, typed seed
+identity/count/range, exact offset/origin, endpoint/root/schema/AST/variable mapping and budget.
+Caller-mutated/reordered/duplicated previews cannot select new requests. Only canonical rebuilt
+requests are sent. The hard six-request budget counts attempted sends, including transport
+failures, with no retries/concurrency/fallbacks. Existing centralized redirect handling is retained.
+
+The ordinary Phase 14 HTTP context is reused (no supplied headers or repeated `-H`), with a fresh
+isolated client/cookie jar per attempt. TLS, timeout, proxy, trust_env=False, response limits,
+same-origin credentials and cross-origin stripping are unchanged. Supplied headers are described
+as request context, not proof of authentication. Named auth contexts remain SAFE-only and cannot
+be combined with Phase 22. No outgoing header values or settings objects enter its result models.
+
+Classifications are exactly Phase 20's TARGET_RETURNED / EXPLICIT_DENIAL / INDETERMINATE /
+NETWORK_FAILURE. Direct returned root.id must match the requested text (JSON integers use decimal
+text; Boolean, float, missing/null/mismatched IDs do not establish identity). Only that identity
+and existing authorization/error shape affect outcomes, never unrelated business values, response
+size, ownership, roles or tenants. Neighbor TARGET_RETURNED creates ADJACENT_OBJECT_ACCESS,
+referencing its seed, generated ID/offset, context metadata and structural/baseline/attempt IDs.
+This is a manual-review candidate, not BOLA/IDOR confirmation, a Finding or severity assignment.
+Predictable IDs alone do not establish an authorization weakness.
+
+Only attempted requests create `SEQUENTIAL_OBJECT_PROBE` evidence: ACTIVE, endpoint, root/argument,
+operator seed, actual requested ID/offset, exact Query/variables, POST, timestamp, response status,
+headers/bytes, duration, normalized transport failure, outcome and identity-match state. Canonical
+response evidence remains potentially sensitive. Results retain configured seeds, exact plans,
+confirmation, executions, candidates, limitations and attempted count. Active results compose this
+as optional `sequential_object_discovery`, with evidence ordered after Phase 18 and before Mutations.
+JSON omits the field when disabled; human reports distinguish supplied/generated IDs without raw
+business-body dumps. Safety Notice remains final once. No prompt, model call, AIContext allowlist,
+model endpoint or transport changes; Phase 22 data is excluded from AI.
+
+There is no recursive expansion (a returned 124 never yields 125 from seed 123), response-ID
+harvesting, random/UUID mutation, range scanning, business-value comparison or automatic follow-up.
+The intentional boundary is: Phase 22 observes adjacent 124 → tester explicitly supplies 124 to a
+separate SAFE Phase 20 scan → optional Phase 21 DENY assertion. Phase 21 still consumes only Phase 20.
+No cross-context probing, case creation, policy creation, ownership inference or nested policies
+are triggered by discovery. All prior requests, evidence ordering, console/report fields and AI
+behavior remain unchanged with Phase 22 disabled.
+
+`tests/fixtures/phase22_target.py --smoke` runs only on loopback, with fake headers and fixed
+returned/null/denied/zero-boundary cases; transport failure uses MockTransport. Offline tests cover
+exact request IDs/counts, no recursive expansion/harvesting, AST preservation, strict consent,
+tampering, context isolation, report/privacy boundaries and prior-phase regressions. No dependency
+is added. Phase 23+, configurable windows/ranges, enumeration/harvesting, automatic Phase 20/21
+handoffs, Mutation IDOR checks, BOLA/IDOR Findings, CWE/CVSS and severity remain unimplemented.
 
 ## 35. MVP definition
 

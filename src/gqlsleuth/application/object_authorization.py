@@ -12,8 +12,8 @@ from gqlsleuth.application.differential_review import (
     run_differential_scan,
 )
 from gqlsleuth.application.nested_authorization import exact_variables
+from gqlsleuth.application.object_lookup import retained_object_lookup
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
-from gqlsleuth.discovery.endpoint_candidates import normalize_discovery_url
 from gqlsleuth.domain.differential import NamedAuthContext, validate_context_names
 from gqlsleuth.domain.exceptions import (
     HttpConfigurationError,
@@ -36,7 +36,6 @@ from gqlsleuth.domain.object_authorization import (
     PreparedObjectProbe,
     parse_object_cases,
 )
-from gqlsleuth.domain.security_review import SecurityCandidateType
 from gqlsleuth.graphql.nested_authorization import field_signature
 from gqlsleuth.graphql.object_authorization import (
     build_object_query,
@@ -156,37 +155,7 @@ def prepare_object_authorization(
                 0,
             )
             owner = retained[owner_index]
-            artifacts = tuple(
-                item
-                for item in owner.query_generation.queries
-                if item.operation_name == case.operation and item.success
-            )
-            owner_schema_scan = owner.query_generation.operation_analysis.schema_scan
-            discovery = owner_schema_scan.introspection.detection.discovery
-            explicit_url = normalize_discovery_url(discovery.target.original_url)
-            exact = tuple(item for item in artifacts if item.endpoint == explicit_url)
-            if exact:
-                artifacts = exact
-            if len(artifacts) != 1:
-                raise SafeExecutionValidationError(
-                    "Requires one unambiguous retained Query artifact/endpoint."
-                )
-            artifact = artifacts[0]
-            review = owner.query_generation.security_review
-            source = next(
-                (
-                    item
-                    for item in (review.candidates if review else ())
-                    if item.endpoint == artifact.endpoint
-                    and item.subject == f"query {case.operation}"
-                    and item.candidate_type is SecurityCandidateType.OBJECT_LOOKUP_REVIEW
-                ),
-                None,
-            )
-            if source is None:
-                raise SafeExecutionValidationError(
-                    "No retained OBJECT_LOOKUP_REVIEW structural source."
-                )
+            artifact, source = retained_object_lookup(owner, case.operation)
             schemas = []
             natives = []
             ids: list[UUID] = []
