@@ -25,7 +25,14 @@ from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
 from gqlsleuth.infrastructure.http import HttpResponse
+from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.differential import present_differential
+from gqlsleuth.presentation.object_lookup import (
+    FOLLOW_UP_NOTICE,
+    ObjectLookupFollowUpHint,
+    follow_up_commands,
+    object_lookup_follow_ups,
+)
 from gqlsleuth.presentation.priorities import priority_label, style_priority_terms
 from gqlsleuth.presentation.responses import present_response, present_response_body
 from gqlsleuth.presentation.security_review import (
@@ -144,7 +151,7 @@ def _render_table(console: Console, table: Table) -> None:
 
 
 def render_error(console: Console, message: str, *, label: str = "Error") -> None:
-    console.print(Text.assemble((f"{label}: ", "gql.error"), message))
+    console.print(Text.assemble((f"{label}: ", "gql.error"), capability_wording(message)))
 
 
 def render_active_gate(console: Console) -> None:
@@ -218,6 +225,16 @@ def render_scan(
                 console,
                 generation.security_review,
                 endpoint=detected.candidate_url,
+                follow_ups=object_lookup_follow_ups(
+                    generation.security_review,
+                    {
+                        url: item.schema
+                        for url, item in schemas.items()
+                        if item.success and item.schema is not None
+                    },
+                )
+                if verbose
+                else (),
                 verbose=verbose,
             )
         queries = tuple(
@@ -647,10 +664,21 @@ def render_differential(
     console.print("Zero differential Mutations executed. Comparison added zero HTTP requests.")
     for context in result.contexts:
         if context.scan and context.scan.query_generation.security_review is not None:
+            schema_scan = context.scan.query_generation.operation_analysis.schema_scan
             render_security_review(
                 console,
                 context.scan.query_generation.security_review,
                 context=context.name,
+                follow_ups=object_lookup_follow_ups(
+                    context.scan.query_generation.security_review,
+                    {
+                        item.endpoint: item.schema
+                        for item in schema_scan.schemas
+                        if item.success and item.schema is not None
+                    },
+                )
+                if verbose
+                else (),
                 verbose=verbose,
             )
 
@@ -661,6 +689,7 @@ def render_security_review(
     *,
     endpoint: str | None = None,
     context: str | None = None,
+    follow_ups: tuple[ObjectLookupFollowUpHint, ...] = (),
     verbose: bool = False,
 ) -> None:
     candidates = tuple(
@@ -693,7 +722,7 @@ def render_security_review(
         for item in visible:
             console.print()
             console.print(Text(item.endpoint + " / " + item.subject, style="gql.metadata"))
-            console.print(item.deterministic_reason, markup=False)
+            console.print(capability_wording(item.deterministic_reason), markup=False)
             if item.related_operation:
                 console.print(priority_label(item.related_operation.priority))
                 console.print(
@@ -703,6 +732,18 @@ def render_security_review(
                 )
             for fact in candidate_facts(item):
                 console.print(fact, markup=False)
-            console.print("Manual review: " + item.review_guidance, markup=False)
+            console.print(
+                "Manual review: " + capability_wording(item.review_guidance), markup=False
+            )
+            for hint in follow_ups:
+                if hint.endpoint == item.endpoint and item.subject == f"query {hint.operation}":
+                    console.print("Suggested follow-up:", style="gql.section")
+                    for label, command in follow_up_commands(hint):
+                        console.print(Text(f"  {label}:"))
+                        console.print(Text(f"    {command}", style="gql.metadata"))
+                    console.print(Text(FOLLOW_UP_NOTICE), style="gql.secondary")
     for limitation in limitations[:3] if not verbose else limitations:
-        console.print(Text(limitation.endpoint + ": " + limitation.reason), style="gql.secondary")
+        console.print(
+            Text(limitation.endpoint + ": " + capability_wording(limitation.reason)),
+            style="gql.secondary",
+        )

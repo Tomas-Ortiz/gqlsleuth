@@ -8,7 +8,13 @@ from gqlsleuth.domain.models import Evidence
 from gqlsleuth.domain.multiplicity import MULTIPLICITY_NOTICE
 from gqlsleuth.domain.query_depth import DEPTH_NOTICE
 from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
+from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.multiplicity import probe_guidance, probe_label, probe_response
+from gqlsleuth.presentation.object_lookup import (
+    FOLLOW_UP_NOTICE,
+    ObjectLookupFollowUpHint,
+    follow_up_commands,
+)
 from gqlsleuth.presentation.query_depth import depth_response
 from gqlsleuth.presentation.responses import ResponsePresentation, present_response
 from gqlsleuth.presentation.security_review import candidate_facts, candidate_label
@@ -105,7 +111,7 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             "Security Review Candidates",
             paragraphs=(
                 "Priority indicates manual-review interest, not vulnerability severity. "
-                "The existing Phase 7 order and rule matches are preserved.",
+                "The existing operation-analysis order and rule matches are preserved.",
             ),
             entries=tuple(
                 ReportEntry(
@@ -127,7 +133,11 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             ),
         ),
         *(
-            [security_review_section(report.graphql_security_review)]
+            [
+                security_review_section(
+                    report.graphql_security_review, follow_ups=report.object_lookup_follow_up or ()
+                )
+            ]
             if report.graphql_security_review is not None
             else []
         ),
@@ -278,7 +288,7 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                                 else "Not executed",
                             ),
                         ),
-                        paragraphs=(item.reason,),
+                        paragraphs=(capability_wording(item.reason),),
                         request_blocks=(
                             ("graphql", item.candidate.query),
                             (
@@ -323,6 +333,7 @@ def security_review_section(
     review: GraphQLSecurityReviewResult,
     *,
     context: str | None = None,
+    follow_ups: tuple[ObjectLookupFollowUpHint, ...] = (),
 ) -> ReportSection:
     entries = tuple(
         ReportEntry(
@@ -343,9 +354,28 @@ def security_review_section(
                 else ()
             ),
             paragraphs=(
-                item.deterministic_reason,
+                capability_wording(item.deterministic_reason),
                 *candidate_facts(item),
-                "Manual review: " + item.review_guidance,
+                "Manual review: " + capability_wording(item.review_guidance),
+            )
+            + (
+                (FOLLOW_UP_NOTICE,)
+                if any(
+                    hint.endpoint == item.endpoint and item.subject == f"query {hint.operation}"
+                    for hint in follow_ups
+                )
+                else ()
+            ),
+            code_blocks=tuple(
+                (
+                    "text",
+                    "Suggested follow-up:\n\n"
+                    + "\n\n".join(
+                        f"{label}:\n  {command}" for label, command in follow_up_commands(hint)
+                    ),
+                )
+                for hint in follow_ups
+                if hint.endpoint == item.endpoint and item.subject == f"query {hint.operation}"
             ),
             evidence_references=(
                 ("Schema evidence", ", ".join(map(str, item.source_evidence_ids))),
@@ -368,7 +398,9 @@ def security_review_section(
                 else "Structural review was not performed: no parsed schema.",
             )
         )
-        + tuple(item.endpoint + ": " + item.reason for item in review.limitations),
+        + tuple(
+            item.endpoint + ": " + capability_wording(item.reason) for item in review.limitations
+        ),
         rows=(("Structural review candidates", str(len(review.candidates))),),
         entries=entries,
     )

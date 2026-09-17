@@ -290,7 +290,7 @@ def scan(
             metavar="CASE[:CONTEXT]",
             rich_help_panel="Authorization Differential Review",
             help=(
-                "Operator-supplied DENY for a Phase 20 case; repeat up to nine. "
+                "Operator-supplied DENY for an object authorization case; repeat up to nine. "
                 "Requires --auth-policy-review."
             ),
         ),

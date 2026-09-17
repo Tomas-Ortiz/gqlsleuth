@@ -12,30 +12,21 @@ default.
 
 ## Current status
 
-The repository is currently at **Phase 22 — Bounded Sequential Object Discovery**. It provides the Phase 0
-and Phase 1 foundation, the centralized Phase 2 HTTP layer, Phase 3 endpoint discovery, Phase 4
-GraphQL behavior detection, Phase 5 introspection retrieval, Phase 6 deterministic schema
-parsing, Phase 7 operation analysis, Phase 8 local read-only query generation, and Phase 9
-controlled Query execution, followed in ACTIVE mode by Mutation previews and separately
-selected and confirmed Mutation execution. Phase 11 adds opt-in JSON, Markdown, and HTML reports
-from those structured results. Phase 12 adds optional local interpretation after the completed
-SAFE or ACTIVE workflow, using Ollama and `qwen3:8b`.
-Phase 13 adds concise default console output, optional detailed output, help/option aliases,
-and comma-separated report formats. Scanning, ACTIVE controls, AI, and report semantics are unchanged.
-Phase 13.1 adds bounded execution responses to human reports and console details, consistent
-priority colors, grouped Mutation previews, and structured AI console tables. Canonical JSON
-evidence, scanner behavior, and AI inputs/validation remain unchanged.
-Phase 14 exposes repeated target headers, user-supplied authentication, explicit timeout/proxy,
-and target TLS verification settings, isolated from local Ollama.
-Phase 15 runs the existing SAFE workflow independently for 2–3 named HTTP contexts, then compares
-their retained observations locally. Differences are manual-review candidates, not vulnerabilities.
-Phase 16 adds local structural security review of retained schema metadata, without additional
-requests, operations, or changes to generation/execution decisions.
-Phase 17 adds separately selected ACTIVE Query-Shape checks. Phase 18 follows with a separately
-selected bounded Query-depth check, before the existing Mutation stage. SAFE scanning and
-Phase 16 remain unchanged.
+GQLSleuth supports endpoint discovery, GraphQL confirmation, introspection, schema parsing,
+operation analysis, minimal Query generation and controlled safe Query execution. Optional
+capabilities include named-context differential review, nested and object authorization review,
+and explicit authorization policy validation. Local structural review adds no target requests.
 
-## Phase 22 — Bounded Sequential Object Discovery
+ACTIVE mode offers independently confirmed Query-shape checks, Query-depth checks, bounded
+sequential object discovery and explicitly selected Mutation execution. Reports support JSON,
+Markdown and HTML; optional local interpretation uses Ollama and `qwen3:8b`. Console output is
+compact by default, with detailed output available through `--verbose`.
+
+Target HTTP headers, authentication, timeouts, proxy and TLS settings remain separate from local
+Ollama. Review candidates require manual validation and are not vulnerability findings. Developer
+roadmap details are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Bounded Sequential Object Discovery
 
 This opt-in, read-only **ACTIVE** stage tests only the immediate numeric neighbors of an exact
 operator-supplied seed. Use it only against an authorized target:
@@ -53,7 +44,7 @@ before scanning without echoing its value. No configurable range, radius, offset
 Preparation is local and sends no requests. The preview displays each exact planned ID. One
 separate **default-NO** confirmation authorizes this stage only. ACTIVE, the flag, or supplied
 seeds alone do not authorize its requests. Non-interactive scans retain previews and execute zero
-Phase 22 requests. Declining this stage still permits the existing Mutation interaction.
+sequential object discovery requests. Declining this stage still permits the existing Mutation interaction.
 
 ```text
 operator seed 123 → baseline 123 → only if TARGET_RETURNED
@@ -69,30 +60,30 @@ failure does not stop the other neighbor or a later seed. Requests are sequentia
 retries, fallback identifiers, randomization, range scanning, recursive discovery or response-ID
 harvesting. Returned business values and response sizes do not determine subsequent requests.
 
-Eligibility reuses Phase 20: a retained Phase 16 object-lookup surface, direct root Query
+Eligibility reuses object authorization: a retained structural object-lookup surface, direct root Query
 argument `ID`/`ID!`, concrete non-list object return and direct output `id: ID`/`ID!`. Nested ID
 inputs, abstract types, guessed scalars, aliases, batching, Mutations and Subscriptions are
 unsupported. AST rewriting preserves other arguments, variable mappings, directives, selections
 and placeholders, adding a direct `id` selection when necessary. Every attempt rechecks the
 rebuilt plan, exact inputs, ACTIVE enablement, confirmation and budget.
 
-Outcomes reuse Phase 20: **TARGET_RETURNED**, **EXPLICIT_DENIAL**, **INDETERMINATE** and
+Outcomes reuse object authorization: **TARGET_RETURNED**, **EXPLICIT_DENIAL**, **INDETERMINATE** and
 **NETWORK_FAILURE**. TARGET_RETURNED requires the returned root `id` to match the requested ID
 exactly; integer JSON IDs use decimal text, while Boolean, missing, null or mismatched IDs do not
 confirm identity. A confirmed adjacent return creates **ADJACENT_OBJECT_ACCESS**, a manual-review
 candidate. It is **not automatic BOLA/IDOR confirmation**: ownership, roles, tenants and intended
 policy remain unknown; predictable identifiers alone do not establish a weakness.
 
-The current single Phase 14 HTTP context is reused, either without supplied headers or with
+The current single target HTTP context is reused, either without supplied headers or with
 repeated `-H` headers (Bearer, Cookie, API key or custom mechanisms). Supplied headers do not prove
 authentication. Existing timeout/TLS/proxy/redirect protections remain. Named `--auth-context`
-scans remain SAFE-only and cannot be used here. Phase 22 does not run Phase 20 or Phase 21:
-the tester must explicitly supply a discovered ID to a **separate SAFE Phase 20 scan**, then
-optionally add Phase 21 DENY assertions. No case/policy creation or cross-context follow-up occurs.
+scans remain SAFE-only and cannot be used here. Sequential object discovery does not run object authorization or authorization policy validation:
+the tester must explicitly supply a discovered ID to a **separate SAFE object authorization scan**, then
+optionally add authorization policy validation DENY assertions. No case/policy creation or cross-context follow-up occurs.
 
-The ACTIVE order is normal Queries → Phase 17 → Phase 18 → optional Phase 22 → Mutations →
+The ACTIVE order is normal Queries → Query-shape validation → Query-depth validation → optional sequential object discovery → Mutations →
 optional AI/reports. Each ACTIVE capability keeps its own confirmation and request budget.
-Phase 22 data is excluded from AIContext; prompts and model-call counts are unchanged.
+sequential object discovery data is excluded from AIContext; prompts and model-call counts are unchanged.
 Console and JSON/Markdown/HTML distinguish supplied seeds, generated IDs, plans, actual attempts,
 outcomes and limitations. Only attempts create `SEQUENTIAL_OBJECT_PROBE` evidence with exact
 Query/variables, response bytes and source references. Outgoing header values are never stored
@@ -107,14 +98,14 @@ uv run python tests/fixtures/phase22_target.py --smoke
 ```
 
 Without `--smoke`, the fixture prints a loopback URL for manual preview/confirmation testing.
-Phase 23+, general enumeration, response harvesting, automatic authorization Findings and
+General enumeration, response harvesting, automatic authorization Findings and
 severity assignment are not implemented.
 
-## Phase 21 — Explicit Authorization Policy Validation
+## Explicit Authorization Policy Validation
 
 This opt-in local stage evaluates **operator-supplied DENY policy** against already-observed
-Phase 20 object-access outcomes. **Phase 21 adds zero HTTP or GraphQL requests.** It never reruns
-Phase 20, changes an identifier, discovers an object, or infers intended permissions.
+object-authorization outcomes. **Authorization policy validation adds zero HTTP or GraphQL requests.** It never reruns
+object authorization, changes an identifier, discovers an object, or infers intended permissions.
 
 For anonymous-only object review, reference the existing normalized case index:
 
@@ -134,52 +125,52 @@ unambiguous compact `"1"`. Differential bare contexts are targeted by label, for
 the label. With no named contexts, only the compact index is accepted.
 
 `--expect-deny` is repeatable, with a hard maximum of **9 assertions**. Indices are 1-based and
-refer to Phase 20's existing deduplicated case order; policy syntax never repeats an identifier.
+refer to object authorization's existing deduplicated case order; policy syntax never repeats an identifier.
 Duplicate references, missing cases/contexts, wildcards, ranges, comma-packed values, and DENY
 against a case's operator-declared authorized context are rejected before scanning.
-`--auth-policy-review` requires both Phase 20 and at least one assertion; `--expect-deny` requires
+`--auth-policy-review` requires both object authorization and at least one assertion; `--expect-deny` requires
 the policy flag. Existing SAFE, named-context and AI restrictions remain unchanged.
 
-| Operator policy | Retained Phase 20 observation | Policy result |
+| Operator policy | Retained object authorization observation | Policy result |
 | --- | --- | --- |
 | DENY | TARGET_RETURNED | VIOLATED — AUTHORIZATION_POLICY_VIOLATION |
 | DENY | EXPLICIT_DENIAL | SATISFIED for this exact request only |
 | DENY | INDETERMINATE or NETWORK_FAILURE | UNRESOLVED |
 | DENY | Context not attempted or valid source unavailable | UNRESOLVED |
 
-Phase 20's access review candidates remain intact. Phase 21 is stronger and more precise:
+Object authorization's access review candidates remain intact. Authorization policy validation is stronger and more precise:
 **observed behavior contradicted an explicit operator-supplied DENY assertion**. GQLSleuth does
 not independently verify that assertion, infer ownership/roles/tenants, assign severity/CVSS/CWE,
 or automatically confirm BOLA, IDOR or a vulnerability. SATISFIED establishes no global policy
 enforcement. Null/mismatched objects and network failures never satisfy DENY.
 
-The workflow is SAFE scanning → Phase 16 → optional Phase 20 → optional local Phase 21 → reports.
-Named scans retain Phase 15 comparison and optional Phase 19 before Phase 20. Phase 21 never
-evaluates nested Phase 19 paths or adds requests for unattempted contexts. Its evaluator consumes
+The workflow is SAFE scanning → structural security review → optional object authorization → optional local authorization policy validation → reports.
+Named scans retain named-context differential comparison and optional nested authorization review before object authorization. Authorization policy validation never
+evaluates nested authorization paths or adds requests for unattempted contexts. Its evaluator consumes
 normalized outcomes and verifies source associations without reopening raw business responses.
 
-Console and JSON/Markdown/HTML add **Authorization Policy Validation** after the Phase 20 section.
+Console and JSON/Markdown/HTML add **Authorization Policy Validation** after the object authorization section.
 JSON's optional `authorization_policy_validation` contains assertions, evaluations, violations and
-references to existing Phase 20 evidence; no network evidence is duplicated or invented. Policy
+references to existing object authorization evidence; no network evidence is duplicated or invented. Policy
 models contain no authentication configuration. Human reports show no raw business bodies, and
 Safety Notice remains final exactly once. Policy data stays outside AIContext; AI behavior and
 call counts are unchanged. With the policy flag absent, previous behavior and report fields remain
-unchanged. ALLOW policies, policy files/matrices and formal Findings are outside this phase.
+unchanged. ALLOW policies, policy files/matrices and formal Findings are outside this capability's scope.
 
-Run local acceptance and exact request-invariance smoke coverage using the existing Phase 20 server:
+Run local acceptance and exact request-invariance smoke coverage using the existing object authorization server:
 
 ```bash
 uv run python tests/fixtures/phase21_smoke.py
 ```
 
 It checks anonymous, single bare, two/three named contexts, owner short-circuit and combined
-Phase 19/20/21 workflows using fake contexts. No public target or real credentials are required.
+nested/object authorization and policy validation workflows using fake contexts. No public target or real credentials are required.
 
-## Phase 20 — Controlled Object Authorization Validation
+## Controlled Object Authorization Validation
 
 Use this opt-in **SAFE** stage only for authorized testing of exact, known identifiers you supply.
-It runs after normal SAFE scanning and local Phase 16 analysis; in named-context scans it follows
-Phase 15 comparison and any optional Phase 19 nested review. It is unrelated to ACTIVE stages.
+It runs after normal SAFE scanning and local structural security analysis; in named-context scans it follows
+named-context differential comparison and any optional nested authorization review. It is unrelated to ACTIVE stages.
 
 Anonymous-only testing needs no token, named context or common `--header`:
 
@@ -198,8 +189,8 @@ You may retain a tester-defined label with one **bare** context:
 gqlsleuth scan https://example.com/graphql --auth-context public --object-auth-review --object-auth-case "order:id=123"
 ```
 
-This single-context convenience applies only with Phase 20 enabled. A single context containing
-headers remains invalid; normal Phase 15 still requires 2–3 contexts. Labels such as `public`,
+This single-context convenience applies only with object authorization enabled. A single context containing
+headers remains invalid; normal named-context differential review still requires 2–3 contexts. Labels such as `public`,
 `anonymous` or `foo` have identical semantics when bare: no user-supplied request/authentication
 headers. This does not rule out other server authentication mechanisms.
 
@@ -223,11 +214,11 @@ in first-seen order. Values preserve everything after the first `=`, including `
 `=` characters; they must be non-empty, at most 256 UTF-8 bytes and contain no control characters.
 Cases without the flag, the flag without cases, ACTIVE, and common `--header` combinations fail
 before scanning. Named-context AI remains unsupported; ordinary single-context AI remains optional
-and receives no Phase 20 data.
+and receives no object authorization data.
 
-Eligibility is local: a retained Phase 16 object-lookup surface, direct `ID`/`ID!` root argument,
+Eligibility is local: a retained structural object-lookup surface, direct `ID`/`ID!` root argument,
 concrete non-list object return, and direct `id: ID`/`ID!` output are required. No nested ID inputs,
-ID lists, abstract runtime guessing or alternate identity-field names are supported. Phase 9
+ID lists, abstract runtime guessing or alternate identity-field names are supported. Safe Query execution
 placeholder SUCCESS is **not required**. AST construction changes only the selected ID input,
 preserves other inputs/selections, and may add an omitted optional ID argument or direct `id`
 selection. One document is validated against all participating schemas. An exact target-URL
@@ -239,20 +230,20 @@ not normalized. Explicit HTTP/GraphQL authorization signals produce `EXPLICIT_DE
 mismatched IDs, generic errors and ambiguous partial data are `INDETERMINATE`. Transport failures
 are `NETWORK_FAILURE`. Neither denial nor return proves a general security policy.
 
-Every attempt uses a fresh isolated client/cookie jar and existing Phase 14 HTTP protections.
+Every attempt uses a fresh isolated client/cookie jar and existing target HTTP protections.
 There is no ID enumeration, increment/decrement, randomization, response harvesting, ownership
 inference, automatic BOLA/IDOR conclusion, Mutation, Subscription, alias, batch, concurrency or retry.
 Only direct returned ID equality is compared; unrelated business values never decide outcomes.
-Phase 19 never supplies cases to Phase 20 and retains its independent budget.
+nested authorization review never supplies cases to object authorization and retains its independent budget.
 
 Console, Markdown and HTML show cases, declarations, outcomes and manual-review guidance without
 dumping unrelated business responses. JSON adds optional `object_authorization_review`, including
 exact requests, outcomes, source references and lossless `OBJECT_AUTHORIZATION_PROBE` evidence
 only for actual attempts. No outgoing authentication configuration is recorded. Treat raw evidence
-as potentially sensitive. Safety Notice remains the final human-report section. With Phase 20
+as potentially sensitive. Safety Notice remains the final human-report section. With object authorization
 disabled, existing request sequences and report fields remain unchanged.
 
-Run the dedicated test-only loopback fixture and combined Phase 19/20 smoke:
+Run the dedicated test-only loopback fixture and combined nested/object authorization smoke:
 
 ```bash
 uv run python tests/fixtures/phase20_target.py --smoke
@@ -261,13 +252,13 @@ uv run python tests/fixtures/phase20_target.py --smoke
 Without `--smoke`, it prints a local URL. Fake `X-Test-Context: clienteA` and `clienteB` headers
 exercise shared object `123`, enforced object `456`, null `999`, and identity `mismatch`;
 object `100` is returned without supplied credentials. No real credentials or public targets are
-needed. Phase 21 adds optional local policy evaluation. Phase 22 is a separate ACTIVE capability;
+needed. Authorization policy validation adds optional local policy evaluation. Sequential object discovery is a separate ACTIVE capability;
 it never supplies cases or assertions to these SAFE stages automatically.
 
-## Phase 19 — Nested Authorization Review
+## Nested Authorization Review
 
 This optional capability belongs to **SAFE named-context scanning**, independently of the ACTIVE
-Phase 17/18 workflow. Run the usual independent SAFE scans and Phase 15 comparison, then opt in
+Query-shape/Query-depth validation workflow. Run the usual independent SAFE scans and named-context differential comparison, then opt in
 to bounded nested-path requests with `--nested-auth-review`:
 
 ```bash
@@ -276,11 +267,11 @@ gqlsleuth scan https://example.com/graphql --auth-context "client=Authorization:
 
 The same one-line syntax works in PowerShell. The flag requires 2–3 named contexts, cannot be
 combined with ACTIVE, `--header`, or `--ai`, and works non-interactively without confirmation.
-Without the flag, existing Phase 15 requests, results and report fields are unchanged.
+Without the flag, existing named-context differential review requests, results and report fields are unchanged.
 
 Runtime eligibility requires an actually attempted SUCCESS baseline Query in every context,
 structurally equivalent baseline documents and exactly identical variables. No new baseline is
-sent. Existing Phase 7 OUTPUT rules identify scalar/enum terminal fields after at least one
+sent. Existing operation analysis OUTPUT rules identify scalar/enum terminal fields after at least one
 composite relationship, for example `project.owner.email`. Input-only rules remain input-only.
 Traversal is local, deterministic, breadth-first and cycle-safe; unsupported abstract resolution,
 required nested business inputs, incompatible schemas and unsafe paths produce limitations.
@@ -290,7 +281,7 @@ and **one composite list edge in the entire Query** are allowed. Existing root s
 arguments, placeholders and variables are preserved. The shared bound helper may supply only a
 minimal optional quantity control of **1**. Unbounded new lists are skipped. One AST-built Query
 is validated against all retained schemas and sent unchanged to every context, sequentially,
-using fresh isolated clients/cookie jars and the existing Phase 14 transport policy. The hard
+using fresh isolated clients/cookie jars and the existing target HTTP transport policy. The hard
 maximum is **nine additional read-only requests** (three paths × three contexts), including
 transport failures, with no retries or fallback requests.
 
@@ -322,25 +313,24 @@ uv run python tests/fixtures/phase19_target.py --smoke
 Without `--smoke`, it prints a local URL; use `X-Test-Context: alpha`, `beta`, or `gamma` to exercise
 returned, denied and ambiguous observations. A `hidden` context provides reduced nested schema
 visibility. No public target or real credentials are needed. Object substitution and automated
-BOLA/IDOR validation remain outside this phase.
+BOLA/IDOR validation remain outside this capability's scope.
 
-## Phase 18 — Controlled Query Depth Validation
+## Controlled Query Depth Validation
 
-The ACTIVE workflow is: ordinary Phase 9 Queries → Phase 17 multiplicity checks → Phase 18
-bounded Query-depth check → Mutation interaction. Each active stage has its own explicit
+The ACTIVE workflow is: ordinary safe Queries → Query-shape checks → a bounded Query-depth check → Mutation interaction. Each active stage has its own explicit
 selection and default-NO confirmation. Enter selects none. SAFE, ACTIVE alone and
 non-interactive scans send zero depth probes. Named authentication contexts remain SAFE-only.
 
-At most one candidate per endpoint is constructed locally from a retained Phase 16 recursive
+At most one candidate per endpoint is constructed locally from a retained structural security review recursive
 witness and an already-attempted safe Query, preferring SUCCESS. A GRAPHQL_ERROR baseline may
 be used when structurally suitable; no new baseline request is sent. The AST transformation
 preserves the root arguments, exact variables, placeholders, anonymity and existing bounds. It
-traverses one retained cycle once, ending with `__typename`, and may reuse the Phase 8 optional
+traverses one retained cycle once, ending with `__typename`, and may reuse the Query generation optional
 quantity-bound helper to introduce only a minimal nested `limit=1` (or equivalent) path.
 Required nested business inputs, unsupported abstract paths, unsafe field names and new
 unbounded list expansion produce limitations instead of executable candidates.
 
-Hard limits: **one Phase 18 request per scan**, **constructed selection depth at most 6**, and
+Hard limits: **one Query-depth validation request per scan**, **constructed selection depth at most 6**, and
 **one composite list expansion in the complete document, including the root**. GQLSleuth counts
 field nodes from root through terminal leaf/`__typename`; this metric need not match a server's
 own depth calculation. No cycle repetition, progressive depth search, retries, concurrency,
@@ -355,7 +345,7 @@ controls, global protection or an exhaustion risk. No business values or timings
 Only attempted depth requests create `GRAPHQL_BEHAVIOR_PROBE` evidence, retaining source IDs,
 baseline/probe depths, path, exact Query/variables, response bytes and transport facts. Reports
 add **Controlled Query Depth Validation**, with bounded human response display and lossless JSON.
-Safety Notice remains last. Phase 18 adds nothing to AIContext and makes no Ollama call.
+Safety Notice remains last. Query-depth validation adds nothing to AIContext and makes no Ollama call.
 
 Run the test-only loopback smoke (accepted, rejected, indeterminate and unselected scenarios):
 
@@ -363,12 +353,12 @@ Run the test-only loopback smoke (accepted, rejected, indeterminate and unselect
 uv run python tests/fixtures/phase18_target.py --smoke
 ```
 
-Without `--smoke`, it prints a loopback URL for manual testing. Select no Phase 17 checks, select
+Without `--smoke`, it prints a loopback URL for manual testing. Select no Query-shape validation checks, select
 and confirm the depth candidate, then press Enter for no Mutations. No public target or real
 credentials are needed. General query-cost analysis and other future runtime checks remain out
 of scope.
 
-## Phase 17 — Controlled GraphQL Multiplicity Validation
+## Controlled GraphQL Multiplicity Validation
 
 Use `gqlsleuth scan https://example.com/graphql --mode active` only against an authorized target.
 After ordinary safe Query execution, ACTIVE previews two probe types per eligible endpoint:
@@ -376,14 +366,14 @@ After ordinary safe Query execution, ACTIVE previews two probe types per eligibl
 - **Alias Multiplicity:** exactly three deterministic aliases of one existing safe Query field.
 - **HTTP Batching:** exactly two identical Query/variables request objects in a JSON array.
 
-The representative Query is chosen from attempted Phase 9 results, preferring SUCCESS and then
+The representative Query is chosen from attempted safe Query execution results, preferring SUCCESS and then
 the existing retained Query order. Its exact arguments, variables, `limit=1` bounds and minimal
 selection are preserved. If none qualifies, the stage records a limitation without probing.
 
 Explicitly select individual comma-separated indices (maximum two), inspect the selected requests,
 and provide one final confirmation, default NO. Enter selects none; non-interactive runs execute
 none. ACTIVE alone authorizes no probes. The existing Mutation selection and confirmation remain
-independent and follow the separate Phase 18 depth stage. At most one Alias request and one Batch request may be attempted
+independent and follow the separate Query-depth validation stage. At most one Alias request and one Batch request may be attempted
 per scan; there are no retries, concurrency, threshold searches or configurable multiplicities.
 
 ACCEPTED, REJECTED and INDETERMINATE describe only this request shape and representative Query.
@@ -397,7 +387,7 @@ JSON, Markdown and HTML add **Controlled GraphQL Multiplicity Validation**, pres
 confirmation, decisions and observations. Attempted requests alone create `GRAPHQL_BEHAVIOR_PROBE`
 evidence with exact requests, response bytes and normalized transport errors. Human responses use
 the existing bounded renderer; canonical JSON preserves complete evidence. Safety Notice remains
-last. Phase 17 is excluded from AIContext and adds no Ollama call. Named authentication-context
+last. Query-shape validation is excluded from AIContext and adds no Ollama call. Named authentication-context
 scans remain SAFE-only and do not perform these probes.
 
 Run the controlled loopback acceptance/rejection/ambiguous smoke without public targets:
@@ -414,23 +404,23 @@ The `scan` command first makes conservative HTTP GET requests to endpoint candid
 those responses for signal analysis. An inconclusive candidate receives at most one static POST
 probe containing `query { __typename }`. Confirmed and probable GraphQL endpoints then receive a
 minimal introspection probe. When introspection is enabled, one complete static introspection
-query retrieves and preserves the raw HTTP response. Phase 6 validates that response with
-`graphql-core` and maps it into GQLSleuth-owned immutable schema models. Phase 7 then classifies
+query retrieves and preserves the raw HTTP response. Schema parsing validates that response with
+`graphql-core` and maps it into GQLSleuth-owned immutable schema models. Operation analysis then classifies
 Query and Mutation root fields with bundled, validated YAML rules and gives matching operations
 a deterministic interest score and review priority. It considers operation metadata plus one
 direct level of related input and output fields; it does not recursively inspect the schema.
 Rules explicitly declare whether they apply to primary, input, or output context, preventing an
 arbitrary returned field from being treated as evidence of the operation's purpose.
 
-Phase 8 generates one anonymous minimal GraphQL query for each Query-root field when possible.
+The generator creates one anonymous minimal GraphQL query for each Query-root field when possible.
 It normally omits optional/defaulted arguments, creates deterministic placeholder variables, and selects a
 small response field path with a maximum internal depth of three and cycle protection. Custom
 scalar placeholders use the string `"test"` and are marked as potentially requiring manual
 adjustment. SAFE generates Query documents only. ACTIVE reuses this same generation algorithm
 for Mutation-root fields after completing the safe workflow. Subscriptions are never generated.
 
-For collection Queries, Phase 8 may also populate one recognized optional `Int` quantity bound
-with **1**. It shares Phase 16's schema inspection of direct composite lists, one-level
+For collection Queries, Query generation may also populate one recognized optional `Int` quantity bound
+with **1**. It shares the structural review schema inspection of direct composite lists, one-level
 page/connection wrappers, and up to three input-object levels (for example,
 `options.paginate.limit`). Only that path and required inputs are populated; unrelated optional
 fields stay omitted. Recognized names are `first`, `last`, `limit`, `take`, `size`, `pageSize`,
@@ -454,7 +444,7 @@ HTTP timeout. A fallback POST is sent only when discovery received an inconclusi
 transport failures without a response proceed directly to the next candidate.
 An explicit `--timeout` overrides both discovery and subsequent target request timeouts.
 
-Phase 9 defensively validates each successful generated artifact against the parsed Query root
+Safe Query execution defensively validates each successful generated artifact against the parsed Query root
 before sending it sequentially. It executes at most 20 Query operations per scan and skips Query
 names containing explicit state-changing action tokens such as `delete`, `burn`, or `reset`.
 The safe workflow never executes Mutations or Subscriptions. Placeholder-related GraphQL errors are retained as
@@ -506,11 +496,11 @@ uv run gqlsleuth scan https://example.com --mode safe
 uv run gqlsleuth scan https://example.com --mode active
 ```
 
-ACTIVE first completes exactly the same Phase 3–9 workflow as SAFE. Selecting `--mode active`
+ACTIVE first completes exactly the same discovery-through-safe-execution workflow as SAFE. Selecting `--mode active`
 acknowledges entry into active capabilities for an authorized target; it does **not** authorize
 any Mutation request. There is no `--authorized`, `--yes`, or `--force` option.
 
-The active stage previews all Mutation candidates in retained Phase 7 order. Executable candidates
+The active stage previews all Mutation candidates in retained operation order. Executable candidates
 show their endpoint once per group, field name, review priority, categories, exact anonymous Mutation document,
 exact variables, and placeholder/manual-adjustment warnings. Failed generation and blocked
 candidates remain visible with their reasons. Destructive primary-name tokens `delete`, `remove`,
@@ -539,21 +529,21 @@ selections/confirmation cannot enable execution. A schema with no Mutations ends
 
 Only confirmed, selected, defensively validated and safety-approved Mutations execute. The
 application independently enforces ACTIVE mode and a hard maximum of five attempted Mutation
-requests, in retained Phase 7 order, sequentially. Each sends one POST containing only `query`
+requests, in retained operation order, sequentially. Each sends one POST containing only `query`
 and `variables` through the existing HTTP client, with its TLS, timeout, redirect, response-size,
 and normalized transport-error behavior. There are no retries, concurrency, or `operationName`.
 One failure does not stop later selected operations.
 
-Mutation responses reuse Phase 9 classifications: `SUCCESS` (including `data: null` without
+Mutation responses reuse safe Query execution classifications: `SUCCESS` (including `data: null` without
 interpretable errors), `GRAPHQL_ERROR` (including partial data), `HTTP_ERROR`, `INVALID_RESPONSE`,
 and `NETWORK_FAILURE`. Only attempted requests create `MUTATION_EXECUTION` evidence containing
 ACTIVE mode, the exact request, timestamp, response facts or normalized failure, duration,
-classification, and Phase 7 analysis. Generation failures, invalid artifacts, safety blocks,
+classification, and operation analysis. Generation failures, invalid artifacts, safety blocks,
 unselected/declined operations, and limit skips remain structured decisions with no fabricated
 execution evidence. Success is not a vulnerability finding or proof of authorization bypass.
 
 Default console output is compact: target/mode, endpoint confidence and introspection status,
-schema counts, the first ten review candidates in existing Phase 7 order, Query-generation totals,
+schema counts, the first ten review candidates in existing operation order, Query-generation totals,
 and execution counts with up to five noteworthy error/skip outcomes. Review candidates show
 interest priority, kind, name, and score. The console does not dump generated Queries or rule
 explanations by default. Structured results retain all operations and evidence.
@@ -592,9 +582,9 @@ possible outcomes.
 
 ## GraphQL structural security review
 
-**GraphQL Security Review** complements Phase 7 semantic interest ranking with deterministic
+**GraphQL Security Review** complements semantic operation interest ranking with deterministic
 schema analysis. It runs after schema/operation analysis and before existing Query generation,
-in SAFE and ACTIVE scans and independently within each Phase 15 named context. It needs no AI,
+in SAFE and ACTIVE scans and independently within each named request context. It needs no AI,
 adds **zero HTTP requests or GraphQL operations**, and preserves all existing Query/Mutation
 generation, safety, selection, limits, ordering, and execution classifications.
 
@@ -610,11 +600,11 @@ The implemented review candidates are:
 | `RECURSIVE_GRAPH_REVIEW` | Query-reachable output cycle includes a list-valued composite relationship. |
 | `FLEXIBLE_SCALAR_INPUT_REVIEW` | Root Query/Mutation input directly or indirectly reaches `JSON`, `JSONObject`, `Any`, or `Map`. |
 | `COMPLEX_INPUT_REVIEW` | Root input reaches a recursive input-object relationship or more than four consecutively required input objects. |
-| `DEPRECATED_SECURITY_RELEVANT_OPERATION` | Deprecated Query/Mutation already has non-zero Phase 7 interest. |
+| `DEPRECATED_SECURITY_RELEVANT_OPERATION` | Deprecated Query/Mutation already has non-zero review interest. |
 
 These are **manual-review candidates, not vulnerability findings**. Absence of an obvious schema
 control does not prove absence of runtime enforcement. Pagination arguments do not prove correct
-limits either. No new priority or severity score is introduced; related Phase 7 interest remains
+limits either. No new priority or severity score is introduced; related review interest remains
 unchanged. No IDs are varied, no upload/subscription/federation probes or depth/cost attacks are
 introduced, and no server vendor is inferred. Existing SAFE Query behavior remains unchanged.
 
@@ -625,7 +615,7 @@ are inspected breadth-first, up to **three input-object levels** (the root argum
 is level one), with cycle protection and the existing type/relationship budgets. For example,
 `options.paginate.limit` is a schema signal even when both inputs are optional.
 
-Generated Queries normally omit optional arguments, except recognized quantity bounds. Phase 16 inspects schema arguments rather than
+Generated Queries normally omit optional arguments, except recognized quantity bounds. Structural security review inspects schema arguments rather than
 generated documents when determining whether an obvious bounding mechanism exists.
 Pagination/bounding arguments are schema signals only; their presence does not prove runtime
 enforcement. Returned item counts never influence this static rule.
@@ -652,11 +642,11 @@ deduplicated by type, endpoint, and subject, ordered by the candidate types abov
 and subject. Multiple paths to the same scalar/input cycle do not duplicate candidates.
 
 Console output is compact (up to ten candidates); verbose output includes supporting facts and
-manual guidance. JSON adds `graphql_security_review` with complete facts, related Phase 7
+manual guidance. JSON adds `graphql_security_review` with complete facts, related operation analysis
 metadata, limitations, and existing schema-evidence IDs. Markdown/HTML add the same review with
 bounded supporting paths, and keep Safety Notice last. Named-context reports present each
-context's review separately; Phase 15 pairwise comparisons do not compare Phase 16 candidate sets.
-AI input and the one-inference behavior are unchanged; no Phase 16 data is sent to Ollama.
+context's review separately; named-context differential review pairwise comparisons do not compare structural security review candidate sets.
+AI input and the one-inference behavior are unchanged; no structural security review data is sent to Ollama.
 
 Run the test-only metadata fixture and generate all report formats locally:
 
@@ -668,6 +658,37 @@ This loads `tests/fixtures/phase16_schema.graphql` locally and verifies all nine
 It includes page collections with no bound, a direct `limit`, and nested `options.paginate.limit`.
 Network/operation guards prevent target requests or execution; no credentials or public target
 are needed. Full SAFE/ACTIVE request equivalence is separately checked with offline transports.
+
+### Object Lookup follow-up guidance
+
+Verbose console output and human reports show short follow-up templates for structurally
+compatible Object Lookup candidates. For `order(id: ID!): Order` with a direct `id: ID!` output:
+
+```text
+Suggested follow-up:
+
+  Object authorization:
+    --object-auth-case "order:id=<ID>"
+
+  Differential object authorization:
+    --object-auth-case "<CONTEXT>:order:id=<ID>"
+
+  Sequential object discovery:
+    --idor-seed "order:id=<NUMERIC_ID>"
+```
+
+Supply a known runtime object identifier. Schema analysis does not establish which IDs are valid.
+`<ID>` and `<NUMERIC_ID>` must be replaced by the tester, never by generated Query placeholders.
+`<CONTEXT>` is an operator-supplied label, not an inferred owner. Use `--object-auth-review` for
+object authorization; sequential object discovery requires `--mode active --idor-discovery` and
+a known canonical numeric ID. A compatible schema does not prove IDs are numeric or sequential.
+
+Hints reuse the runtime capabilities' shared structural eligibility check and add **zero requests
+or GraphQL operations**. Unsupported shapes and ambiguous identifier arguments receive no
+ready-to-use template; their original structural review candidates remain unchanged. This is
+investigation guidance, not a vulnerability finding. Canonical JSON adds capability-named
+`object_lookup_follow_up` metadata only where hints exist. Hints contain no runtime IDs or
+authentication settings, create no evidence and are excluded from AIContext.
 
 ## Reports
 
@@ -767,7 +788,7 @@ excluded to keep the input purely structural. This is a dedicated projection, no
 redaction subsystem; existing scanner evidence is untouched.
 
 Input is limited to **20 operations** and **12,000 serialized UTF-8 bytes**, prioritizing existing
-Phase 7 interest rankings. Operation names longer than 128 characters are omitted; at most ten
+operation interest rankings. Operation names longer than 128 characters are omitted; at most ten
 schema summaries are included. Size reduction removes lower-priority schema summaries before
 operations. Metadata explicitly records included/omitted operations and context truncation.
 
@@ -808,7 +829,7 @@ not rewritten. Model text is rendered as untrusted text, never interpreted as Ri
 ## Configuration
 
 Configuration uses CLI options and built-in defaults only. `--mode safe` remains the default.
-Phase 14 supports **one authentication/request context per scan**, through user-supplied headers:
+target HTTP configuration supports **one authentication/request context per scan**, through user-supplied headers:
 
 ```bash
 uv run gqlsleuth scan https://example.com -H "Authorization: Bearer TOKEN" -H "X-Tenant-ID: 123"
@@ -854,7 +875,7 @@ reports add no request-header-values section. Existing server response presentat
 Treat reports as potentially sensitive pentest artifacts. Canonical JSON preserves existing
 evidence, including exact variables and response headers/bodies, which may contain credentials
 or echoed request information. Current evidence does **not** retain request headers or target
-HTTP configuration; Phase 14 neither adds those fields nor removes existing facts. There is no
+HTTP configuration; target HTTP configuration neither adds those fields nor removes existing facts. There is no
 generic automatic redaction. Store reports securely and never commit real credentials/evidence.
 
 Environment variables and configuration files are not supported yet. They remain deferred
@@ -864,7 +885,7 @@ until the project has enough settings to justify multiple configuration sources.
 
 GraphQL does not imply Bearer authentication, JWT, or any particular role. A context is simply
 a tester-defined label and zero or more HTTP headers. Bearer, Cookie, API key, tenant, and
-proprietary headers use the same Phase 14 header parser and transport protections:
+proprietary headers use the same target header parser and transport protections:
 
 ```bash
 uv run gqlsleuth scan https://example.com/graphql --auth-context public --auth-context "cliente=Authorization: Bearer TOKEN"
@@ -919,7 +940,7 @@ may explain it. Manual validation is required. There are no authorization Findin
 analysis, automatic login/token acquisition, BOLA/IDOR tests, ID enumeration, ownership inference,
 or cross-context variable substitution. Use only against systems you are authorized to test.
 
-### Controlled local Phase 15 validation
+### Controlled local differential review validation
 
 A test-only GraphQL-like fixture uses no real credentials or public service. Run the complete
 local smoke (starts a loopback server, runs three SAFE contexts, writes all formats, then stops):

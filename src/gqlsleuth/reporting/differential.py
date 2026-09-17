@@ -156,7 +156,11 @@ def differential_sections(report: DifferentialReportContext) -> tuple[ReportSect
         )
         if scan and scan.graphql_security_review is not None:
             sections.append(
-                security_review_section(scan.graphql_security_review, context=context.name)
+                security_review_section(
+                    scan.graphql_security_review,
+                    context=context.name,
+                    follow_ups=scan.object_lookup_follow_up or (),
+                )
             )
     for pair in report.pairs:
         entries = []

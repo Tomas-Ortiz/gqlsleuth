@@ -7,13 +7,14 @@ from gqlsleuth.domain.authorization_policy import (
     AuthorizationPolicyResult,
     PolicyStatus,
 )
+from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection
 
 
 def authorization_policy_section(result: AuthorizationPolicyResult) -> ReportSection:
     return ReportSection(
         "Authorization Policy Validation",
-        paragraphs=(POLICY_NOTICE, *result.limitations),
+        paragraphs=tuple(capability_wording(text) for text in (POLICY_NOTICE, *result.limitations)),
         rows=(
             ("Operator-supplied DENY assertions", str(len(result.assertions))),
             ("Policy violations", str(len(result.violations))),
@@ -32,7 +33,7 @@ def authorization_policy_section(result: AuthorizationPolicyResult) -> ReportSec
                     ("Policy provenance", "OPERATOR_SUPPLIED"),
                     ("Expected policy", "DENY"),
                     (
-                        "Observed Phase 20 outcome",
+                        "Observed object authorization outcome",
                         item.observed.value.upper() if item.observed else "NOT_OBSERVED",
                     ),
                     ("Evaluation", item.status.value.upper()),
@@ -42,9 +43,9 @@ def authorization_policy_section(result: AuthorizationPolicyResult) -> ReportSec
                     if item.status is PolicyStatus.VIOLATED
                     else ()
                 )
-                + (item.reason,),
+                + (capability_wording(item.reason),),
                 evidence_references=tuple(
-                    ("Phase 20 evidence", str(identifier))
+                    ("Object authorization evidence", str(identifier))
                     for identifier in item.source_evidence_ids
                 ),
             )

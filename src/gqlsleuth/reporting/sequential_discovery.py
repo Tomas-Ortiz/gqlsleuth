@@ -3,6 +3,7 @@
 import json
 
 from gqlsleuth.domain.sequential_discovery import SEQUENTIAL_NOTICE, SequentialDiscoveryResult
+from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection
 
 
@@ -65,7 +66,7 @@ def sequential_discovery_section(result: SequentialDiscoveryResult) -> ReportSec
             )
     return ReportSection(
         "Bounded Sequential Object Discovery",
-        paragraphs=(SEQUENTIAL_NOTICE, *result.limitations),
+        paragraphs=(capability_wording(SEQUENTIAL_NOTICE), *result.limitations),
         rows=(
             (
                 "Context",

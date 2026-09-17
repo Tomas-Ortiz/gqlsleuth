@@ -12,6 +12,7 @@ from gqlsleuth.domain.query_depth import (
     QueryDepthProbePreview,
     QueryDepthValidationResult,
 )
+from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.console import _document, _section
 from gqlsleuth.presentation.responses import ResponsePresentation, present_response_body
 
@@ -88,6 +89,6 @@ def render_query_depth(
                 )
                 if response.body.notice:
                     console.print(response.body.notice, markup=False)
-            console.print(item.reason, markup=False)
+            console.print(capability_wording(item.reason), markup=False)
     for limitation in result.limitations:
         console.print(limitation, markup=False)

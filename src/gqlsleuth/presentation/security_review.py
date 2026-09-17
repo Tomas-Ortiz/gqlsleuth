@@ -1,6 +1,7 @@
 """Human labels and bounded facts shared by deterministic security review views."""
 
 from gqlsleuth.domain.security_review import GraphQLSecurityReviewCandidate, SecurityCandidateType
+from gqlsleuth.presentation.capabilities import capability_wording
 
 
 def candidate_label(kind: SecurityCandidateType) -> str:
@@ -21,7 +22,7 @@ def candidate_summary(candidate: GraphQLSecurityReviewCandidate) -> str:
         SecurityCandidateType.FLEXIBLE_SCALAR_INPUT_REVIEW: "Broad custom scalar input",
         SecurityCandidateType.COMPLEX_INPUT_REVIEW: "Recursive/deep required input structure",
         SecurityCandidateType.DEPRECATED_SECURITY_RELEVANT_OPERATION: (
-            "Deprecated with Phase 7 interest"
+            "Deprecated with review interest"
         ),
     }[candidate.candidate_type]
 
@@ -29,7 +30,8 @@ def candidate_summary(candidate: GraphQLSecurityReviewCandidate) -> str:
 def candidate_facts(candidate: GraphQLSecurityReviewCandidate) -> tuple[str, ...]:
     """Canonical JSON retains every fact; human displays bound long paths/name lists."""
     facts = tuple(
-        text if len(text) <= 400 else text[:397] + "..." for text in candidate.supporting_facts[:8]
+        capability_wording(text if len(text) <= 400 else text[:397] + "...")
+        for text in candidate.supporting_facts[:8]
     )
     if len(candidate.supporting_facts) > 8:
         facts += ("Additional supporting facts are retained in JSON.",)

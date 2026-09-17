@@ -7,6 +7,7 @@ from rich.table import Table
 from rich.text import Text
 
 from gqlsleuth.domain.sequential_discovery import SEQUENTIAL_NOTICE, SequentialDiscoveryResult
+from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.console import _document, _section
 
 
@@ -73,4 +74,4 @@ def render_sequential_discovery(
                 )
     for limitation in result.limitations:
         console.print(Text(limitation))
-    console.print(Text(SEQUENTIAL_NOTICE))
+    console.print(Text(capability_wording(SEQUENTIAL_NOTICE)))

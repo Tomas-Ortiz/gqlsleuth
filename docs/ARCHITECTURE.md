@@ -2013,6 +2013,39 @@ Offline tests also compare complete SAFE/ACTIVE request sequences with local rev
 verify immutable evidence/Phase 7/AI input, and retain all Phase 14/15 regression checks.
 Phase 16 itself adds no runtime requests or dependencies.
 
+#### Object Lookup follow-up guidance (presentation enhancement)
+
+This is a Phase 16 UX/integration refinement, not a new roadmap phase. The pure
+`presentation/object_lookup.py` projection combines existing OBJECT_LOOKUP_REVIEW candidates
+with retained ParsedSchema objects. It calls `graphql.object_authorization.object_fields`, the
+same structural gate used by both Phase 20 and Phase 22 through `build_object_query`. No separate
+compatibility algorithm, network call, Query generation, execution or Evidence is introduced.
+
+Each root argument is checked through that gate. Exactly one accepted argument yields a hint;
+zero accepted arguments or multiple equally eligible arguments omit guidance rather than guess.
+Runtime callers still explicitly choose their argument and their eligibility is unchanged.
+Compatibility describes structure only: later runtime identifiers, artifact validation, context
+configuration and consent remain necessary. Sequential compatibility is valid because both
+current capabilities use this same gate, not because object authorization implies it in general.
+
+The projection preserves endpoint, root/argument and rendered types, capability-named compatibility
+fields and literal templates `operation:argument=<ID>`, `<CONTEXT>:operation:argument=<ID>` and
+`operation:argument=<NUMERIC_ID>`. No Phase 8 value or response data is consulted. Neither valid
+IDs nor numeric/sequential identity semantics, object ownership or intended policy are inferred.
+
+Compact console output remains unchanged. Verbose review shows Suggested follow-up with short
+CLI fragments and a reminder to supply known identifiers. Markdown/HTML share the same projection
+and templates. Report schema version 1 gains optional `object_lookup_follow_up` metadata, omitted
+when empty; named-context reports derive it separately for each retained schema. The original
+candidate objects, ordering, scores, facts, evidence references and canonical review data remain
+unchanged. Safety Notice stays final once; AIContext and inference counts remain unchanged.
+
+Human terminology deliberately uses **Object authorization**, **Differential object authorization**,
+**Authorization policy validation**, and **Sequential object discovery**, never roadmap numbers.
+Legacy stage labels in related human notices/reasons are translated only at presentation boundaries;
+canonical retained results/evidence keep their original text. README usage follows capability names;
+architecture/developer history may continue using phase numbers. No Phase 23+ behavior is added.
+
 ### Phase 17 — Controlled GraphQL Multiplicity Validation
 
 Implemented as a separate ACTIVE-only stage after ordinary Phase 9 Queries and before the

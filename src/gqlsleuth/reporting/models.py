@@ -19,6 +19,7 @@ from gqlsleuth.domain.schema import SchemaSummary
 from gqlsleuth.domain.security_review import GraphQLSecurityReviewResult
 from gqlsleuth.domain.sequential_discovery import SequentialDiscoveryResult
 from gqlsleuth.infrastructure.http import HttpResponse
+from gqlsleuth.presentation.object_lookup import ObjectLookupFollowUpHint
 
 
 class ReportFormat(StrEnum):
@@ -109,6 +110,7 @@ class ReportContext:
     sequential_object_discovery: SequentialDiscoveryResult | None = None
     object_authorization_review: ObjectAuthorizationResult | None = None
     authorization_policy_validation: AuthorizationPolicyResult | None = None
+    object_lookup_follow_up: tuple[ObjectLookupFollowUpHint, ...] | None = None
 
 
 @dataclass(frozen=True)

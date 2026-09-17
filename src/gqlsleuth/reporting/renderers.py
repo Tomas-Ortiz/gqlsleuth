@@ -87,6 +87,7 @@ def _json_value(value: object) -> JsonValue:
                     "nested_authorization_review",
                     "object_authorization_review",
                     "authorization_policy_validation",
+                    "object_lookup_follow_up",
                 }
                 and getattr(value, field.name) is None
             )

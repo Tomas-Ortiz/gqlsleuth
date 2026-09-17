@@ -11,6 +11,7 @@ from gqlsleuth.domain.authorization_policy import (
     AuthorizationPolicyResult,
     PolicyStatus,
 )
+from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.console import _section
 
 
@@ -45,7 +46,7 @@ def render_authorization_policy(
             console.print(
                 Text(
                     f"Case {item.case.index}, context {item.assertion.context}: "
-                    f"{prefix}{item.reason}"
+                    f"{prefix}{capability_wording(item.reason)}"
                 )
             )
         if verbose:
@@ -56,7 +57,7 @@ def render_authorization_policy(
                 )
             )
             for identifier in item.source_evidence_ids:
-                console.print(Text(f"Phase 20 evidence: {identifier}"))
+                console.print(Text(f"Object authorization evidence: {identifier}"))
     for limitation in result.limitations:
-        console.print(Text(limitation))
-    console.print(Text(POLICY_NOTICE))
+        console.print(Text(capability_wording(limitation)))
+    console.print(Text(capability_wording(POLICY_NOTICE)))

@@ -16,6 +16,7 @@ from gqlsleuth.domain.active import MutationDecision
 from gqlsleuth.domain.analysis import InterestPriority, OperationCategory
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType
 from gqlsleuth.domain.query_generation import OperationGenerationResult
+from gqlsleuth.presentation.object_lookup import object_lookup_follow_ups
 from gqlsleuth.reporting.models import (
     ActiveReport,
     EndpointReport,
@@ -144,6 +145,15 @@ def build_report(
         safety_notice=SAFETY_NOTICE,
         ai_interpretation=ai_interpretation,
         graphql_security_review=safe.query_generation.security_review,
+        object_lookup_follow_up=object_lookup_follow_ups(
+            safe.query_generation.security_review,
+            {
+                item.endpoint: item.schema
+                for item in schema_scan.schemas
+                if item.success and item.schema is not None
+            },
+        )
+        or None,
         object_authorization_review=safe.object_authorization_review,
         authorization_policy_validation=safe.authorization_policy_validation,
         multiplicity=result.multiplicity if isinstance(result, ActiveExecutionScanResult) else None,
