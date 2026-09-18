@@ -23,6 +23,7 @@ from gqlsleuth.application.active_execution import (
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.authorization_policy import evaluate_authorization_policy
 from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
+from gqlsleuth.application.idor import IdorSession
 from gqlsleuth.application.multiplicity import execute_multiplicity, prepare_multiplicity
 from gqlsleuth.application.mutation_authorization import MutationAuthorizationSession
 from gqlsleuth.application.object_authorization import run_object_authorization_scan
@@ -38,6 +39,7 @@ from gqlsleuth.application.sequential_discovery import (
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.authorization_policy import parse_policy_assertions
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
+from gqlsleuth.domain.idor import IdorDetectionResult
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
 from gqlsleuth.domain.mutation_authorization import (
@@ -72,6 +74,7 @@ from gqlsleuth.presentation.console import (
     render_scan,
     render_state_warning,
 )
+from gqlsleuth.presentation.idor import render_idor
 from gqlsleuth.presentation.multiplicity import render_multiplicity, render_probe_previews
 from gqlsleuth.presentation.mutation_authorization import render_mutation_authorization
 from gqlsleuth.presentation.query_depth import render_depth_previews, render_query_depth
@@ -224,7 +227,8 @@ def scan(
             help=(
                 "Compare 2–3 user-named HTTP contexts in SAFE mode. Repeat a label to add headers; "
                 "a bare label has no supplied headers. Labels imply no privilege order. "
-                "Cannot combine with --header, ACTIVE, or --ai. Default: disabled."
+                "One header-bearing label is allowed with ACTIVE --idor-review only. "
+                "Cannot combine with --header or --ai. Default: disabled."
             ),
         ),
     ] = None,
@@ -369,6 +373,19 @@ def scan(
             ),
         ),
     ] = None,
+    idor_review: Annotated[
+        bool,
+        typer.Option(
+            "--idor-review",
+            rich_help_panel="IDOR / BOLA Detection",
+            help=(
+                "ACTIVE bounded IDOR/BOLA testing with separate confirmation. Anonymous: seed "
+                "and neighbors expected DENY. Supplied context: seed ALLOW baseline, neighbors "
+                "DENY. These are operator policy assumptions. Default: disabled."
+            ),
+            show_default=False,
+        ),
+    ] = False,
     idor_discovery: Annotated[
         bool,
         typer.Option(
@@ -387,7 +404,10 @@ def scan(
             "--idor-seed",
             metavar="OPERATION:ARGUMENT=ID",
             rich_help_panel="Active Object Discovery",
-            help="Canonical unsigned decimal seed; repeat up to two. Requires --idor-discovery.",
+            help=(
+                "Canonical unsigned decimal seed; repeat up to two. "
+                "Requires --idor-discovery or --idor-review."
+            ),
         ),
     ] = None,
 ) -> None:
@@ -420,13 +440,23 @@ def scan(
         mutation_cases = (
             parse_mutation_cases(mutation_auth_case or []) if mutation_auth_review else ()
         )
-        if idor_seed is not None and not idor_discovery:
-            raise GQLSleuthError("--idor-seed requires --idor-discovery.")
+        if idor_review and (mode is not ScanMode.ACTIVE or idor_discovery):
+            raise GQLSleuthError(
+                "--idor-review requires ACTIVE mode and cannot combine with --idor-discovery."
+            )
+        if idor_review and not idor_seed:
+            raise GQLSleuthError("--idor-review requires --idor-seed.")
+        if idor_review and nested_auth_review:
+            raise GQLSleuthError("IDOR/BOLA does not perform named-context differential review.")
+        if idor_seed is not None and not (idor_discovery or idor_review):
+            raise GQLSleuthError("--idor-seed requires --idor-discovery or --idor-review.")
         if idor_discovery and (mode is not ScanMode.ACTIVE or auth_context is not None):
             raise GQLSleuthError(
                 "--idor-discovery requires ACTIVE single-context mode without --auth-context."
             )
-        discovery_seeds = parse_discovery_seeds(idor_seed or []) if idor_discovery else ()
+        discovery_seeds = (
+            parse_discovery_seeds(idor_seed or []) if idor_discovery or idor_review else ()
+        )
         if expect_deny is not None and not auth_policy_review:
             raise GQLSleuthError("--expect-deny requires --auth-policy-review.")
         if auth_policy_review and not object_auth_review:
@@ -443,7 +473,12 @@ def scan(
             )
         contexts = (
             map_auth_context_inputs(
-                auth_context, headers=headers, mode=mode, ai=ai, object_review=object_auth_review
+                auth_context,
+                headers=headers,
+                mode=mode,
+                ai=ai,
+                object_review=object_auth_review,
+                idor_review=idor_review,
             )
             if auth_context is not None
             else None
@@ -473,6 +508,10 @@ def scan(
         http_settings = map_target_http_inputs(
             headers=headers, timeout=timeout, verify_tls=verify_tls, proxy=proxy
         )
+        idor_context_label = None
+        if idor_review and contexts is not None:
+            idor_context_label = contexts[0].name
+            http_settings = http_settings.model_copy(update={"custom_headers": contexts[0].headers})
         if not http_settings.verify_tls:
             console.print(
                 "WARNING: TLS certificate verification is disabled for target requests.",
@@ -488,7 +527,7 @@ def scan(
                 http_settings=http_settings,
                 nested_auth_review=nested_auth_review,
             )
-        elif contexts is not None:
+        elif contexts is not None and not idor_review:
             if nested_auth_review:
                 result = run_differential_scan(
                     target,
@@ -552,6 +591,25 @@ def scan(
     schema_scan = result.query_generation.operation_analysis.schema_scan
     mode = schema_scan.introspection.detection.discovery.mode
     report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result
+    if idor_context_label is not None:
+        # This exception enters only the IDOR capability, never other named-context ACTIVE stages.
+        detection = _run_idor_stage(
+            result,
+            seeds=discovery_seeds,
+            http_settings=http_settings,
+            context_label=idor_context_label,
+            verbose=verbose,
+        )
+        report_result = ActiveExecutionScanResult(
+            ActiveMutationPreviewResult(result, ()),
+            (),
+            False,
+            (),
+            (),
+            idor_bola_detection=detection,
+        )
+        _finish_reports(report_result, report_formats, output)
+        return
     if mode is ScanMode.ACTIVE:
         multiplicity = _run_multiplicity_stage(result, http_settings=http_settings, verbose=verbose)
         query_depth = _run_depth_stage(result, http_settings=http_settings, verbose=verbose)
@@ -560,6 +618,13 @@ def scan(
                 result, seeds=discovery_seeds, http_settings=http_settings, verbose=verbose
             )
             if idor_discovery
+            else None
+        )
+        idor_detection = (
+            _run_idor_stage(
+                result, seeds=discovery_seeds, http_settings=http_settings, verbose=verbose
+            )
+            if idor_review
             else None
         )
         mutation_authorization = (
@@ -581,6 +646,7 @@ def scan(
             sequential_object_discovery=sequential,
             mutation_authorization=mutation_authorization,
             sensitive_input_validation=sensitive_validation,
+            idor_bola_detection=idor_detection,
         )
     ai_result = None
     if ai:
@@ -673,6 +739,38 @@ def _run_multiplicity_stage(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
     render_multiplicity(console, result, verbose=verbose)
+    return result
+
+
+def _run_idor_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    seeds: tuple[SequentialDiscoverySeed, ...],
+    http_settings: HttpClientSettings,
+    context_label: str | None = None,
+    verbose: bool = False,
+) -> IdorDetectionResult:
+    session = IdorSession(
+        safe,
+        seeds=seeds,
+        enabled=True,
+        http_settings=http_settings,
+        context_label=context_label,
+    )
+    preview = session.preview
+    render_idor(console, preview, preview=True, verbose=verbose)
+    confirmed = False
+    if not preview.probes:
+        console.print("No eligible IDOR/BOLA requests.")
+    elif not _interactive_stdin():
+        console.print("Interactive confirmation is required; zero IDOR/BOLA requests execute.")
+    else:
+        try:
+            confirmed = typer.confirm("Execute IDOR / BOLA detection?", default=False)
+        except (typer.Abort, EOFError, KeyboardInterrupt):
+            console.print("IDOR/BOLA confirmation cancelled.")
+    result = session.execute(preview=preview, confirmed=confirmed)
+    render_idor(console, result, verbose=verbose)
     return result
 
 

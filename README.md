@@ -19,14 +19,96 @@ and explicit authorization policy validation. Local structural and Sensitive Inp
 no target requests.
 
 ACTIVE mode offers independently confirmed Query-shape checks, Query-depth checks, bounded
-sequential object discovery, Mutation authorization validation, Sensitive Input Validation and explicitly selected Mutation
-execution. Reports support JSON,
+sequential object discovery, IDOR/BOLA detection, Mutation authorization validation,
+Sensitive Input Validation and explicitly selected Mutation execution. Reports support JSON,
 Markdown and HTML; optional local interpretation uses Ollama and `qwen3:8b`. Console output is
 compact by default, with detailed output available through `--verbose`.
 
 Target HTTP headers, authentication, timeouts, proxy and TLS settings remain separate from local
 Ollama. Review candidates require manual validation and are not vulnerability findings. Developer
 roadmap details are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## IDOR / BOLA Detection
+
+This opt-in ACTIVE workflow tests an **operator-supplied object authorization expectation**
+using a known numeric seed and only its immediate valid `-1` and `+1` neighbors.
+Use it only on systems you are authorized to test.
+
+Anonymous testing:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --idor-review --idor-seed "order:id=123"
+```
+
+By enabling this workflow, you declare that access to the seed and generated neighbors must
+be **DENIED** without supplied authentication. Do not use that assumption for intentionally
+public objects. An exactly matching returned object contradicts that explicit expectation.
+
+One supplied authenticated request context:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --auth-context "usuario=Authorization: Bearer TOKEN" --idor-review --idor-seed "order:id=123"
+```
+
+Here the seed is the expected accessible **ALLOW baseline**. Only when the exact seed object is
+returned may the immediate neighbors run. Those alternate IDs are operator-expected **DENY**.
+A successful baseline is never a Finding. An unusable baseline skips its neighbors.
+
+`usuario` is an opaque label, not a role. Repeat that same label to add Cookie, API key, tenant
+or proprietary headers using the existing header parser. Exactly one header-bearing context is
+allowed here; omit the context entirely for anonymous testing. Ordinary `-H` remains supported
+and uses the supplied-context baseline policy. Header presence selects this policy; it does not
+prove that a server accepted authentication. No authentication mechanism or privilege hierarchy
+is inferred. Mixing `-H` and `--auth-context` remains rejected.
+
+This is a narrow exception to normal SAFE named-context cardinality. It performs one normal
+safe Query pipeline followed by IDOR/BOLA validation, with **no differential comparison, other
+ACTIVE stages, generic Mutation stage or AI call** on the single named-context route. Existing
+ordinary ACTIVE scans retain their independently confirmed stages. Named-context `--ai` is
+rejected; the AI context and inference behavior for existing scans are unchanged.
+
+- Reuse `--idor-seed OPERATION:ARGUMENT=VALUE`, at most two seeds, in supplied order.
+- Identifiers must be canonical unsigned decimal text in `0..9223372036854775807`; no signs,
+  leading zeroes, UUIDs or ranges. Zero plans `0,1`; the maximum omits its overflowing neighbor.
+- Eligibility requires a safe Query, direct `ID`/`ID!` argument, concrete non-list output and
+  direct `id: ID`/`ID!`. Existing AST validation/substitution preserves unrelated inputs,
+  selections, collection bounds and placeholders.
+- The preview shows context, policy, exact planned identifiers and maximum requests. One separate
+  **Execute IDOR / BOLA detection? [y/N]** confirmation defaults to NO. Non-interactive runs send
+  zero IDOR requests. Other confirmations never authorize these requests.
+- Maximum six attempted probes: baseline then at most two immediate neighbors per seed. Transport
+  failures consume attempts. No retries, concurrency, recursive expansion, response-derived IDs,
+  random identifiers, range scans or automatic handoff to Mutation capabilities.
+- `--idor-discovery` remains the lower-level observation capability. Choose it or `--idor-review`;
+  the two switches cannot be combined in one scan.
+
+| Policy / outcome | Result |
+| --- | --- |
+| ALLOW baseline + TARGET_RETURNED | BASELINE_CONFIRMED; no Finding |
+| ALLOW baseline + any other outcome | BASELINE_UNUSABLE; no neighbors or Finding |
+| DENY + TARGET_RETURNED | VIOLATED; OBJECT_LEVEL_AUTHORIZATION_FAILURE / IDOR-BOLA Finding |
+| DENY + EXPLICIT_DENIAL | SATISFIED for this exact request |
+| DENY + INDETERMINATE or NETWORK_FAILURE | UNRESOLVED; no Finding |
+
+Identity uses only the direct returned root `id`, with existing exact textual/integer semantics.
+Unrelated business fields cannot confirm access. **Findings depend on your DENY expectation**:
+GQLSleuth does not know whether an alternate object is legitimately accessible or shared, and does
+not infer ownership, identities, tenancy or intended business policy. Validate that expectation
+manually. No severity, CVSS, CWE or broader impact is assigned.
+
+JSON adds `idor_bola_detection` only when enabled, preserving plans, policies, outcomes, Findings
+and exact attempt evidence. Markdown/HTML include **IDOR / BOLA Detection** and, when applicable,
+**IDOR / BOLA Findings**; Safety Notice remains last. Each Finding references its exact attempt,
+plus the confirmed baseline for authenticated alternates. Only actual probes create
+`IDOR_BOLA_PROBE` evidence. Outgoing authentication values/settings never enter these results or
+human output; retained response evidence may still contain application data. IDOR data is excluded
+from AIContext. Reporting performs no additional requests.
+
+For deterministic development checks using only loopback and fake credentials:
+
+```bash
+uv run python tests/fixtures/phase25_target.py --smoke
+```
 
 ## Sensitive Input Review and Validation
 
@@ -258,11 +340,12 @@ policy remain unknown; predictable identifiers alone do not establish a weakness
 The current single target HTTP context is reused, either without supplied headers or with
 repeated `-H` headers (Bearer, Cookie, API key or custom mechanisms). Supplied headers do not prove
 authentication. Existing timeout/TLS/proxy/redirect protections remain. Named `--auth-context`
-scans remain SAFE-only and cannot be used here. Sequential object discovery does not run object authorization or authorization policy validation:
+scans cannot be used for this lower-level discovery capability; the single named-context ACTIVE
+exception is limited to IDOR/BOLA Detection. Sequential object discovery does not run object authorization or authorization policy validation:
 the tester must explicitly supply a discovered ID to a **separate SAFE object authorization scan**, then
 optionally add authorization policy validation DENY assertions. No case/policy creation or cross-context follow-up occurs.
 
-The ACTIVE order is normal Queries → Query-shape validation → Query-depth validation → optional sequential object discovery → optional Mutation authorization → optional Sensitive Input Validation → generic Mutations →
+The ordinary ACTIVE order is normal Queries → Query-shape validation → Query-depth validation → optional sequential object discovery or IDOR/BOLA Detection → optional Mutation authorization → optional Sensitive Input Validation → generic Mutations →
 optional AI/reports. Each ACTIVE capability keeps its own confirmation and request budget.
 sequential object discovery data is excluded from AIContext; prompts and model-call counts are unchanged.
 Console and JSON/Markdown/HTML distinguish supplied seeds, generated IDs, plans, actual attempts,
@@ -279,8 +362,8 @@ uv run python tests/fixtures/phase22_target.py --smoke
 ```
 
 Without `--smoke`, the fixture prints a loopback URL for manual preview/confirmation testing.
-General enumeration, response harvesting, automatic authorization Findings and
-severity assignment are not implemented.
+General enumeration, response harvesting, authorization Findings and severity assignment remain
+outside this lower-level discovery capability. IDOR/BOLA Detection adds explicit policy evaluation separately.
 
 ## Explicit Authorization Policy Validation
 
@@ -500,7 +583,7 @@ BOLA/IDOR validation remain outside this capability's scope.
 
 The ACTIVE workflow is: ordinary safe Queries → Query-shape checks → a bounded Query-depth check → Mutation interaction. Each active stage has its own explicit
 selection and default-NO confirmation. Enter selects none. SAFE, ACTIVE alone and
-non-interactive scans send zero depth probes. Named authentication contexts remain SAFE-only.
+non-interactive scans send zero depth probes. Named authentication contexts do not enter depth validation.
 
 At most one candidate per endpoint is constructed locally from a retained structural security review recursive
 witness and an already-attempted safe Query, preferring SUCCESS. A GRAPHQL_ERROR baseline may
@@ -930,8 +1013,9 @@ artifacts and the default report directories are ignored by Git.
 
 Reports are intended only for authorized testing. **CRITICAL/HIGH INTEREST indicates review
 priority, not vulnerability severity.** Enabled introspection and successful execution are not
-proof of exploitability. Reports create no Findings; all automated results require professional
-validation. Recommendations are fixed responses to observed scan state, without AI.
+proof of exploitability. Reports present existing results without creating Findings themselves.
+Explicit IDOR/BOLA testing can supply policy-backed Findings; all automated results require
+professional validation. Recommendations are fixed responses to observed scan state, without AI.
 
 ## Optional local AI assistance
 
@@ -1085,7 +1169,8 @@ uv run gqlsleuth scan https://example.com/graphql --auth-context public --auth-c
   Labels never establish identity, authentication success, or a privilege hierarchy.
 - A bare label supplies no headers. Repeating it does not erase headers already accumulated.
   The first `=` separates label from header; the header still splits at its first colon.
-- `--auth-context` cannot be combined with `-H`/`--header`, `--mode active`, or `--ai`.
+- For differential review, `--auth-context` cannot be combined with `-H`/`--header`, `--mode active`, or `--ai`.
+  The separate IDOR/BOLA workflow has the narrow single-context ACTIVE exception described above.
   Invalid combinations fail before scanning. Existing single-context SAFE, ACTIVE, and AI
   behavior is unchanged. Differential scans make no Ollama calls.
 - `--timeout`, `--proxy`, and TLS options apply equally to each independent settings/client

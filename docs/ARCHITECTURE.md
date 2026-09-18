@@ -174,6 +174,11 @@ numeric `--idor-seed` values. Its own default-NO confirmation permits only a see
 fixed immediate neighbors, with a six-request hard budget. It does not alter Mutation gates or
 SAFE named-context restrictions. See the Phase 22 roadmap entry for exact bounds and semantics.
 
+Phase 25 composes those bounded object primitives behind `--idor-review`. It adds explicit
+anonymous DENY or supplied-context ALLOW-baseline/DENY-alternate policy and evidence-linked
+IDOR/BOLA Findings. A narrow ACTIVE exception permits one header-bearing named context for
+this capability only. Normal Phase 15 restrictions remain intact; see the Phase 25 entry.
+
 ## 7. Accepted input
 
 GQLSleuth accepts either:
@@ -2061,7 +2066,7 @@ architecture/developer history may continue using phase numbers. No Phase 23+ be
 Implemented as a separate ACTIVE-only stage after ordinary Phase 9 Queries and before the
 unchanged Phase 10 Mutation interaction. SAFE and ACTIVE without explicit selection/confirmation
 send no Phase 17 requests. Non-interactive scans may show previews but cannot select or confirm.
-Named HTTP contexts remain SAFE-only, with no differential multiplicity analysis.
+Named HTTP contexts do not enter multiplicity analysis, including the separate Phase 25 exception.
 
 `application/multiplicity.py` composes the retained safe scan with local previews, selects one
 representative attempted valid Query per endpoint (SUCCESS first, then retained Phase 7 order),
@@ -2122,7 +2127,7 @@ limiting, subscriptions, uploads and federation runtime behavior remain future p
 Implemented as an independent ACTIVE stage: Phase 9 → Phase 17 → Phase 18 → Phase 10 Mutation
 interaction. Each active stage has separate selections, default-NO confirmations, results and
 budgets. SAFE, unselected, declined and non-interactive scans issue no Phase 18 requests. Named
-contexts remain SAFE-only. No public target is needed for development or acceptance.
+contexts do not enter depth validation. No public target is needed for development or acceptance.
 
 `application/query_depth.py` composes a retained safe scan with immutable previews. Preparation
 is local: recover the same typed cycle witnesses using the existing Phase 16 `schema_graph`
@@ -2489,7 +2494,7 @@ failures, with no retries/concurrency/fallbacks. Existing centralized redirect h
 The ordinary Phase 14 HTTP context is reused (no supplied headers or repeated `-H`), with a fresh
 isolated client/cookie jar per attempt. TLS, timeout, proxy, trust_env=False, response limits,
 same-origin credentials and cross-origin stripping are unchanged. Supplied headers are described
-as request context, not proof of authentication. Named auth contexts remain SAFE-only and cannot
+as request context, not proof of authentication. Named auth contexts cannot
 be combined with Phase 22. No outgoing header values or settings objects enter its result models.
 
 Classifications are exactly Phase 20's TARGET_RETURNED / EXPLICIT_DENIAL / INDETERMINATE /
@@ -2524,7 +2529,7 @@ returned/null/denied/zero-boundary cases; transport failure uses MockTransport. 
 exact request IDs/counts, no recursive expansion/harvesting, AST preservation, strict consent,
 tampering, context isolation, report/privacy boundaries and prior-phase regressions. No dependency
 is added. Configurable windows/ranges, enumeration/harvesting, automatic Phase 20/21 handoffs,
-Mutation IDOR checks, BOLA/IDOR Findings, CWE/CVSS and severity remain unimplemented. Phase 23
+Mutation IDOR checks, BOLA/IDOR Findings, CWE/CVSS and severity remain outside Phase 22. Phase 23
 requires its own operator-supplied case; discovered IDs are never transferred automatically.
 
 ### Phase 23 — Controlled Mutation Authorization Validation
@@ -2730,9 +2735,104 @@ returns, current-object Mutation, denial, business error, mismatched value/ID, d
 destructive rejection and mocked transport failure. Offline tests cover exact matching/typing,
 single-field scope, AST/preview tampering, independent consent, no exploration/read-after-write,
 evidence/privacy, AI isolation, reports and prior-capability regressions. No dependency is added.
-Phase 25+, recursive input fuzzing, automatic value guessing, enum exploration, multiple fields/
+Recursive input fuzzing, automatic value guessing, enum exploration, multiple fields/
 cases/requests, differential input testing, automatic ID/target handoff, rollback and persistence
 verification remain out of scope.
+
+### Phase 25 — End-to-End IDOR / BOLA Detection
+
+Implemented as a separate opt-in ACTIVE policy workflow, composing existing object lookup and
+bounded sequential primitives. It does not replace Phase 20, Phase 21 or Phase 22, manufacture
+their result graphs, or transfer identifiers into Mutation Authorization/Sensitive Input Validation.
+
+CLI requires `--mode active --idor-review --idor-seed OPERATION:ARGUMENT=VALUE`. The unchanged
+Phase 22 seed parser accepts one or two canonical unsigned decimal IDs in `0..2^63-1`, preserving
+input order. Fixed plans are seed, seed-1, seed+1, omitting invalid numeric neighbors without
+wraparound. No larger window, radius, ranges, recursive expansion, response-derived identifiers,
+UUID/random mutation, retries or concurrency exist. `--idor-review` and `--idor-discovery` are
+mutually exclusive; both reuse the same bounds and six-attempt maximum.
+
+Policy is explicit and capability-specific:
+
+- No supplied target headers: anonymous seed and alternates are expected DENY.
+- Supplied target headers: seed is an expected ALLOW baseline; alternates are expected DENY.
+- Header presence selects the supplied-context policy, not proof of valid server authentication.
+  There is no token inspection, authentication mechanism inference, role order or ownership model.
+- Exact TARGET_RETURNED on the seed gates neighbors in both modes. Authenticated seed success
+  is BASELINE_CONFIRMED only. Denied/ambiguous/failed authenticated baselines are BASELINE_UNUSABLE,
+  with zero neighbors and no Finding. Anonymous denial is SATISFIED; ambiguity/failure UNRESOLVED.
+- DENY + TARGET_RETURNED produces VIOLATED and a focused immutable
+  OBJECT_LEVEL_AUTHORIZATION_FAILURE Finding classified IDOR / BOLA. DENY + EXPLICIT_DENIAL is
+  SATISFIED. INDETERMINATE/NETWORK_FAILURE/skipped requests remain UNRESOLVED without Findings.
+
+Findings explicitly depend on operator policy. Anonymous wording says the exact object was
+returned without supplied authentication contrary to DENY. Authenticated wording says the exact
+alternate object was returned under the current supplied context contrary to DENY. No ownership,
+other-user identity, tenancy or independently verified business policy is claimed. Intentionally
+public or legitimately shared objects invalidate the operator assumption. No severity/CVSS/CWE,
+exploitability score, business-impact score or generic vulnerability hierarchy is introduced.
+
+`map_auth_context_inputs` reuses its existing grouping/name/header validation with a narrow
+`idor_review is True` + ACTIVE exception for exactly one unique header-bearing context. Repeated
+entries for that label accumulate headers. Bare labels are rejected with guidance to omit the
+option for anonymous testing. Mixing `-H` with named contexts remains invalid. Normal Phase 15
+still requires 2–3 SAFE contexts; normal Phase 20's existing bare-context exception is unchanged.
+The single named IDOR route uses immutable settings carrying only that context's headers for the
+normal safe scan and IDOR probes. It creates no DifferentialScanResult, runs no pairwise analysis,
+does not enter Phase 17/18 or generic Mutations, and rejects incompatible named-context stages.
+Named-context AI remains rejected. Ordinary `-H` ACTIVE orchestration remains available.
+
+`application/bounded_object.py` extracts the existing Phase 22 pure plan construction, seed
+validation, fresh-client single-probe transport and baseline/request accounting. Phase 22 retains
+its public preparation/execution API, evidence, decisions and classifications. Phase 25 reuses
+the same `SequentialDiscoverySeed`/`SequentialDiscoveryProbe` value types and constants, without
+fabricating SequentialDiscoveryResult objects. Existing `retained_object_lookup` selects the
+unambiguous artifact and OBJECT_LOOKUP_REVIEW source. Existing Phase 20 `build_object_query`
+enforces direct ID, safe concrete output, direct output id, native schema validation and actual
+AST argument-to-variable mapping. Unrelated variables, directives, fields, placeholders and
+collection bounds remain intact. No second Query generator or response classifier is introduced.
+
+`IdorSession` owns the attempt budget and snapshots its preview. Immediately before each send it
+rebuilds the complete canonical plan and compares strict enablement/ACTIVE mode, seed identity,
+context metadata, ordering, offsets, document, variables (including JSON types), retained schema
+and structural source. Strict `confirmed is True`, baseline eligibility and the shared remaining
+budget are required. Only freshly rebuilt requests are transmitted. Caller-edited previews cannot
+choose IDs or alter policy. Repeated calls on a used session return the retained result without
+more HTTP. Failures consume attempts; failed neighbors do not cancel later eligible neighbors.
+
+Preview shows context type/opaque label, operator policy, seed and planned baseline/alternate IDs,
+maximum requests, returned-data notice and policy limitation. Separate default-NO
+`Execute IDOR / BOLA detection?` consent cannot be substituted by any other confirmation.
+Non-interactive, declined, disabled and unsupported cases add zero IDOR probes.
+
+HTTP uses the centralized client unchanged: timeout/proxy/TLS, trust_env=False, response limits,
+same-origin credentials and cross-origin stripping remain intact. Each probe has a fresh client
+and cookie state. Phase 20 exact root-ID classification is reused: matching text/integer JSON can
+confirm access; Boolean/float/missing/null/mismatched IDs cannot. No business-body comparisons.
+
+Frozen project-owned models in `domain/idor.py` retain context, seeds, bounded plans, confirmation,
+executions, policies, findings, limits and counts. Attempt-only `IDOR_BOLA_PROBE` evidence retains
+ACTIVE, endpoint, context metadata, root/argument, seed/requested ID, offset, role, expected policy,
+policy result, source references, exact Query/variables and complete existing bounded HTTP facts.
+No evidence is fabricated for previews or skips. Findings reference the exact causing attempt;
+authenticated Findings also reference their successful baseline. Outgoing headers/settings/proxy
+credentials are never serialized into these models. No generic redaction is added.
+
+`ActiveExecutionScanResult.idor_bola_detection` composes the result. Existing evidence ordering
+is preserved, adding IDOR evidence before later Mutation capabilities when enabled. Canonical
+JSON omits the field when disabled. Shared human presentation adds IDOR / BOLA Detection and
+conditional IDOR / BOLA Findings, without raw business-body dumps. Safety Notice remains final
+once and qualifies policy-backed Findings when this capability is present. Renderers create no
+Findings or new classifications. AIContext, prompts, schema/allowlist, transport and call count
+remain unchanged; IDOR data stays outside AI.
+
+`tests/fixtures/phase25_target.py --smoke` reuses the Phase 22 schema/loopback server infrastructure
+with explicit test scenarios and fake headers. It covers anonymous/supplied-context success,
+denial, unusable baseline, mismatched alternate ID, failed baseline/neighbor transport, zero
+boundary, disabled and declined execution. Offline tests cover strict consent, forged plans,
+revalidation between sends, prior workflow preservation, narrow context scope, cookie/redirect
+isolation, evidence provenance, reporting, AI exclusion and secret canaries. No external target,
+runtime dependency or later vulnerability family is introduced.
 
 ## 35. MVP definition
 

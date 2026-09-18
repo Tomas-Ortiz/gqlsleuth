@@ -35,6 +35,7 @@ class EvidenceType(StrEnum):
     SEQUENTIAL_OBJECT_PROBE = "sequential_object_probe"
     MUTATION_AUTHORIZATION_PROBE = "mutation_authorization_probe"
     SENSITIVE_INPUT_PROBE = "sensitive_input_probe"
+    IDOR_BOLA_PROBE = "idor_bola_probe"
     HTTP_ERROR = "http_error"
     PARSER_ERROR = "parser_error"
 

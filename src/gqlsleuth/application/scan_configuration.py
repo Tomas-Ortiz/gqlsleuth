@@ -68,15 +68,19 @@ def map_auth_context_inputs(
     mode: ScanMode = ScanMode.SAFE,
     ai: bool = False,
     object_review: bool = False,
+    idor_review: bool = False,
 ) -> tuple[NamedAuthContext, ...]:
     """Accumulate first-seen labels, reusing Phase 14 header syntax and validation."""
     if headers:
         raise HttpConfigurationError("--auth-context cannot be combined with --header / -H.")
-    if mode is not ScanMode.SAFE:
+    single_idor = idor_review is True and mode is ScanMode.ACTIVE
+    if mode is not ScanMode.SAFE and not single_idor:
         raise HttpConfigurationError("--auth-context supports SAFE mode only.")
     if ai:
         raise HttpConfigurationError(
-            "Differential AI interpretation is not implemented; omit --ai."
+            "Named IDOR/BOLA scans do not invoke AI; omit --ai."
+            if single_idor
+            else "Differential AI interpretation is not implemented; omit --ai."
         )
     grouped: dict[str, list[str]] = {}
     for entry in entries:
@@ -86,7 +90,12 @@ def map_auth_context_inputs(
         if separator:
             grouped[name].append(header)
     single_bare = object_review is True and len(grouped) == 1 and not next(iter(grouped.values()))
-    validate_context_names(tuple(grouped), check_count=not single_bare)
+    if single_idor and (len(grouped) != 1 or not next(iter(grouped.values()))):
+        raise HttpConfigurationError(
+            "IDOR/BOLA requires exactly one context with supplied headers; "
+            "omit --auth-context for anonymous testing."
+        )
+    validate_context_names(tuple(grouped), check_count=not (single_bare or single_idor))
     return tuple(
         NamedAuthContext(name, map_target_http_inputs(headers=values).custom_headers)
         for name, values in grouped.items()

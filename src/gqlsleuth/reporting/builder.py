@@ -142,7 +142,18 @@ def build_report(
         evidence_counts=counts,
         errors_and_limitations=issues,
         recommendations=(),
-        safety_notice=SAFETY_NOTICE,
+        safety_notice=(
+            SAFETY_NOTICE.replace(
+                "This report creates no vulnerability findings.",
+                "IDOR/BOLA Findings rely on explicit operator-supplied DENY policy and exact "
+                "returned-object evidence; independently validate that policy.",
+            )
+            if isinstance(result, ActiveExecutionScanResult) and result.idor_bola_detection
+            else SAFETY_NOTICE
+        ),
+        idor_bola_detection=result.idor_bola_detection
+        if isinstance(result, ActiveExecutionScanResult)
+        else None,
         ai_interpretation=ai_interpretation,
         graphql_security_review=safe.query_generation.security_review,
         sensitive_input_review=safe.query_generation.sensitive_input_review or None,

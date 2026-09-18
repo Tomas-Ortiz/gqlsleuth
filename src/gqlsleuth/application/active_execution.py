@@ -16,6 +16,7 @@ from gqlsleuth.domain.active import (
 from gqlsleuth.domain.analysis import OperationAnalysis, OperationKind
 from gqlsleuth.domain.exceptions import GQLSleuthError, HttpError, QueryGenerationError
 from gqlsleuth.domain.execution import QueryExecutionStatus
+from gqlsleuth.domain.idor import IdorDetectionResult
 from gqlsleuth.domain.models import Evidence, ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
 from gqlsleuth.domain.mutation_authorization import MutationAuthorizationResult
@@ -78,6 +79,7 @@ class ActiveExecutionScanResult:
     sequential_object_discovery: SequentialDiscoveryResult | None = None
     mutation_authorization: MutationAuthorizationResult | None = None
     sensitive_input_validation: SensitiveInputValidationResult | None = None
+    idor_bola_detection: IdorDetectionResult | None = None
 
     @property
     def safe_execution(self) -> SafeExecutionScanResult:
@@ -99,6 +101,7 @@ class ActiveExecutionScanResult:
             + probes
             + depth
             + sequential
+            + (self.idor_bola_detection.evidence if self.idor_bola_detection else ())
             + mutation_auth
             + sensitive
             + self.execution_evidence

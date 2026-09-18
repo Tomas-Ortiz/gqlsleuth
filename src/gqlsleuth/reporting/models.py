@@ -9,6 +9,7 @@ from gqlsleuth.ai.models import AIInterpretationResult
 from gqlsleuth.domain.analysis import OperationAnalysis
 from gqlsleuth.domain.authorization_policy import AuthorizationPolicyResult
 from gqlsleuth.domain.differential import ContextPairReview
+from gqlsleuth.domain.idor import IdorDetectionResult
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, ScanMode, Target
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
 from gqlsleuth.domain.mutation_authorization import MutationAuthorizationResult
@@ -116,6 +117,7 @@ class ReportContext:
     mutation_authorization: MutationAuthorizationResult | None = None
     sensitive_input_review: tuple[SensitiveInputCandidate, ...] | None = None
     sensitive_input_validation: SensitiveInputValidationResult | None = None
+    idor_bola_detection: IdorDetectionResult | None = None
 
 
 @dataclass(frozen=True)

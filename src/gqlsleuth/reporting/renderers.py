@@ -91,6 +91,7 @@ def _json_value(value: object) -> JsonValue:
                     "mutation_authorization",
                     "sensitive_input_review",
                     "sensitive_input_validation",
+                    "idor_bola_detection",
                 }
                 and getattr(value, field.name) is None
             )
