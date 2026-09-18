@@ -11,6 +11,7 @@ from gqlsleuth.domain.authorization_policy import AuthorizationPolicyResult
 from gqlsleuth.domain.differential import ContextPairReview
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, ScanMode, Target
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
+from gqlsleuth.domain.mutation_authorization import MutationAuthorizationResult
 from gqlsleuth.domain.nested_authorization import NestedAuthorizationResult
 from gqlsleuth.domain.object_authorization import ObjectAuthorizationResult
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
@@ -111,6 +112,7 @@ class ReportContext:
     object_authorization_review: ObjectAuthorizationResult | None = None
     authorization_policy_validation: AuthorizationPolicyResult | None = None
     object_lookup_follow_up: tuple[ObjectLookupFollowUpHint, ...] | None = None
+    mutation_authorization: MutationAuthorizationResult | None = None
 
 
 @dataclass(frozen=True)

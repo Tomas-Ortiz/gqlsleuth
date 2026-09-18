@@ -19,6 +19,7 @@ from graphql.language.ast import (
 from graphql.language.visitor import Visitor, visit
 from pydantic import JsonValue
 
+from gqlsleuth.domain.analysis import OperationKind
 from gqlsleuth.domain.exceptions import SafeExecutionValidationError
 from gqlsleuth.domain.object_authorization import ObjectAuthorizationCase, ObjectOutcome
 from gqlsleuth.domain.query_generation import QueryGenerationResult
@@ -54,22 +55,29 @@ def object_fields(
     return root, identity
 
 
-def _plain_query(document: DocumentNode) -> tuple[OperationDefinitionNode, FieldNode]:
+def _plain_operation(
+    document: DocumentNode, kind: OperationKind = OperationKind.QUERY
+) -> tuple[OperationDefinitionNode, FieldNode]:
     if len(document.definitions) != 1 or not isinstance(
         document.definitions[0], OperationDefinitionNode
     ):
-        raise SafeExecutionValidationError("Requires exactly one Query definition.")
+        raise SafeExecutionValidationError(f"Requires exactly one {kind.value.title()} definition.")
     operation = document.definitions[0]
     if (
-        operation.operation.value != "query"
+        operation.operation.value != kind.value
         or operation.name
         or len(operation.selection_set.selections) != 1
     ):
-        raise SafeExecutionValidationError("Requires one anonymous Query root.")
+        raise SafeExecutionValidationError(f"Requires one anonymous {kind.value.title()} root.")
     pending = list(operation.selection_set.selections)
     while pending:
         field = pending.pop()
-        if not isinstance(field, FieldNode) or field.alias or side_effect_tokens(field.name.value):
+        if (
+            not isinstance(field, FieldNode)
+            or field.alias
+            or (kind is OperationKind.QUERY and side_effect_tokens(field.name.value))
+            or (kind is OperationKind.MUTATION and field.directives)
+        ):
             raise SafeExecutionValidationError(
                 "Aliases, fragments and unsafe fields are unsupported."
             )
@@ -90,19 +98,25 @@ class _VariableUses(Visitor):
 
 
 def validate_object_document(
-    native: GraphQLSchema, query: str, variables: dict[str, JsonValue]
+    native: GraphQLSchema,
+    query: str,
+    variables: dict[str, JsonValue],
+    *,
+    kind: OperationKind = OperationKind.QUERY,
 ) -> tuple[object, ...]:
     """Validate all retained selections and compare effective schema-coerced inputs locally."""
     document = parse(query)
-    operation, root = _plain_query(document)
+    operation, root = _plain_operation(document, kind)
     if validate(native, document):
-        raise SafeExecutionValidationError("Query does not validate against retained schema.")
+        raise SafeExecutionValidationError(
+            f"{kind.value.title()} does not validate against retained schema."
+        )
     coerced = get_variable_values(native, operation.variable_definitions or (), variables)
     if isinstance(coerced, list):
         raise SafeExecutionValidationError(
-            "Query variables do not validate against retained schema."
+            f"{kind.value.title()} variables do not validate against retained schema."
         )
-    pending = [(native.query_type, root)]
+    pending = [(native.query_type if kind is OperationKind.QUERY else native.mutation_type, root)]
     values: list[object] = []
     while pending:
         parent, field = pending.pop()
@@ -140,10 +154,28 @@ def build_object_query(
     if base.operation_name != case.operation:
         raise SafeExecutionValidationError("Baseline operation does not match the supplied case.")
     document = deepcopy(parse(base.query_text or ""))
-    operation, root = _plain_query(document)
+    operation, root = _plain_operation(document)
     validate_object_document(native, base.query_text or "", base.variables)
-    variables = deepcopy(base.variables)
-    selected = next((arg for arg in root.arguments if arg.name.value == case.argument), None)
+    variables = substitute_object_identifier(
+        operation, root, root_schema, base.variables, case.argument, case.identifier
+    )
+    query = print_ast(document)
+    validate_safe_artifact(schema, replace(base, query_text=query, variables=variables))
+    validate_object_document(native, query, variables)
+    return query, variables
+
+
+def substitute_object_identifier(
+    operation: OperationDefinitionNode,
+    root: FieldNode,
+    root_schema: SchemaField,
+    original_variables: dict[str, JsonValue],
+    argument: str,
+    identifier: str,
+) -> dict[str, JsonValue]:
+    """Rewrite one direct ID through its actual AST mapping; preserve all other inputs."""
+    variables = deepcopy(original_variables)
+    selected = next((arg for arg in root.arguments if arg.name.value == argument), None)
     if selected is not None and isinstance(selected.value, VariableNode):
         name = selected.value.name.value
         uses = _VariableUses()
@@ -154,29 +186,29 @@ def build_object_query(
             raise SafeExecutionValidationError(
                 "Selected ID variable also controls unrelated input."
             )
-        variables[name] = case.identifier
+        variables[name] = identifier
     else:
         used = set(variables) | {
             item.variable.name.value for item in operation.variable_definitions or ()
         }
-        name = case.argument
+        name = argument
         suffix = 1
         while name in used:
-            name = f"{case.argument}_{suffix}"
+            name = f"{argument}_{suffix}"
             suffix += 1
         argument_type = next(
-            arg.type.render() for arg in root_schema.arguments if arg.name == case.argument
+            arg.type.render() for arg in root_schema.arguments if arg.name == argument
         )
         variable = VariableNode(name=NameNode(value=name))
         definition = VariableDefinitionNode(variable=variable, type=parse_type(argument_type))
         operation.variable_definitions = (*operation.variable_definitions, definition)
-        new_argument = ArgumentNode(name=NameNode(value=case.argument), value=variable)
+        new_argument = ArgumentNode(name=NameNode(value=argument), value=variable)
         root.arguments = (
             tuple(new_argument if arg is selected else arg for arg in root.arguments)
             if selected
             else (*root.arguments, new_argument)
         )
-        variables[name] = case.identifier
+        variables[name] = identifier
     fields = root.selection_set.selections if root.selection_set else ()
     identity = next(
         (item for item in fields if isinstance(item, FieldNode) and item.name.value == "id"), None
@@ -187,10 +219,7 @@ def build_object_query(
         root.selection_set = SelectionSetNode(
             selections=(*fields, FieldNode(name=NameNode(value="id")))
         )
-    query = print_ast(document)
-    validate_safe_artifact(schema, replace(base, query_text=query, variables=variables))
-    validate_object_document(native, query, variables)
-    return query, variables
+    return variables
 
 
 def classify_object_response(

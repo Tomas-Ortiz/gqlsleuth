@@ -158,14 +158,16 @@ Even in active mode, the tool must:
 
 - Block clearly destructive primary Mutation-name action tokens with no override.
 - Show the operation before executing it.
-- Require explicit individual-index batch selection and one final confirmation, default NO.
+- For generic Mutations, require explicit individual-index batch selection and one final
+  confirmation, default NO. Mutation authorization uses its own exact case and confirmation.
 - Preserve the exact request and response as evidence.
 - Apply request limits and timeouts.
 - Clearly label active results in reports.
 
 There are no per-Mutation confirmation prompts. Non-interactive stdin never prompts, selects,
 or confirms: previews are retained, a clear message is printed, and zero Mutations execute.
-The hard limit is five attempted Mutation requests per scan. Subscriptions remain out of scope.
+Generic Mutation execution has a hard limit of five attempted requests per scan. Phase 23 has
+an independent one-attempt budget and consent boundary. Subscriptions remain out of scope.
 
 Phase 22 adds a separate read-only ACTIVE capability behind `--idor-discovery` and explicit
 numeric `--idor-seed` values. Its own default-NO confirmation permits only a seed baseline and
@@ -819,6 +821,10 @@ and variables, HTTP response status/headers/body/duration when available, normal
 failure details, and the associated classification and review priority. Skipped operations create
 no fabricated HTTP evidence. Execution results are observations, not vulnerability confirmation.
 SAFE and ACTIVE use the same Query-only behavior through Phase 9.
+
+Phase 23 adds optional Mutation authorization in a single ordinary HTTP context. The operator
+supplies one exact Mutation/ID and asserts DENY; full request preview and independent default-NO
+confirmation are mandatory. No cross-context Mutation replay is supported. See its roadmap entry.
 
 ### 17.1 Controlled active Mutation execution (Phase 10)
 
@@ -2424,7 +2430,7 @@ it never creates Phase 20 cases or Phase 21 assertions automatically.
 
 Implemented as a separate, default-off, read-only ACTIVE stage:
 
-`Phase 9 → Phase 17 → Phase 18 → optional Phase 22 → Phase 10 Mutations → optional AI/reports`.
+`Phase 9 → Phase 17 → Phase 18 → optional Phase 22 → optional Phase 23 → Phase 10 Mutations → optional AI/reports`.
 
 CLI requires `--mode active --idor-discovery` and one or two repeated
 `--idor-seed OPERATION:ARGUMENT=VALUE` entries. Names are GraphQL identifiers. Parsing splits on
@@ -2513,8 +2519,97 @@ behavior remain unchanged with Phase 22 disabled.
 returned/null/denied/zero-boundary cases; transport failure uses MockTransport. Offline tests cover
 exact request IDs/counts, no recursive expansion/harvesting, AST preservation, strict consent,
 tampering, context isolation, report/privacy boundaries and prior-phase regressions. No dependency
-is added. Phase 23+, configurable windows/ranges, enumeration/harvesting, automatic Phase 20/21
-handoffs, Mutation IDOR checks, BOLA/IDOR Findings, CWE/CVSS and severity remain unimplemented.
+is added. Configurable windows/ranges, enumeration/harvesting, automatic Phase 20/21 handoffs,
+Mutation IDOR checks, BOLA/IDOR Findings, CWE/CVSS and severity remain unimplemented. Phase 23
+requires its own operator-supplied case; discovered IDs are never transferred automatically.
+
+### Phase 23 — Controlled Mutation Authorization Validation
+
+Implemented as a separate opt-in ACTIVE capability in one ordinary current HTTP context:
+`Phase 9 → Phase 17 → Phase 18 → optional Phase 22 → optional Phase 23 → Phase 10 → AI/reports`.
+CLI requires `--mode active --mutation-auth-review --mutation-auth-case OPERATION:ARGUMENT=ID`.
+The flag intrinsically asserts **operator-supplied DENY** for that exact Mutation/object. There is
+no ALLOW policy or extra `--expect-deny` requirement. Anonymous requests and Phase 14 `-H` headers
+are supported; named `--auth-context` remains SAFE-only and is rejected before scanning.
+
+`domain/mutation_authorization.py` owns frozen cases, prepared probes, executions, evaluations,
+violations and aggregate results. `MAX_PHASE23_CASES=1` and `MAX_PHASE23_REQUESTS=1` are hard limits.
+The parser reuses Phase 20 textual ID validation, but rejects a second entry even if identical.
+It partitions on the first `=`, requires exactly two GraphQL names on the left, and retains the
+exact non-empty ID (maximum 256 UTF-8 bytes, no controls). UUID/string IDs are accepted without
+numeric conversion, normalization or expansion. Invalid input errors never echo supplied values.
+
+`application/mutation_authorization.py` prepares locally from retained Phase 7 Mutation analysis
+and matching parsed/raw introspection schema. It prefers the exact target endpoint or requires one
+unambiguous alternative. It calls the existing `generate_mutation`, preserving all required
+business inputs and semantic/nested placeholders. The new pure Mutation eligibility adapter
+requires direct ID/ID!, one concrete non-list output and direct output id:ID/ID! without arguments.
+Interfaces/unions, nested/list IDs, guessed scalars and destructive primary-name tokens are
+unsupported. Destructive-name classification and artifact validation reuse Phase 10 helpers.
+Phase 16 sources/scores are not eligibility prerequisites and remain unchanged.
+
+The existing Phase 20 AST identifier substitution is extracted as `substitute_object_identifier`.
+Both callers preserve actual argument-to-variable mappings and reject a variable reused by
+unrelated inputs. Only the selected ID changes; an omitted ID argument or output id selection may
+be added. Shared schema/input validation defaults to its unchanged Query behavior; Mutation callers
+explicitly request Mutation validation. One anonymous operation/root, no aliases/fragments,
+no conditional Mutation selections, valid variables and exact schema membership are checked.
+No regex replacement, second generator, baseline, no-op guessing or read-before-write is added.
+
+`MutationAuthorizationSession` owns the application-level request budget, separate from immutable
+report data and HTTP configuration. Its preview is copied for the CLI. Immediately before sending,
+it rebuilds the entire plan, rechecks ACTIVE/explicit enablement, typed DENY case/count, schema,
+generator, AST, destructive safety and exact variables (including JSON types). A missing/altered
+preview, declined/non-Boolean confirmation, unavailable structure or changed retained data sends
+nothing. Only the canonical rebuilt request is sent. The attempt is reserved before transport;
+repeated execution calls on the session return its existing result, including after transport
+failure. No caller-supplied result count can reset the budget.
+
+The CLI shows the full exact Mutation and all variables, identifier, DENY expectation, safe
+current-context description, one-request maximum and state-change warning, then asks one dedicated
+`Execute mutation authorization validation? [y/N]`. Non-interactive stdin retains the preview and
+never confirms. Generic Mutation and sequential-discovery approvals do not authorize this stage;
+declining it still permits later generic Mutation interaction. Existing five-Mutation budget and
+selection semantics remain intact and independent.
+
+One POST contains only `query` and `variables`, using the centralized HttpClient and unchanged
+Phase 14 TLS/proxy/timeout/redirect/header/cookie/size-limit protections. There is no retry, fallback,
+second context, second identifier or compensating write. The existing conservative object-response
+classifier supplies exact-ID and explicit-denial semantics; only TARGET_RETURNED is renamed
+TARGET_MUTATION_RETURNED. JSON integers compare through decimal text; Boolean/float, missing/null,
+mismatched ID, business errors, partial data and generic HTTP errors cannot confirm the object.
+
+- DENY + TARGET_MUTATION_RETURNED → VIOLATED and MUTATION_AUTHORIZATION_POLICY_VIOLATION.
+- DENY + EXPLICIT_DENIAL → SATISFIED for the exact request only.
+- DENY + INDETERMINATE / NETWORK_FAILURE / no attempt → UNRESOLVED.
+
+The violation means the Mutation returned the exact target object in a context for which the
+operator asserted DENY. It does not prove every intended side effect occurred or independently
+verify the policy. Manual state/policy validation is required. No ownership, identity, roles,
+hierarchy, tenants, BOLA/IDOR taxonomy, vulnerability Findings, severity, CVSS or CWE are inferred.
+
+Only actual attempts create typed ACTIVE `MUTATION_AUTHORIZATION_PROBE` evidence: endpoint, root,
+argument, exact supplied ID/document/variables, DENY policy, POST, timestamp, bounded raw response
+bytes/status/headers/duration, normalized transport error, outcome, ID-match state and schema source
+references. The violation references this evidence, not new fabricated HTTP evidence. Unsupported,
+declined and preview-only results retain limitations without request evidence. Outgoing header
+values/settings never enter new domain models or presentation; exact Mutation variables are
+intentionally fully visible for consent and remain potentially sensitive scan data.
+
+Active scan/report results compose optional `mutation_authorization`, omitted from JSON when
+disabled. Evidence order is previous SAFE/probes → sequential discovery → Mutation authorization
+→ generic Mutation executions. Console and Markdown/HTML use capability names, preserve complete
+request facts without unrelated raw business bodies, and keep Safety Notice final exactly once.
+AIContext/prompts/schema/allowlist, model transport and inference count are untouched. Phase 20/21
+cases/policies and Phase 22 discovered IDs are never automatically consumed.
+
+`tests/fixtures/phase23_target.py --smoke` validates loopback success, explicit denial, business
+rejection, mismatched ID, declined consent and destructive rejection, plus mocked transport failure.
+Tests cover strict independent gates, one-attempt enforcement, AST/preview/schema tampering,
+exact request/evidence, secret canaries, reports, AI exclusion and disabled-path regressions.
+No public target or new dependency is required. Automatic Mutation follow-up hints are deferred.
+Phase 24+, differential Mutation replay, delete testing, rollback, automatic baseline/ID handoff,
+mass assignment, field fuzzing and role changes remain out of scope.
 
 ## 35. MVP definition
 

@@ -310,6 +310,10 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
         from gqlsleuth.reporting.object_authorization import object_authorization_section
 
         sections.append(object_authorization_section(report.object_authorization_review))
+    if report.mutation_authorization is not None:
+        from gqlsleuth.reporting.mutation_authorization import mutation_authorization_section
+
+        sections.append(mutation_authorization_section(report.mutation_authorization))
     if report.authorization_policy_validation is not None:
         from gqlsleuth.reporting.authorization_policy import authorization_policy_section
 

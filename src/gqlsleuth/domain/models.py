@@ -33,6 +33,7 @@ class EvidenceType(StrEnum):
     NESTED_AUTHORIZATION_PROBE = "nested_authorization_probe"
     OBJECT_AUTHORIZATION_PROBE = "object_authorization_probe"
     SEQUENTIAL_OBJECT_PROBE = "sequential_object_probe"
+    MUTATION_AUTHORIZATION_PROBE = "mutation_authorization_probe"
     HTTP_ERROR = "http_error"
     PARSER_ERROR = "parser_error"
 

@@ -18,6 +18,7 @@ from gqlsleuth.domain.exceptions import GQLSleuthError, HttpError, QueryGenerati
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.models import Evidence, ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
+from gqlsleuth.domain.mutation_authorization import MutationAuthorizationResult
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.schema import ParsedSchema
 from gqlsleuth.domain.sequential_discovery import SequentialDiscoveryResult
@@ -74,6 +75,7 @@ class ActiveExecutionScanResult:
     multiplicity: MultiplicityValidationResult | None = None
     query_depth: QueryDepthValidationResult | None = None
     sequential_object_discovery: SequentialDiscoveryResult | None = None
+    mutation_authorization: MutationAuthorizationResult | None = None
 
     @property
     def safe_execution(self) -> SafeExecutionScanResult:
@@ -86,7 +88,15 @@ class ActiveExecutionScanResult:
         sequential = (
             self.sequential_object_discovery.evidence if self.sequential_object_discovery else ()
         )
-        return self.preview.evidence + probes + depth + sequential + self.execution_evidence
+        mutation_auth = self.mutation_authorization.evidence if self.mutation_authorization else ()
+        return (
+            self.preview.evidence
+            + probes
+            + depth
+            + sequential
+            + mutation_auth
+            + self.execution_evidence
+        )
 
 
 def prepare_active_mutations(

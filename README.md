@@ -18,13 +18,91 @@ capabilities include named-context differential review, nested and object author
 and explicit authorization policy validation. Local structural review adds no target requests.
 
 ACTIVE mode offers independently confirmed Query-shape checks, Query-depth checks, bounded
-sequential object discovery and explicitly selected Mutation execution. Reports support JSON,
+sequential object discovery, Mutation authorization validation and explicitly selected Mutation
+execution. Reports support JSON,
 Markdown and HTML; optional local interpretation uses Ollama and `qwen3:8b`. Console output is
 compact by default, with detailed output available through `--verbose`.
 
 Target HTTP headers, authentication, timeouts, proxy and TLS settings remain separate from local
 Ollama. Review candidates require manual validation and are not vulnerability findings. Developer
 roadmap details are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Mutation Authorization Validation
+
+This opt-in **ACTIVE** capability tests an **operator-supplied DENY policy** for one exact
+Mutation/object in the current request context. Use only against systems you are authorized to test:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --mutation-auth-review --mutation-auth-case "updateOrder:id=123"
+gqlsleuth scan https://example.com/graphql --mode active -H "Authorization: Bearer TOKEN" --mutation-auth-review --mutation-auth-case "updateOrder:id=123"
+```
+
+`--mutation-auth-review` means the operator expects the current request context to be denied this
+exact Mutation. No additional `--expect-deny` is needed. **Exactly one case and at most one attempted
+request** are supported; neither limit is configurable. Case syntax is `OPERATION:ARGUMENT=ID`.
+Names must be GraphQL identifiers. The complete text after the first `=` is preserved, including
+UUIDs and additional `=` characters: no integer conversion or identifier changes. IDs must be
+non-empty, at most 256 UTF-8 bytes, and free of controls. Invalid syntax fails before scanning
+without echoing the value. SAFE mode and named `--auth-context` combinations are rejected.
+
+The ordinary target HTTP context may have no supplied headers or use repeated `-H` headers:
+Bearer, Cookie, API key and custom mechanisms remain supported. Supplied headers do not establish
+identity or permissions. Existing TLS, proxy, timeout, redirect and response-size protections apply.
+
+Preparation is local. Eligibility requires a Mutation root with a direct `ID`/`ID!` argument,
+a concrete non-list object return and direct `id: ID`/`ID!` output. Nested IDs, ID lists,
+interfaces/unions, custom identifier scalars, aliases and batching are unsupported. Existing
+destructive-name rules reject explicitly destructive Mutations with no override; other names are
+not assumed harmless. The existing deterministic Mutation generator supplies required inputs.
+Only the selected ID is replaced through its actual AST variable mapping; other generated business
+inputs and semantic placeholders remain unchanged. An omitted direct ID argument or output `id`
+selection may be added. No read-before-write, harmless-value guessing or state copying occurs.
+
+The preview shows the **complete exact Mutation and all variables**, the target ID, DENY
+expectation, current-context description, one-request maximum and state-change warning. One
+independent **default-NO** confirmation asks `Execute mutation authorization validation?`.
+Non-interactive input never confirms. Declining or an unsupported case sends zero requests and
+creates no request evidence. Generic Mutation selection and sequential discovery retain separate
+consent and budgets; declining this capability does not cancel their interaction.
+
+| Observed Mutation outcome | DENY evaluation |
+| --- | --- |
+| TARGET_MUTATION_RETURNED | VIOLATED — MUTATION_AUTHORIZATION_POLICY_VIOLATION |
+| EXPLICIT_DENIAL | SATISFIED for this exact request only |
+| INDETERMINATE or NETWORK_FAILURE | UNRESOLVED |
+
+TARGET_MUTATION_RETURNED requires the direct returned `data.<mutation>.id` to match the supplied
+text exactly, using existing integer-JSON ID semantics. Missing/null/mismatched IDs, partial data,
+business/validation errors and generic HTTP failures do not satisfy DENY. Explicit denial reuses
+the existing conservative HTTP/GraphQL classifier. A violation means the exact object was returned
+despite the **operator's DENY assertion**, whose correctness is not independently established.
+It does not prove every intended side effect occurred. Review resulting server-side state manually.
+No ownership, roles, tenants or intended permissions are inferred; no BOLA/IDOR classification,
+vulnerability Finding, severity, CVSS or CWE is produced. SATISFIED is not a general security claim.
+
+There is no retry, baseline, cross-context replay, rollback, identifier discovery or automatic
+handoff from object authorization, policy assertions or sequential discovery. The operator must
+supply this case independently. ACTIVE ordering is ordinary Queries → Query-shape checks →
+Query-depth checks → optional sequential discovery → optional Mutation authorization → generic
+Mutation interaction → optional AI/reports. Each confirmation authorizes only its own capability.
+
+Console and JSON/Markdown/HTML retain the case, exact plan, confirmation, attempts, outcomes,
+evaluation and limitations. Only an attempted request creates `MUTATION_AUTHORIZATION_PROBE`
+evidence with exact request/response facts; the derived violation references that evidence.
+The optional JSON field `mutation_authorization` is absent when disabled. Human reports keep
+Safety Notice final exactly once. New models/presentation never copy outgoing header values or
+HTTP configuration. Previewed variables and canonical response evidence remain potentially
+sensitive pentest data. This capability's data is excluded from AIContext; AI behavior is unchanged.
+
+Run the deterministic test-only loopback fixture with fake credentials (no public target):
+
+```bash
+uv run python tests/fixtures/phase23_target.py --smoke
+```
+
+Without `--smoke`, the fixture prints a local URL for manual CLI confirmation testing. `updateOrder`
+with `123` returns that ID, `456` denies, `business` rejects business input, and `mismatch` returns
+a different ID. The smoke also checks transport failure, declined consent and destructive rejection.
 
 ## Bounded Sequential Object Discovery
 
@@ -81,7 +159,7 @@ scans remain SAFE-only and cannot be used here. Sequential object discovery does
 the tester must explicitly supply a discovered ID to a **separate SAFE object authorization scan**, then
 optionally add authorization policy validation DENY assertions. No case/policy creation or cross-context follow-up occurs.
 
-The ACTIVE order is normal Queries → Query-shape validation → Query-depth validation → optional sequential object discovery → Mutations →
+The ACTIVE order is normal Queries → Query-shape validation → Query-depth validation → optional sequential object discovery → optional Mutation authorization → generic Mutations →
 optional AI/reports. Each ACTIVE capability keeps its own confirmation and request budget.
 sequential object discovery data is excluded from AIContext; prompts and model-call counts are unchanged.
 Console and JSON/Markdown/HTML distinguish supplied seeds, generated IDs, plans, actual attempts,

@@ -24,6 +24,7 @@ from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.authorization_policy import evaluate_authorization_policy
 from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
 from gqlsleuth.application.multiplicity import execute_multiplicity, prepare_multiplicity
+from gqlsleuth.application.mutation_authorization import MutationAuthorizationSession
 from gqlsleuth.application.object_authorization import run_object_authorization_scan
 from gqlsleuth.application.query_depth import execute_query_depth, prepare_query_depth
 from gqlsleuth.application.reporting import generate_reports
@@ -38,6 +39,11 @@ from gqlsleuth.domain.authorization_policy import parse_policy_assertions
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
+from gqlsleuth.domain.mutation_authorization import (
+    MutationAuthorizationCase,
+    MutationAuthorizationResult,
+    parse_mutation_cases,
+)
 from gqlsleuth.domain.object_authorization import parse_object_cases
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.sequential_discovery import (
@@ -61,6 +67,7 @@ from gqlsleuth.presentation.console import (
     render_state_warning,
 )
 from gqlsleuth.presentation.multiplicity import render_multiplicity, render_probe_previews
+from gqlsleuth.presentation.mutation_authorization import render_mutation_authorization
 from gqlsleuth.presentation.query_depth import render_depth_previews, render_query_depth
 from gqlsleuth.presentation.sequential_discovery import render_sequential_discovery
 from gqlsleuth.reporting.models import ReportFormat
@@ -295,6 +302,30 @@ def scan(
             ),
         ),
     ] = None,
+    mutation_auth_review: Annotated[
+        bool,
+        typer.Option(
+            "--mutation-auth-review",
+            rich_help_panel="Mutation Authorization Validation",
+            help=(
+                "Assert DENY for one exact Mutation/object in the current HTTP context. "
+                "ACTIVE and independent confirmation required. Default: disabled."
+            ),
+            show_default=False,
+        ),
+    ] = False,
+    mutation_auth_case: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--mutation-auth-case",
+            metavar="OPERATION:ARGUMENT=ID",
+            rich_help_panel="Mutation Authorization Validation",
+            help=(
+                "One exact textual object ID; requires --mutation-auth-review. "
+                "Maximum one case/request."
+            ),
+        ),
+    ] = None,
     idor_discovery: Annotated[
         bool,
         typer.Option(
@@ -323,6 +354,15 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        if mutation_auth_case is not None and not mutation_auth_review:
+            raise GQLSleuthError("--mutation-auth-case requires --mutation-auth-review.")
+        if mutation_auth_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
+            raise GQLSleuthError(
+                "Mutation authorization requires ACTIVE single-context mode without --auth-context."
+            )
+        mutation_cases = (
+            parse_mutation_cases(mutation_auth_case or []) if mutation_auth_review else ()
+        )
         if idor_seed is not None and not idor_discovery:
             raise GQLSleuthError("--idor-seed requires --idor-discovery.")
         if idor_discovery and (mode is not ScanMode.ACTIVE or auth_context is not None):
@@ -465,11 +505,19 @@ def scan(
             if idor_discovery
             else None
         )
+        mutation_authorization = (
+            _run_mutation_authorization_stage(
+                result, cases=mutation_cases, http_settings=http_settings
+            )
+            if mutation_auth_review
+            else None
+        )
         report_result = replace(
             _run_active_stage(result, http_settings=http_settings),
             multiplicity=multiplicity,
             query_depth=query_depth,
             sequential_object_discovery=sequential,
+            mutation_authorization=mutation_authorization,
         )
     ai_result = None
     if ai:
@@ -597,6 +645,34 @@ def _run_sequential_stage(
         http_settings=http_settings,
     )
     render_sequential_discovery(console, result, verbose=verbose)
+    return result
+
+
+def _run_mutation_authorization_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    cases: tuple[MutationAuthorizationCase, ...],
+    http_settings: HttpClientSettings,
+) -> MutationAuthorizationResult:
+    session = MutationAuthorizationSession(
+        safe, cases=cases, enabled=True, http_settings=http_settings
+    )
+    preview = session.preview
+    render_mutation_authorization(console, preview, preview=True)
+    confirmed = False
+    if preview.probe is None:
+        console.print("No eligible Mutation authorization request.")
+    elif not _interactive_stdin():
+        console.print(
+            "Interactive confirmation is required; zero Mutation authorization requests execute."
+        )
+    else:
+        try:
+            confirmed = typer.confirm("Execute mutation authorization validation?", default=False)
+        except (typer.Abort, EOFError, KeyboardInterrupt):
+            console.print("Mutation authorization confirmation cancelled.")
+    result = session.execute(preview=preview, confirmed=confirmed)
+    render_mutation_authorization(console, result)
     return result
 
 
