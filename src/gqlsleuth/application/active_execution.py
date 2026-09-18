@@ -14,6 +14,7 @@ from gqlsleuth.domain.active import (
     MutationPreview,
 )
 from gqlsleuth.domain.analysis import OperationAnalysis, OperationKind
+from gqlsleuth.domain.authentication import AuthenticationSecurityResult
 from gqlsleuth.domain.exceptions import GQLSleuthError, HttpError, QueryGenerationError
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.idor import IdorDetectionResult
@@ -80,6 +81,7 @@ class ActiveExecutionScanResult:
     mutation_authorization: MutationAuthorizationResult | None = None
     sensitive_input_validation: SensitiveInputValidationResult | None = None
     idor_bola_detection: IdorDetectionResult | None = None
+    authentication_token_security: AuthenticationSecurityResult | None = None
 
     @property
     def safe_execution(self) -> SafeExecutionScanResult:
@@ -98,6 +100,11 @@ class ActiveExecutionScanResult:
         )
         return (
             self.preview.evidence
+            + (
+                self.authentication_token_security.evidence
+                if self.authentication_token_security
+                else ()
+            )
             + probes
             + depth
             + sequential

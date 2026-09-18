@@ -2834,6 +2834,97 @@ revalidation between sends, prior workflow preservation, narrow context scope, c
 isolation, evidence provenance, reporting, AI exclusion and secret canaries. No external target,
 runtime dependency or later vulnerability family is introduced.
 
+### Phase 26 — Authentication & Token Security
+
+Implemented as one opt-in ACTIVE capability: `--auth-security-review`, using exactly one existing
+Phase 14 `Authorization: Bearer TOKEN` header. Carrier errors are controlled and never echo values.
+Opaque tokens are supported for the generic control. Named contexts are rejected for this
+capability without changing Phase 15 cardinality or the narrow Phase 25 exception. No new runtime
+dependency, token option, credential source or configuration system is introduced.
+
+`rules/token_security.py` performs bounded stdlib-only, unverified JWT structural inspection.
+It accepts canonical three-segment base64url JSON objects, rejects ambiguous duplicate keys and
+unsupported JWS extensions, and falls back to opaque tokens. Safe metadata consists of recognized
+algorithm labels (other text becomes `unrecognized`), presence-only header/claim facts and temporal
+states. NumericDate requires finite, supported numeric UTC timestamps, excluding booleans and
+strings. The skew is 60 seconds. Key-reference presence, absent claims and common algorithms
+produce no Findings by themselves. No signing keys are fetched or verified locally.
+
+`application/authentication.py` composes immutable project-owned Phase 26 results with the existing
+Phase 9 results. Candidate order follows retained execution order. Eligibility requires an actual
+SUCCESS Query, matching request/response evidence, native schema/variable validation, Phase 9 safe
+artifact validation, and an unambiguous non-null result for the expected root field. The latter
+does not change Phase 9's existing `data:null` SUCCESS classification. Queries with missing,
+inconsistent, cross-origin or ambiguous baseline data are ineligible. There is no Query generation
+or extra authenticated-baseline request.
+
+CLI selection declares one exact Query expected to require Bearer authentication. Optional JWT
+probes are selected upfront, conditional on later control denial, so the single default-NO
+`Execute authentication and token security probes?` confirmation precedes every Phase 26 request.
+The preview displays the exact Query/variables, operator policy, retained baseline, hidden carrier,
+selected probes and maximum request count. No selection, non-interactive execution or declined
+confirmation sends a Phase 26 request. Other capability confirmations cannot authorize this stage.
+It runs after Phase 9 and before unrelated ACTIVE Query/object/Mutation stages.
+
+`AuthenticationSecuritySession` owns the canonical selection, settings and three-attempt budget.
+It revalidates the current retained baseline, exact request, metadata, selection, ACTIVE/enablement
+gates and literal `confirmed=True` immediately before each send. Caller-edited previews cannot
+supply request/token material. One mandatory Authorization-removed control executes first, retaining
+every other supplied header. This is not necessarily anonymous access. Only EXPLICIT_DENIAL permits
+selected JWT probes: deterministic one-character signature tampering with byte-identical original
+header/payload, and `alg=none` with copied header and exact original payload plus empty signature.
+An originally unsigned token needs no equivalent replay. Claims are never modified. No retries,
+concurrency, alternate operations, claim fuzzing or token discovery occurs.
+
+Fresh centralized HttpClient instances preserve all existing timeout, TLS, proxy, trust_env=False,
+body limits and redirect/header protections. Generated variants cannot cross the original target
+origin. Cross-origin final responses remain INDETERMINATE. Transport failures consume attempts;
+the session cannot replay attempted work. Control failure/access/ambiguity skips selected variants.
+A failed optional probe does not prevent a later independently eligible selected probe.
+
+`graphql/authentication.py` reuses the existing Phase 9 classifier and exact Phase 19 authorization
+error helper. Existing `NestedOutcome.RETURNED` is displayed as ACCESS_RETURNED. Null/ambiguous
+states, generic GraphQL errors and non-authorization HTTP failures are INDETERMINATE. HTTP 401/403
+and applicable exact authorization errors are EXPLICIT_DENIAL; normalized transport errors are
+NETWORK_FAILURE. The existing DENY policy matrix is VIOLATED/SATISFIED/UNRESOLVED respectively.
+
+Five scoped Finding conditions are supported:
+
+- AUTHENTICATION_ENFORCEMENT_FAILURE: successful baseline and Authorization-removed access.
+- JWT_SIGNATURE_VALIDATION_FAILURE: denied control and altered-signature access.
+- JWT_NONE_ALGORITHM_ACCEPTED: denied control and unsigned variant access, or an already unsigned
+  original token accepted in the baseline.
+- EXPIRED_JWT_ACCEPTED: original token expired before baseline start beyond skew, plus denied control.
+- NOT_YET_VALID_JWT_ACCEPTED: original nbf later than baseline completion plus skew, plus denied control.
+
+The baseline request interval is reconstructed from retained evidence completion timestamp and
+duration. Conservative interval edges avoid borderline temporal claims. Missing/malformed claims
+never create temporal Findings. Each Finding retains endpoint, operation, condition, operator-policy
+provenance and baseline/control/probe evidence references. Its exact Query/variables are retained
+once in the selected candidate and actual probe evidence. No severity, CVSS/CWE, role hierarchy,
+application-wide compromise or business-impact inference is added.
+
+Only attempted requests create `AUTHENTICATION_SECURITY_PROBE` evidence, with exact Query/variables,
+POST, UTC timestamp, safe JWT metadata, baseline reference, HTTP status, duration, normalized errors,
+outcome and policy. Outgoing Authorization, tokens/variants, Cookie values and proxy credentials
+are transient private request material, never normal Phase 26 models. This capability explicitly
+withholds a whole response body containing known supplied/generated credential material, records
+`response_material_withheld`, and allowlists non-credential response metadata. It introduces no
+generic redaction and does not rewrite prior evidence. Normal baseline response bytes are referenced
+only, not duplicated into the Phase 26 projection.
+
+`ActiveExecutionScanResult.authentication_token_security` and the additive report field preserve
+local metadata, selection, consent, attempted counts, decisions and Findings. Disabled reports omit
+the field. Shared human presentation adds Authentication & Token Security and conditional
+Authentication & Token Findings before the final single Safety Notice. No token data, metadata,
+probe outcomes or Findings enter AIContext; AI transport, prompts and call counts stay unchanged.
+
+Offline tests use mock transports and `tests/fixtures/phase26_target.py --smoke`, a loopback-only
+target with fake signing material. Coverage includes strict consent, exact replay, canonical-plan
+revalidation, all probe/Finding gates, temporal boundaries, unsupported tokens, redirect/cookie
+isolation, request limits, privacy canaries, CLI and reports. No external target, login flow, key
+attack, OAuth/OIDC, password/account-recovery testing or future vulnerability family is implemented.
+
 ## 35. MVP definition
 
 The first meaningful MVP should be able to:

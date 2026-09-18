@@ -20,13 +20,76 @@ no target requests.
 
 ACTIVE mode offers independently confirmed Query-shape checks, Query-depth checks, bounded
 sequential object discovery, IDOR/BOLA detection, Mutation authorization validation,
-Sensitive Input Validation and explicitly selected Mutation execution. Reports support JSON,
-Markdown and HTML; optional local interpretation uses Ollama and `qwen3:8b`. Console output is
+Sensitive Input Validation, Authentication & Token Security and explicitly selected Mutation
+execution. Reports support JSON, Markdown and HTML; optional local interpretation uses Ollama
+and `qwen3:8b`. Console output is
 compact by default, with detailed output available through `--verbose`.
 
 Target HTTP headers, authentication, timeouts, proxy and TLS settings remain separate from local
 Ollama. Review candidates require manual validation and are not vulnerability findings. Developer
 roadmap details are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Authentication & Token Security
+
+For an authorized target, supply your own Bearer token through the existing HTTP header option:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active -H "Authorization: Bearer TOKEN" --auth-security-review
+```
+
+This opt-in capability requires ACTIVE mode and exactly one non-empty Authorization Bearer
+header. Named `--auth-context` is unsupported here; existing differential and IDOR behavior is
+unchanged. No login, token acquisition, token refresh or credential attack is performed.
+
+Local inspection recognizes supported JWT structures without verifying their signatures. It
+retains only an algorithm label, header/claim presence and UTC temporal states, with 60 seconds
+of conservative clock skew. Unsupported structures remain opaque Bearer tokens. Missing claims,
+key-reference fields and ordinary algorithms such as HS256/RS256/ES256 are not vulnerabilities.
+
+Select **one previously successful safe Query** that you expect to require the supplied Bearer
+authentication. Its exact retained document and variables are reused; the original baseline is
+not resent. Null/ambiguous responses cannot establish an access baseline. Optional tampered-signature
+and unsigned `alg=none` probes are selected individually, conditionally on explicit control denial.
+The final preview shows the request and selected probes but never tokens. One separate
+**Execute authentication and token security probes? [y/N]** confirmation defaults to NO.
+Empty selection, declined confirmation and non-interactive runs add zero authentication probes.
+
+- First, remove **only Authorization** and replay the exact selected Query. Cookies, tenant and
+  other supplied headers stay present, so this is an Authorization-removed control, not necessarily
+  anonymous access.
+- Only explicit denial permits selected JWT probes. A tampered signature changes one signature
+  character while preserving header/payload bytes. The unsigned variant changes only header `alg`
+  and removes the signature, preserving the exact payload. No claims are changed.
+- At most **three additional attempts**: one control and up to two selected variants, sequentially.
+  Failed attempts consume the budget. No retries, alternative Queries or extra baselines.
+- Central HTTP timeout, TLS, proxy, response-size and redirect/header protections remain in force.
+  Token variants are stripped on cross-origin redirects; cross-origin responses do not establish
+  token acceptance.
+
+Findings are scoped to this exact Query and operator expectation: authentication enforcement
+failure when the Authorization-removed control returns access; signature-validation failure or
+unsigned-token acceptance only after a denied control. An already expired or future-`nbf` supplied
+JWT accepted in the retained baseline may produce a temporal Finding after control denial, without
+another request. Times are compared to the baseline, not report generation. Generic GraphQL errors,
+null results and transport failures remain unresolved. No severity or application-wide impact is
+inferred. Other remaining credentials can explain access and require professional validation.
+
+Console and JSON/Markdown/HTML reports include safe metadata, selection, consent, outcomes,
+request counts and evidence-linked Findings. Phase 26 stores no outgoing token, generated variant,
+Cookie value or proxy credential. Its response capture withholds an entire body containing known
+request credential material and records that limitation; only non-credential response metadata is
+retained. This boundary does not rewrite prior scanner evidence. Baseline evidence is referenced,
+not copied. Reports remain sensitive artifacts, and Safety Notice remains the final human section.
+This capability does not enter AIContext or add Ollama calls.
+
+Offline development smoke with fixture-only credentials:
+
+```bash
+uv run python tests/fixtures/phase26_target.py --smoke
+```
+
+The fixture binds only to loopback and checks enforcement, each selected JWT variant, supplied
+temporal/unsigned tokens, opaque tokens, network failure, decline and non-interactive behavior.
 
 ## IDOR / BOLA Detection
 

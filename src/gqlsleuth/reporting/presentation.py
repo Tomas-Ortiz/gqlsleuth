@@ -306,6 +306,10 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
         from gqlsleuth.reporting.sequential_discovery import sequential_discovery_section
 
         sections.append(sequential_discovery_section(report.sequential_object_discovery))
+    if report.authentication_token_security is not None:
+        from gqlsleuth.reporting.authentication import authentication_sections
+
+        sections.extend(authentication_sections(report.authentication_token_security))
     if report.idor_bola_detection is not None:
         from gqlsleuth.reporting.idor import idor_sections
 

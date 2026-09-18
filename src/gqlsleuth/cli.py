@@ -9,6 +9,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.text import Text
 from typer._click import Context, HelpFormatter
 from typer.core import TyperGroup
 
@@ -21,6 +22,11 @@ from gqlsleuth.application.active_execution import (
     prepare_active_mutations,
 )
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
+from gqlsleuth.application.authentication import (
+    AuthenticationSecuritySession,
+    bearer_token,
+    prepare_authentication_security,
+)
 from gqlsleuth.application.authorization_policy import evaluate_authorization_policy
 from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
 from gqlsleuth.application.idor import IdorSession
@@ -37,6 +43,7 @@ from gqlsleuth.application.sequential_discovery import (
     prepare_sequential_discovery,
 )
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
+from gqlsleuth.domain.authentication import AuthenticationProbe, AuthenticationSecurityResult
 from gqlsleuth.domain.authorization_policy import parse_policy_assertions
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
 from gqlsleuth.domain.idor import IdorDetectionResult
@@ -60,6 +67,7 @@ from gqlsleuth.domain.sequential_discovery import (
     parse_discovery_seeds,
 )
 from gqlsleuth.infrastructure.http import HttpClientSettings
+from gqlsleuth.presentation.authentication import PROBE_LABELS, render_authentication
 from gqlsleuth.presentation.authorization_policy import render_authorization_policy
 from gqlsleuth.presentation.console import (
     CONSOLE_THEME,
@@ -373,6 +381,18 @@ def scan(
             ),
         ),
     ] = None,
+    auth_security_review: Annotated[
+        bool,
+        typer.Option(
+            "--auth-security-review",
+            rich_help_panel="Authentication & Token Security",
+            help=(
+                "Inspect supplied Bearer token; ACTIVE, one successful Query and separate "
+                "confirmation required for up to three probes. Default: disabled."
+            ),
+            show_default=False,
+        ),
+    ] = False,
     idor_review: Annotated[
         bool,
         typer.Option(
@@ -417,6 +437,10 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        if auth_security_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
+            raise GQLSleuthError(
+                "--auth-security-review requires ACTIVE mode without --auth-context."
+            )
         if (
             sensitive_input_case is not None or sensitive_input_target is not None
         ) and not sensitive_input_review:
@@ -508,6 +532,8 @@ def scan(
         http_settings = map_target_http_inputs(
             headers=headers, timeout=timeout, verify_tls=verify_tls, proxy=proxy
         )
+        if auth_security_review:
+            bearer_token(http_settings)
         idor_context_label = None
         if idor_review and contexts is not None:
             idor_context_label = contexts[0].name
@@ -611,6 +637,11 @@ def scan(
         _finish_reports(report_result, report_formats, output)
         return
     if mode is ScanMode.ACTIVE:
+        authentication = (
+            _run_authentication_stage(result, http_settings=http_settings, verbose=verbose)
+            if auth_security_review
+            else None
+        )
         multiplicity = _run_multiplicity_stage(result, http_settings=http_settings, verbose=verbose)
         query_depth = _run_depth_stage(result, http_settings=http_settings, verbose=verbose)
         sequential = (
@@ -647,6 +678,7 @@ def scan(
             mutation_authorization=mutation_authorization,
             sensitive_input_validation=sensitive_validation,
             idor_bola_detection=idor_detection,
+            authentication_token_security=authentication,
         )
     ai_result = None
     if ai:
@@ -739,6 +771,85 @@ def _run_multiplicity_stage(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
     render_multiplicity(console, result, verbose=verbose)
+    return result
+
+
+def _run_authentication_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    http_settings: HttpClientSettings,
+    verbose: bool = False,
+) -> AuthenticationSecurityResult:
+    preview = prepare_authentication_security(safe, http_settings=http_settings, enabled=True)
+    render_authentication(console, preview, preview=True)
+    if not preview.candidates:
+        return preview
+    if not _interactive_stdin():
+        message = (
+            "Interactive selection and confirmation required; zero authentication probes execute."
+        )
+        console.print(message)
+        return replace(preview, limitations=(*preview.limitations, message))
+    selected_probes: tuple[AuthenticationProbe, ...] = ()
+    try:
+        while True:
+            value = typer.prompt(
+                "Select one Query expected to require the supplied Bearer token (Enter for none)",
+                default="",
+                show_default=False,
+            ).strip()
+            if not value:
+                return preview
+            indices = {str(item.index): item.index for item in preview.candidates}
+            if value in indices:
+                selected_index = indices[value]
+                break
+            console.print("Choose exactly one listed Query index, or Enter for none.")
+        if preview.available_probes:
+            console.print(
+                "Optional JWT probes run only if the control establishes explicit denial."
+            )
+            for index, probe in enumerate(preview.available_probes, 1):
+                console.print(Text(f"[{index}] {PROBE_LABELS[probe]}", style="cyan"))
+            while True:
+                value = typer.prompt(
+                    "Select JWT probes (max 2, Enter for none)", default="", show_default=False
+                ).strip()
+                if not value:
+                    break
+                tokens = tuple(token.strip() for token in value.split(","))
+                allowed = {
+                    str(index): probe for index, probe in enumerate(preview.available_probes, 1)
+                }
+                if (
+                    len(tokens) <= 2
+                    and len(set(tokens)) == len(tokens)
+                    and all(token in allowed for token in tokens)
+                ):
+                    selected_probes = tuple(allowed[token] for token in tokens)
+                    break
+                console.print(
+                    "Choose up to two distinct individual JWT probe indices, or Enter for none."
+                )
+        session = AuthenticationSecuritySession(
+            safe,
+            http_settings=http_settings,
+            enabled=True,
+            selected_index=selected_index,
+            selected_probes=selected_probes,
+        )
+        preview = session.preview
+        render_authentication(console, preview, preview=True)
+        confirmed = typer.confirm(
+            "Execute authentication and token security probes?", default=False
+        )
+    except (typer.Abort, EOFError, KeyboardInterrupt):
+        console.print(
+            "Authentication security selection/confirmation cancelled; zero probes execute."
+        )
+        return preview
+    result = session.execute(preview=preview, confirmed=confirmed)
+    render_authentication(console, result, verbose=verbose)
     return result
 
 

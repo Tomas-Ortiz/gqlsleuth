@@ -7,6 +7,7 @@ from uuid import UUID
 
 from gqlsleuth.ai.models import AIInterpretationResult
 from gqlsleuth.domain.analysis import OperationAnalysis
+from gqlsleuth.domain.authentication import AuthenticationSecurityResult
 from gqlsleuth.domain.authorization_policy import AuthorizationPolicyResult
 from gqlsleuth.domain.differential import ContextPairReview
 from gqlsleuth.domain.idor import IdorDetectionResult
@@ -118,6 +119,7 @@ class ReportContext:
     sensitive_input_review: tuple[SensitiveInputCandidate, ...] | None = None
     sensitive_input_validation: SensitiveInputValidationResult | None = None
     idor_bola_detection: IdorDetectionResult | None = None
+    authentication_token_security: AuthenticationSecurityResult | None = None
 
 
 @dataclass(frozen=True)
