@@ -145,6 +145,10 @@ def build_report(
         safety_notice=SAFETY_NOTICE,
         ai_interpretation=ai_interpretation,
         graphql_security_review=safe.query_generation.security_review,
+        sensitive_input_review=safe.query_generation.sensitive_input_review or None,
+        sensitive_input_validation=result.sensitive_input_validation
+        if isinstance(result, ActiveExecutionScanResult)
+        else None,
         object_lookup_follow_up=object_lookup_follow_ups(
             safe.query_generation.security_review,
             {

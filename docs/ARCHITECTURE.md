@@ -826,6 +826,10 @@ Phase 23 adds optional Mutation authorization in a single ordinary HTTP context.
 supplies one exact Mutation/ID and asserts DENY; full request preview and independent default-NO
 confirmation are mandatory. No cross-context Mutation replay is supported. See its roadmap entry.
 
+Phase 24 adds zero-request Sensitive Input Review and a separate opt-in Sensitive Input Validation
+stage. The operator supplies one exact field/value and any required target ID. Its one-attempt
+budget and default-NO confirmation are independent from all other ACTIVE capabilities.
+
 ### 17.1 Controlled active Mutation execution (Phase 10)
 
 The application API separates local preparation from selected execution:
@@ -2608,8 +2612,127 @@ rejection, mismatched ID, declined consent and destructive rejection, plus mocke
 Tests cover strict independent gates, one-attempt enforcement, AST/preview/schema tampering,
 exact request/evidence, secret canaries, reports, AI exclusion and disabled-path regressions.
 No public target or new dependency is required. Automatic Mutation follow-up hints are deferred.
-Phase 24+, differential Mutation replay, delete testing, rollback, automatic baseline/ID handoff,
-mass assignment, field fuzzing and role changes remain out of scope.
+Differential Mutation replay, delete testing, rollback and automatic baseline/ID handoff remain
+out of scope. Phase 24 adds only explicit, single-field/value validation; no automatic field/value
+exploration or role changes are introduced.
+
+### Phase 24 — Sensitive Input Discovery and Controlled Validation
+
+Implemented as two separate result paths: **Sensitive Input Review** (always local) and optional
+ACTIVE **Sensitive Input Validation**. The runtime order is Phase 9 → Phase 17 → Phase 18 →
+optional Phase 22 → optional Phase 23 → optional Phase 24 validation → generic Mutations → AI/reports.
+All ACTIVE consent boundaries and budgets are independent. Earlier cases, assertions, discovered
+IDs and Mutation authorization targets are never consumed automatically.
+
+`application/sensitive_input_review.py` runs with existing local analysis/query generation,
+retaining an immutable candidate tuple separately from Phase 16's unchanged candidates. It walks
+only Mutation-root direct non-list input-object arguments and their direct scalar/enum leaves.
+It does not traverse nested input objects, inspect runtime bodies, generate values or add HTTP
+Evidence. Ordering is endpoint, operation, input argument, then leaf name. Query inputs are excluded.
+
+`rules/sensitive_input.py` uses the entire token tuple returned by Phase 7 `normalize_terms`, with
+no substring/partial-token match. The bundled exact names (including equivalent normalized casing
+and separators) are:
+
+- PRIVILEGE_CONTROL: admin, isAdmin, staff, isStaff, role, roles, permission, permissions,
+  privilege, privileges, accessLevel.
+- OWNERSHIP_CONTROL: ownerId, userId, accountId.
+- TENANCY_CONTROL: tenantId, organizationId, orgId.
+- TRUST_STATE: verified, isVerified, approved, isApproved, enabled, isEnabled.
+
+Generic status/type/level and longer identifiers such as administratorEmail, roleDescription and
+ownershipNote do not match. Categories are review concepts, not severity. Candidates retain
+endpoint, Mutation, argument/leaf, rendered input type, category, deterministic reason and schema
+facts. A shared pure structural gate adds only literal `<VALUE>`/`<ID>` follow-up templates when
+compatible. This is a schema hint, not proof of valid runtime data or a generated executable plan.
+
+CLI validation requires `--mode active --sensitive-input-review` with exactly one repeated-option
+entry `--sensitive-input-case OPERATION:ARGUMENT.FIELD=VALUE`, optionally accompanied by
+`--sensitive-input-target ARGUMENT=ID`. The flag intrinsically asserts operator-supplied DENY for
+control of that exact field/value. Parsing splits on the first `=`, validates exactly one dotted
+field level and GraphQL names, and reuses the object-case text bounds (non-empty, at most 256 UTF-8
+bytes, no control characters). Error messages omit malformed values. Repeated cases, deeper/indexed
+paths, SAFE enablement, missing flags/cases and named contexts are rejected before scanning.
+Schema-dependent eligibility failures are controlled preparation limitations after schema discovery.
+
+Initial ACTIVE validation intentionally supports **detected fields only**, with provenance
+`detected_sensitive_input`; arbitrary operator-selected non-rule fields are deferred. Supported
+types are Boolean (`true`/`false` only), Int (canonical signed 32-bit decimal, no -0/leading zero/+),
+String and ID (exact text), and exact enum members. Float, lists, nested objects and custom scalar
+inference are unsupported. The concrete non-list output must expose a direct, argument-free field
+with the same name and named scalar/enum type. Nullability may differ. No mapping is guessed.
+
+Exactly one direct root ID/ID! argument requires the operator to supply that target, even when
+optional. Multiple possible ID arguments and ID-list targets are rejected; no direct ID means
+no target may be supplied. A target also requires direct output id:ID/ID! without arguments.
+The current destructive-name helper rejects destructive Mutations without changing generic rules.
+
+`application/mutation_preparation.py` extracts Phase 23's existing exact-endpoint/unambiguous
+Mutation selection and parsed/raw schema consistency checks, shared by both capabilities.
+Both still call the current deterministic Mutation generator. The Phase 20 AST root-argument
+substitution and direct-output selection helpers are shared without changing Query defaults.
+`graphql/sensitive_input.py` preserves the actual input argument's variable mapping, updates just
+the selected leaf, substitutes only an explicit target, and adds required confirmation selections.
+Unrelated generated inputs, optional omissions, semantic placeholders and selections remain.
+An omitted optional input object is supported only if the minimal inserted object validates;
+the stage does not invent missing unrelated required siblings. Inline/default inputs retain their
+effective schema values. Variables reused by unrelated arguments, aliases, fragments, conditional
+selections, extra operations/roots and invalid input types are rejected locally.
+
+`SensitiveInputSession` independently rebuilds the canonical plan before its one POST. It checks
+ACTIVE/enablement, typed case/DENY, exact path/value/target, schema/generator/AST, output compatibility,
+destructive safety, exact variables including JSON types, strict confirmation and available budget.
+Prepared snapshots cannot change unrelated inputs or reset the budget. `MAX_PHASE24_CASES=1` and
+`MAX_PHASE24_REQUESTS=1` are not configurable. Attempts are reserved before transport; repeated
+session execution returns the retained result, including after transport failure. No alternate
+field/value, baseline, re-fetch, persistence Query, rollback or second context is attempted.
+
+The preview prints the complete final GraphQL and all variables, exact field/value/target,
+operator DENY assertion, context description, one-request maximum, state-change warning and
+persistence limitation. `Execute sensitive input validation? [y/N]` defaults to NO. Non-interactive
+input never confirms. Declining does not cancel generic Mutation interaction and no prior consent
+can authorize this stage. The centralized HttpClient retains all Phase 14 settings/credential and
+redirect protections; HTTP configuration is never stored in the new result models.
+
+Outcomes inspect only the expected root, selected output leaf and optional target identity:
+
+- TARGET_VALUE_RETURNED requires a successful GraphQL response without non-empty errors, exact
+  type-aware selected-value equality, and exact target ID match when configured.
+- EXPLICIT_DENIAL reuses the existing conservative HTTP 401/403 and scoped normalized GraphQL
+  authorization signal helper. Ambiguous partial data never confirms acceptance.
+- INDETERMINATE includes wrong/missing ID/value, null, unsupported forms, business/validation
+  errors and generic HTTP failures. NETWORK_FAILURE uses normalized transport failures.
+
+Boolean/Int equality distinguishes JSON types; String/Enum equality is exact, and ID comparison
+reuses the extracted Phase 20 exact textual/integer-JSON helper. Unrelated business values and
+response size never influence decisions. DENY plus TARGET_VALUE_RETURNED produces VIOLATED and
+SENSITIVE_INPUT_POLICY_VIOLATION; explicit denial is SATISFIED for that request; all other/unattempted
+states are UNRESOLVED. A violation only states that the response returned the supplied value under
+an operator DENY assertion. Persistence, prior value, privilege change and broader impact are not
+verified. No mass-assignment/privilege-escalation classification, Findings, CWE/CVSS or severity.
+
+Only attempts create ACTIVE `SENSITIVE_INPUT_PROBE` evidence with endpoint/Mutation/input path,
+typed supplied value, optional target, exact document/variables, POST/timestamp, bounded raw response
+bytes/status/headers/duration, normalized transport error, ID/value match states, outcome, DENY and
+schema source references. Local detection/unsupported/declined results create no network Evidence.
+Frozen capability models compose case, prepared request, execution evidence, local evaluation,
+violation, consent, limitations and attempt count. Outgoing Authorization/Cookie/API-key/proxy
+configuration is excluded; canonical business response data follows existing evidence semantics.
+
+Reports add `sensitive_input_review` only when candidates exist and `sensitive_input_validation`
+only when enabled. Named SAFE reports retain local review per context without ACTIVE validation.
+Human output uses capability names and keeps Safety Notice final exactly once. AIContext, prompts,
+schema/allowlist, model, transport and call count are unchanged. Existing request sequences, Phase
+16 semantics and all authorization/discovery behavior remain unchanged when validation is disabled.
+
+`tests/fixtures/phase24_target.py --smoke` is loopback-only with fake headers; it covers Boolean/enum
+returns, current-object Mutation, denial, business error, mismatched value/ID, declined confirmation,
+destructive rejection and mocked transport failure. Offline tests cover exact matching/typing,
+single-field scope, AST/preview tampering, independent consent, no exploration/read-after-write,
+evidence/privacy, AI isolation, reports and prior-capability regressions. No dependency is added.
+Phase 25+, recursive input fuzzing, automatic value guessing, enum exploration, multiple fields/
+cases/requests, differential input testing, automatic ID/target handoff, rollback and persistence
+verification remain out of scope.
 
 ## 35. MVP definition
 

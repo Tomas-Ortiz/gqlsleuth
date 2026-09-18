@@ -30,6 +30,7 @@ from gqlsleuth.application.query_depth import execute_query_depth, prepare_query
 from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
 from gqlsleuth.application.scan_configuration import map_auth_context_inputs, map_target_http_inputs
+from gqlsleuth.application.sensitive_input import SensitiveInputSession
 from gqlsleuth.application.sequential_discovery import (
     execute_sequential_discovery,
     prepare_sequential_discovery,
@@ -46,6 +47,11 @@ from gqlsleuth.domain.mutation_authorization import (
 )
 from gqlsleuth.domain.object_authorization import parse_object_cases
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
+from gqlsleuth.domain.sensitive_input import (
+    SensitiveInputCase,
+    SensitiveInputValidationResult,
+    parse_sensitive_case,
+)
 from gqlsleuth.domain.sequential_discovery import (
     SequentialDiscoveryResult,
     SequentialDiscoverySeed,
@@ -69,6 +75,7 @@ from gqlsleuth.presentation.console import (
 from gqlsleuth.presentation.multiplicity import render_multiplicity, render_probe_previews
 from gqlsleuth.presentation.mutation_authorization import render_mutation_authorization
 from gqlsleuth.presentation.query_depth import render_depth_previews, render_query_depth
+from gqlsleuth.presentation.sensitive_input import render_sensitive_validation
 from gqlsleuth.presentation.sequential_discovery import render_sequential_discovery
 from gqlsleuth.reporting.models import ReportFormat
 
@@ -302,6 +309,42 @@ def scan(
             ),
         ),
     ] = None,
+    sensitive_input_review: Annotated[
+        bool,
+        typer.Option(
+            "--sensitive-input-review",
+            rich_help_panel="Sensitive Input Validation",
+            help=(
+                "Assert DENY for one explicit field/value. ACTIVE and independent "
+                "confirmation required. Default: disabled."
+            ),
+            show_default=False,
+        ),
+    ] = False,
+    sensitive_input_case: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--sensitive-input-case",
+            metavar="CASE",
+            rich_help_panel="Sensitive Input Validation",
+            help=(
+                "OPERATION:INPUT.FIELD=VALUE; one detected direct input leaf and exact value. "
+                "Requires --sensitive-input-review."
+            ),
+        ),
+    ] = None,
+    sensitive_input_target: Annotated[
+        str | None,
+        typer.Option(
+            "--sensitive-input-target",
+            metavar="ARGUMENT=ID",
+            rich_help_panel="Sensitive Input Validation",
+            help=(
+                "Exact target ID, required when the Mutation exposes one direct ID argument. "
+                "Default: none."
+            ),
+        ),
+    ] = None,
     mutation_auth_review: Annotated[
         bool,
         typer.Option(
@@ -354,6 +397,20 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        if (
+            sensitive_input_case is not None or sensitive_input_target is not None
+        ) and not sensitive_input_review:
+            raise GQLSleuthError("Sensitive input case/target requires --sensitive-input-review.")
+        if sensitive_input_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
+            raise GQLSleuthError(
+                "Sensitive input validation requires ACTIVE single-context mode "
+                "without --auth-context."
+            )
+        sensitive_case = (
+            parse_sensitive_case(sensitive_input_case or [], sensitive_input_target)
+            if sensitive_input_review
+            else None
+        )
         if mutation_auth_case is not None and not mutation_auth_review:
             raise GQLSleuthError("--mutation-auth-case requires --mutation-auth-review.")
         if mutation_auth_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
@@ -512,12 +569,18 @@ def scan(
             if mutation_auth_review
             else None
         )
+        sensitive_validation = (
+            _run_sensitive_stage(result, case=sensitive_case, http_settings=http_settings)
+            if sensitive_case
+            else None
+        )
         report_result = replace(
             _run_active_stage(result, http_settings=http_settings),
             multiplicity=multiplicity,
             query_depth=query_depth,
             sequential_object_discovery=sequential,
             mutation_authorization=mutation_authorization,
+            sensitive_input_validation=sensitive_validation,
         )
     ai_result = None
     if ai:
@@ -645,6 +708,32 @@ def _run_sequential_stage(
         http_settings=http_settings,
     )
     render_sequential_discovery(console, result, verbose=verbose)
+    return result
+
+
+def _run_sensitive_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    case: SensitiveInputCase,
+    http_settings: HttpClientSettings,
+) -> SensitiveInputValidationResult:
+    session = SensitiveInputSession(safe, case=case, enabled=True, http_settings=http_settings)
+    preview = session.preview
+    render_sensitive_validation(console, preview, preview=True)
+    confirmed = False
+    if preview.probe is None:
+        console.print("No eligible sensitive input request.")
+    elif not _interactive_stdin():
+        console.print(
+            "Interactive confirmation is required; zero sensitive input requests execute."
+        )
+    else:
+        try:
+            confirmed = typer.confirm("Execute sensitive input validation?", default=False)
+        except (typer.Abort, EOFError, KeyboardInterrupt):
+            console.print("Sensitive input confirmation cancelled.")
+    result = session.execute(preview=preview, confirmed=confirmed)
+    render_sensitive_validation(console, result)
     return result
 
 

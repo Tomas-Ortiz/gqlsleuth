@@ -182,7 +182,10 @@ def test_scan_help_documents_defaults_without_duplicate_metadata():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
     assert result.exit_code == 0
     output = " ".join(result.stdout.replace("│", " ").replace("|", " ").split())
-    assert output.lower().count("default:") == 15
+    assert output.lower().count("default:") == 17
+    assert "--sensitive-input-review" in output
+    assert "--sensitive-input-case" in output
+    assert "--sensitive-input-target" in output
     assert "--mutation-auth-review" in output
     assert "--mutation-auth-case" in output
     assert "--idor-discovery" in output
@@ -216,6 +219,8 @@ def test_scan_help_documents_defaults_without_duplicate_metadata():
         ("output", None, "Default: ./gqlsleuth-reports when reports are requested."),
         ("auth_context", None, "Default: disabled."),
         ("mutation_auth_review", False, "Default: disabled."),
+        ("sensitive_input_review", False, "Default: disabled."),
+        ("sensitive_input_target", None, "Default: none."),
     ],
 )
 def test_default_descriptions_belong_to_the_right_options_without_changing_values(

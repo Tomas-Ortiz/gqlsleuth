@@ -15,10 +15,11 @@ default.
 GQLSleuth supports endpoint discovery, GraphQL confirmation, introspection, schema parsing,
 operation analysis, minimal Query generation and controlled safe Query execution. Optional
 capabilities include named-context differential review, nested and object authorization review,
-and explicit authorization policy validation. Local structural review adds no target requests.
+and explicit authorization policy validation. Local structural and Sensitive Input Review add
+no target requests.
 
 ACTIVE mode offers independently confirmed Query-shape checks, Query-depth checks, bounded
-sequential object discovery, Mutation authorization validation and explicitly selected Mutation
+sequential object discovery, Mutation authorization validation, Sensitive Input Validation and explicitly selected Mutation
 execution. Reports support JSON,
 Markdown and HTML; optional local interpretation uses Ollama and `qwen3:8b`. Console output is
 compact by default, with detailed output available through `--verbose`.
@@ -26,6 +27,108 @@ compact by default, with detailed output available through `--verbose`.
 Target HTTP headers, authentication, timeouts, proxy and TLS settings remain separate from local
 Ollama. Review candidates require manual validation and are not vulnerability findings. Developer
 roadmap details are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Sensitive Input Review and Validation
+
+**Sensitive Input Review** automatically inspects retained Mutation schemas locally, in SAFE,
+ACTIVE and named-context scans. It adds **zero target requests**, executes nothing, and never
+chooses test values. It inspects only a direct input-object argument's direct scalar/enum fields;
+it does not recurse into nested input objects. Review candidates are schema hints, not findings.
+
+Rules compare the **entire normalized identifier token sequence**, using the existing
+camelCase/PascalCase/snake_case normalization. Thus `isStaff`, `IsStaff` and `is_staff` match;
+`administratorEmail`, `roleDescription`, `ownershipNote`, `status`, `type` and `level` do not.
+
+| Review category | Exact names (equivalent normalized spellings also match) |
+| --- | --- |
+| PRIVILEGE_CONTROL | admin, isAdmin, staff, isStaff, role, roles, permission, permissions, privilege, privileges, accessLevel |
+| OWNERSHIP_CONTROL | ownerId, userId, accountId |
+| TENANCY_CONTROL | tenantId, organizationId, orgId |
+| TRUST_STATE | verified, isVerified, approved, isApproved, enabled, isEnabled |
+
+Default output is compact. Verbose output and human reports retain reasons/schema facts and,
+where structurally compatible, literal `<VALUE>`/`<ID>` follow-up templates. No generated
+placeholder is represented as a discovered ID or accepted value. Lists/custom scalars may be
+review candidates but receive no ACTIVE validation hint when unsupported.
+
+**Sensitive Input Validation** is a separate opt-in ACTIVE capability. It asserts that the
+current request context **must be denied control of this exact field/value**:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --sensitive-input-review --sensitive-input-case "updateUser:input.isStaff=true" --sensitive-input-target "id=123"
+gqlsleuth scan https://example.com/graphql --mode active -H "Authorization: Bearer TOKEN" --sensitive-input-review --sensitive-input-case "updateUser:input.role=ADMIN" --sensitive-input-target "id=123"
+gqlsleuth scan https://example.com/graphql --mode active --sensitive-input-review --sensitive-input-case "updateProfile:input.isStaff=true"
+```
+
+Use only authorized targets and values/objects you explicitly intend to test. The operator chooses
+the value: GQLSleuth never toggles Booleans, changes `USER` to `ADMIN`, enumerates enum members or
+tries alternate fields/values. Initial validation is restricted to **detected rule-matching fields**;
+arbitrary non-rule fields are not supported.
+
+Case syntax is exactly `OPERATION:INPUT_ARGUMENT.FIELD=VALUE`, split on the first `=`. Only one
+direct field is accepted, with GraphQL names and non-empty, control-free values of at most 256
+UTF-8 bytes. Deeper paths and indexed lists are unsupported. Values remain exact textual input
+until schema typing: Boolean accepts only `true`/`false`; Int accepts canonical signed 32-bit
+decimal text (no `+1`, `01` or `-0`); String/ID preserve text; enums require an exact member.
+Float, lists, nested input objects and custom scalar guessing are unsupported for validation.
+
+If the Mutation has exactly one direct `ID`/`ID!` argument, **even optional**, supply
+`--sensitive-input-target "ARGUMENT=ID"`. Synthetic target IDs are never used. Multiple target ID
+arguments or ID-list targets are unsupported. A Mutation with no direct ID argument needs no
+target, and supplying one is rejected. String/UUID target IDs follow existing exact ID semantics.
+
+Eligibility also requires a non-destructive Mutation, a concrete non-list returned object, and a
+direct output field with the **same name and named scalar/enum type** as the selected input leaf.
+When a target is supplied, direct output `id: ID`/`ID!` is required. No input/output mapping is
+guessed. Existing deterministic Mutation generation supplies unrelated required inputs. AST
+updates change only the selected leaf and explicit target, preserving unrelated generated values
+and selections, and add only confirmation selections. An omitted optional input object can be
+populated if this minimal update validates; missing required siblings are not guessed specially.
+
+The complete Mutation and **all variables** are shown before one independent default-NO
+`Execute sensitive input validation?` confirmation. The preview states DENY, the exact value/target,
+the **one-case / one-attempt** limit, state-change risk and lack of persistence verification.
+Non-interactive stdin never confirms. Destructive Mutations, unsupported cases and declined
+consent send zero validation requests. Schema/type/target eligibility is resolved after the normal
+scan obtains the schema; a failed preparation is retained as a limitation, without a probe request.
+
+| Observation | Operator-supplied DENY evaluation |
+| --- | --- |
+| TARGET_VALUE_RETURNED | VIOLATED — SENSITIVE_INPUT_POLICY_VIOLATION |
+| EXPLICIT_DENIAL | SATISFIED for this exact request only |
+| INDETERMINATE or NETWORK_FAILURE | UNRESOLVED |
+
+Confirmation compares only the direct selected output value, with type-aware equality. When a
+target is supplied, its returned ID must also match exactly. Partial data, business errors, absent
+fields, mismatched values/IDs and generic HTTP failures cannot confirm acceptance or enforcement.
+A policy violation means the response returned the operator-supplied value despite the operator's
+DENY assertion. **Persistence and broader business impact are not verified.** No mass-assignment,
+privilege-escalation, BOLA/IDOR, vulnerability Finding, severity, CWE or CVSS is assigned.
+
+The current ordinary HTTP context supports no supplied headers or repeated `-H` headers with the
+existing TLS/proxy/timeout/redirect protections. Named `--auth-context` remains SAFE-only.
+There is no retry, baseline, second context, alternate ID/value, read-after-write, rollback or
+automatic handoff from other authorization/discovery results. This stage follows optional Mutation
+authorization and precedes generic Mutation interaction; each capability retains its own consent
+and request budget. Transport failure consumes the single attempt.
+
+Console and JSON/Markdown/HTML keep local `sensitive_input_review` separate from optional
+`sensitive_input_validation` (absent when disabled). Only attempts create `SENSITIVE_INPUT_PROBE`
+evidence, retaining exact request/response facts, typed value, target, match states and DENY policy.
+Outgoing header/configuration secrets are not copied into new results or human presentation.
+Complete previewed variables and canonical response evidence remain potentially sensitive pentest
+data. Safety Notice stays last. AIContext, prompts, allowlist, transport and call count are unchanged;
+AI receives no new review/validation data. Disabled validation adds no requests to any workflow.
+
+Run the test-only loopback smoke fixture with fake headers and no public target:
+
+```bash
+uv run python tests/fixtures/phase24_target.py --smoke
+```
+
+Without `--smoke`, it prints a local URL for manual CLI use. The fixture covers exact Boolean/enum
+returns, explicit denial, business rejection, wrong value/ID, current-object Mutation, network
+failure, declined consent and destructive rejection.
 
 ## Mutation Authorization Validation
 
@@ -83,7 +186,7 @@ vulnerability Finding, severity, CVSS or CWE is produced. SATISFIED is not a gen
 There is no retry, baseline, cross-context replay, rollback, identifier discovery or automatic
 handoff from object authorization, policy assertions or sequential discovery. The operator must
 supply this case independently. ACTIVE ordering is ordinary Queries → Query-shape checks →
-Query-depth checks → optional sequential discovery → optional Mutation authorization → generic
+Query-depth checks → optional sequential discovery → optional Mutation authorization → optional Sensitive Input Validation → generic
 Mutation interaction → optional AI/reports. Each confirmation authorizes only its own capability.
 
 Console and JSON/Markdown/HTML retain the case, exact plan, confirmation, attempts, outcomes,
@@ -159,7 +262,7 @@ scans remain SAFE-only and cannot be used here. Sequential object discovery does
 the tester must explicitly supply a discovered ID to a **separate SAFE object authorization scan**, then
 optionally add authorization policy validation DENY assertions. No case/policy creation or cross-context follow-up occurs.
 
-The ACTIVE order is normal Queries → Query-shape validation → Query-depth validation → optional sequential object discovery → optional Mutation authorization → generic Mutations →
+The ACTIVE order is normal Queries → Query-shape validation → Query-depth validation → optional sequential object discovery → optional Mutation authorization → optional Sensitive Input Validation → generic Mutations →
 optional AI/reports. Each ACTIVE capability keeps its own confirmation and request budget.
 sequential object discovery data is excluded from AIContext; prompts and model-call counts are unchanged.
 Console and JSON/Markdown/HTML distinguish supplied seeds, generated IDs, plans, actual attempts,

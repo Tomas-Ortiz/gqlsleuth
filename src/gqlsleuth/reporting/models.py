@@ -18,6 +18,7 @@ from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.query_generation import OperationGenerationResult
 from gqlsleuth.domain.schema import SchemaSummary
 from gqlsleuth.domain.security_review import GraphQLSecurityReviewResult
+from gqlsleuth.domain.sensitive_input import SensitiveInputCandidate, SensitiveInputValidationResult
 from gqlsleuth.domain.sequential_discovery import SequentialDiscoveryResult
 from gqlsleuth.infrastructure.http import HttpResponse
 from gqlsleuth.presentation.object_lookup import ObjectLookupFollowUpHint
@@ -113,6 +114,8 @@ class ReportContext:
     authorization_policy_validation: AuthorizationPolicyResult | None = None
     object_lookup_follow_up: tuple[ObjectLookupFollowUpHint, ...] | None = None
     mutation_authorization: MutationAuthorizationResult | None = None
+    sensitive_input_review: tuple[SensitiveInputCandidate, ...] | None = None
+    sensitive_input_validation: SensitiveInputValidationResult | None = None
 
 
 @dataclass(frozen=True)

@@ -7,11 +7,13 @@ from gqlsleuth.application.operation_analysis import (
     run_operation_analysis_scan,
 )
 from gqlsleuth.application.security_review import review_analyzed_schemas
+from gqlsleuth.application.sensitive_input_review import review_sensitive_inputs
 from gqlsleuth.domain.analysis import OperationKind
 from gqlsleuth.domain.exceptions import QueryGenerationError
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.domain.security_review import GraphQLSecurityReviewResult
+from gqlsleuth.domain.sensitive_input import SensitiveInputCandidate
 from gqlsleuth.graphql.query_generation import DEFAULT_MAX_SELECTION_DEPTH, generate_query
 from gqlsleuth.infrastructure.http import HttpClientSettings
 
@@ -26,6 +28,7 @@ class QueryGenerationScanResult:
     queries: tuple[QueryGenerationResult, ...]
     query_evidence: tuple[Evidence, ...]
     security_review: GraphQLSecurityReviewResult | None = None
+    sensitive_input_review: tuple[SensitiveInputCandidate, ...] = ()
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:
@@ -92,6 +95,7 @@ def generate_analyzed_queries(
         queries=tuple(results),
         query_evidence=tuple(evidence),
         security_review=security_review,
+        sensitive_input_review=review_sensitive_inputs(operation_analysis),
     )
 
 

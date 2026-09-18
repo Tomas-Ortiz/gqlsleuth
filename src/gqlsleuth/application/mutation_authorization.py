@@ -7,10 +7,9 @@ from time import perf_counter
 
 from graphql import GraphQLError
 
+from gqlsleuth.application.mutation_preparation import retained_mutation
 from gqlsleuth.application.nested_authorization import exact_variables
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult
-from gqlsleuth.discovery.endpoint_candidates import normalize_discovery_url
-from gqlsleuth.domain.analysis import OperationKind
 from gqlsleuth.domain.authorization_policy import ExpectedPolicy, PolicyStatus
 from gqlsleuth.domain.exceptions import (
     HttpConfigurationError,
@@ -19,7 +18,7 @@ from gqlsleuth.domain.exceptions import (
     SafeExecutionValidationError,
     SchemaParsingError,
 )
-from gqlsleuth.domain.models import EvidenceType, ScanMode, Target
+from gqlsleuth.domain.models import ScanMode, Target
 from gqlsleuth.domain.mutation_authorization import (
     MAX_PHASE23_REQUESTS,
     MutationAuthorizationCase,
@@ -37,7 +36,6 @@ from gqlsleuth.graphql.active_execution import destructive_tokens
 from gqlsleuth.graphql.mutation_authorization import build_mutation_probe
 from gqlsleuth.graphql.object_authorization import classify_object_response
 from gqlsleuth.graphql.query_generation import generate_mutation
-from gqlsleuth.graphql.schema_parser import load_introspection_schema, parse_introspection_response
 from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings, HttpRequest
 
 
@@ -79,49 +77,9 @@ def prepare_mutation_authorization(
             ),
         )
     try:
-        operations = tuple(
-            operation
-            for endpoint in safe.query_generation.operation_analysis.endpoints
-            if endpoint.success
-            for operation in endpoint.operations
-            if operation.kind is OperationKind.MUTATION and operation.name == case.operation
-        )
-        exact = tuple(
-            op
-            for op in operations
-            if op.endpoint == normalize_discovery_url(discovery.target.original_url)
-        )
-        operations = exact or operations
-        if len(operations) != 1:
-            raise SafeExecutionValidationError(
-                "Requires one unambiguous Mutation operation/endpoint."
-            )
-        operation = operations[0]
-        schemas = tuple(
-            item.schema
-            for item in scan.schemas
-            if item.endpoint == operation.endpoint and item.success and item.schema is not None
-        )
-        responses = tuple(
-            item.full_response
-            for item in scan.introspection.introspections
-            if item.endpoint == operation.endpoint and item.full_response is not None
-        )
-        if (
-            len(schemas) != 1
-            or len(responses) != 1
-            or parse_introspection_response(responses[0].body) != schemas[0]
-        ):
-            raise SafeExecutionValidationError("Retained schema is unavailable or inconsistent.")
-        native = load_introspection_schema(responses[0].body)
-        artifact = generate_mutation(schemas[0], operation)
-        query, variables = build_mutation_probe(schemas[0], native, artifact, case)
-        references = tuple(
-            item.evidence_id
-            for item in safe.evidence
-            if item.endpoint == operation.endpoint
-            and item.evidence_type is EvidenceType.SCHEMA_ARTIFACT
-        )
+        schema, native, operation, references = retained_mutation(safe, case.operation)
+        artifact = generate_mutation(schema, operation)
+        query, variables = build_mutation_probe(schema, native, artifact, case)
         probe = PreparedMutationAuthorizationProbe(
             case,
             operation.endpoint,

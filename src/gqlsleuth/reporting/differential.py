@@ -162,6 +162,10 @@ def differential_sections(report: DifferentialReportContext) -> tuple[ReportSect
                     follow_ups=scan.object_lookup_follow_up or (),
                 )
             )
+        if scan and scan.sensitive_input_review:
+            from gqlsleuth.reporting.sensitive_input import sensitive_review_section
+
+            sections.append(sensitive_review_section(scan.sensitive_input_review, context.name))
     for pair in report.pairs:
         entries = []
         for candidate in pair.candidates:

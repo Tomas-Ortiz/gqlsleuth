@@ -237,6 +237,17 @@ def render_scan(
                 else (),
                 verbose=verbose,
             )
+        from gqlsleuth.presentation.sensitive_input import render_sensitive_review
+
+        render_sensitive_review(
+            console,
+            tuple(
+                item
+                for item in generation.sensitive_input_review
+                if item.endpoint == detected.candidate_url
+            ),
+            verbose=verbose,
+        )
         queries = tuple(
             item for item in generation.queries if item.endpoint == detected.candidate_url
         )
@@ -663,6 +674,15 @@ def render_differential(
             )
     console.print("Zero differential Mutations executed. Comparison added zero HTTP requests.")
     for context in result.contexts:
+        if context.scan:
+            from gqlsleuth.presentation.sensitive_input import render_sensitive_review
+
+            render_sensitive_review(
+                console,
+                context.scan.query_generation.sensitive_input_review,
+                verbose=verbose,
+                context=context.name,
+            )
         if context.scan and context.scan.query_generation.security_review is not None:
             schema_scan = context.scan.query_generation.operation_analysis.schema_scan
             render_security_review(

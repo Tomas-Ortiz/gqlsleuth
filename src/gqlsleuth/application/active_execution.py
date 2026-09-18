@@ -21,6 +21,7 @@ from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
 from gqlsleuth.domain.mutation_authorization import MutationAuthorizationResult
 from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.schema import ParsedSchema
+from gqlsleuth.domain.sensitive_input import SensitiveInputValidationResult
 from gqlsleuth.domain.sequential_discovery import SequentialDiscoveryResult
 from gqlsleuth.graphql.active_execution import assess_mutation
 from gqlsleuth.graphql.query_generation import DEFAULT_MAX_SELECTION_DEPTH, generate_mutation
@@ -76,6 +77,7 @@ class ActiveExecutionScanResult:
     query_depth: QueryDepthValidationResult | None = None
     sequential_object_discovery: SequentialDiscoveryResult | None = None
     mutation_authorization: MutationAuthorizationResult | None = None
+    sensitive_input_validation: SensitiveInputValidationResult | None = None
 
     @property
     def safe_execution(self) -> SafeExecutionScanResult:
@@ -89,12 +91,16 @@ class ActiveExecutionScanResult:
             self.sequential_object_discovery.evidence if self.sequential_object_discovery else ()
         )
         mutation_auth = self.mutation_authorization.evidence if self.mutation_authorization else ()
+        sensitive = (
+            self.sensitive_input_validation.evidence if self.sensitive_input_validation else ()
+        )
         return (
             self.preview.evidence
             + probes
             + depth
             + sequential
             + mutation_auth
+            + sensitive
             + self.execution_evidence
         )
 

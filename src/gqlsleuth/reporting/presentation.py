@@ -318,6 +318,16 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
         from gqlsleuth.reporting.authorization_policy import authorization_policy_section
 
         sections.append(authorization_policy_section(report.authorization_policy_validation))
+    if report.sensitive_input_review or report.sensitive_input_validation:
+        from gqlsleuth.reporting.sensitive_input import (
+            sensitive_review_section,
+            sensitive_validation_section,
+        )
+
+        if report.sensitive_input_review:
+            sections.append(sensitive_review_section(report.sensitive_input_review))
+        if report.sensitive_input_validation:
+            sections.append(sensitive_validation_section(report.sensitive_input_validation))
     if report.ai_interpretation is not None:
         sections.append(ai_section(report.ai_interpretation))
     sections.append(

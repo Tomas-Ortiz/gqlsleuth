@@ -174,6 +174,22 @@ def substitute_object_identifier(
     identifier: str,
 ) -> dict[str, JsonValue]:
     """Rewrite one direct ID through its actual AST mapping; preserve all other inputs."""
+    variables = substitute_root_argument(
+        operation, root, root_schema, original_variables, argument, identifier
+    )
+    ensure_direct_selection(root, "id")
+    return variables
+
+
+def substitute_root_argument(
+    operation: OperationDefinitionNode,
+    root: FieldNode,
+    root_schema: SchemaField,
+    original_variables: dict[str, JsonValue],
+    argument: str,
+    value: JsonValue,
+) -> dict[str, JsonValue]:
+    """Replace one unshared root argument through its AST mapping; copy all other variables."""
     variables = deepcopy(original_variables)
     selected = next((arg for arg in root.arguments if arg.name.value == argument), None)
     if selected is not None and isinstance(selected.value, VariableNode):
@@ -186,7 +202,7 @@ def substitute_object_identifier(
             raise SafeExecutionValidationError(
                 "Selected ID variable also controls unrelated input."
             )
-        variables[name] = identifier
+        variables[name] = value
     else:
         used = set(variables) | {
             item.variable.name.value for item in operation.variable_definitions or ()
@@ -208,18 +224,27 @@ def substitute_object_identifier(
             if selected
             else (*root.arguments, new_argument)
         )
-        variables[name] = identifier
+        variables[name] = value
+    return variables
+
+
+def ensure_direct_selection(root: FieldNode, name: str) -> None:
+    """Preserve selections and require an unconditional direct confirmation field."""
     fields = root.selection_set.selections if root.selection_set else ()
     identity = next(
-        (item for item in fields if isinstance(item, FieldNode) and item.name.value == "id"), None
+        (item for item in fields if isinstance(item, FieldNode) and item.name.value == name), None
     )
     if identity and identity.directives:
         raise SafeExecutionValidationError("Conditional identity selection is unsupported.")
     if identity is None:
         root.selection_set = SelectionSetNode(
-            selections=(*fields, FieldNode(name=NameNode(value="id")))
+            selections=(*fields, FieldNode(name=NameNode(value=name)))
         )
-    return variables
+
+
+def exact_id_matches(value: object, identifier: str) -> bool | None:
+    """Exact textual GraphQL ID comparison; integer JSON is allowed, Boolean/float is not."""
+    return str(value) == identifier if isinstance(value, str) or type(value) is int else None
 
 
 def classify_object_response(
@@ -233,7 +258,7 @@ def classify_object_response(
     data = document.get("data") if isinstance(document, dict) else None
     root = data.get(operation) if isinstance(data, dict) else None
     value = root.get("id") if isinstance(root, dict) else None
-    matches = str(value) == identifier if isinstance(value, str) or type(value) is int else None
+    matches = exact_id_matches(value, identifier)
     if status in {401, 403}:
         return (
             ObjectOutcome.EXPLICIT_DENIAL,
