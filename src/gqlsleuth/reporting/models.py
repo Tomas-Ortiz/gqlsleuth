@@ -6,6 +6,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from gqlsleuth.ai.models import AIInterpretationResult
+from gqlsleuth.domain.abuse_controls import AbuseControlResult
 from gqlsleuth.domain.analysis import OperationAnalysis
 from gqlsleuth.domain.authentication import AuthenticationSecurityResult
 from gqlsleuth.domain.authorization_policy import AuthorizationPolicyResult
@@ -120,6 +121,7 @@ class ReportContext:
     sensitive_input_validation: SensitiveInputValidationResult | None = None
     idor_bola_detection: IdorDetectionResult | None = None
     authentication_token_security: AuthenticationSecurityResult | None = None
+    rate_limiting_abuse_controls: AbuseControlResult | None = None
 
 
 @dataclass(frozen=True)

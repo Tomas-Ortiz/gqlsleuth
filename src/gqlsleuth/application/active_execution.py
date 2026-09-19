@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from time import perf_counter
 
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult
+from gqlsleuth.domain.abuse_controls import AbuseControlResult
 from gqlsleuth.domain.active import (
     MAX_MUTATION_EXECUTIONS,
     MutationDecision,
@@ -82,6 +83,7 @@ class ActiveExecutionScanResult:
     sensitive_input_validation: SensitiveInputValidationResult | None = None
     idor_bola_detection: IdorDetectionResult | None = None
     authentication_token_security: AuthenticationSecurityResult | None = None
+    rate_limiting_abuse_controls: AbuseControlResult | None = None
 
     @property
     def safe_execution(self) -> SafeExecutionScanResult:
@@ -112,6 +114,11 @@ class ActiveExecutionScanResult:
             + mutation_auth
             + sensitive
             + self.execution_evidence
+            + (
+                self.rate_limiting_abuse_controls.evidence
+                if self.rate_limiting_abuse_controls
+                else ()
+            )
         )
 
 

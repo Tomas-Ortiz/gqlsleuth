@@ -182,7 +182,8 @@ def test_scan_help_documents_defaults_without_duplicate_metadata():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
     assert result.exit_code == 0
     output = " ".join(result.stdout.replace("│", " ").replace("|", " ").split())
-    assert output.lower().count("default:") == 19
+    assert output.lower().count("default:") == 20
+    assert "--rate-limit-review" in output
     assert "--auth-security-review" in output
     assert "--idor-review" in output
     assert "--sensitive-input-review" in output
@@ -225,6 +226,7 @@ def test_scan_help_documents_defaults_without_duplicate_metadata():
         ("sensitive_input_target", None, "Default: none."),
         ("idor_review", False, "Default: disabled."),
         ("auth_security_review", False, "Default: disabled."),
+        ("rate_limit_review", False, "Default: disabled."),
     ],
 )
 def test_default_descriptions_belong_to_the_right_options_without_changing_values(

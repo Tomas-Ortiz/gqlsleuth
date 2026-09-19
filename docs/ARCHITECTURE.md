@@ -2925,6 +2925,86 @@ revalidation, all probe/Finding gates, temporal boundaries, unsupported tokens, 
 isolation, request limits, privacy canaries, CLI and reports. No external target, login flow, key
 attack, OAuth/OIDC, password/account-recovery testing or future vulnerability family is implemented.
 
+### Phase 27 — Rate Limiting & Abuse Controls
+
+Implemented as optional `--rate-limit-review` in ACTIVE mode, with anonymous or existing `-H`
+headers. Named authentication contexts and SAFE mode are rejected before scanning. Disabled
+scans preserve their workflow, requests, reports and AI behavior. This is bounded validation of
+one operator policy, not threshold discovery, brute force, denial-of-service testing or evasion.
+
+`application/abuse_controls.py` builds candidates locally from actual ordinary Phase 9 Query and
+generic Phase 10 Mutation execution containers, never the aggregated security-probe evidence.
+It matches the exact retained request and response provenance, native schema/variables, Phase 7
+metadata, parsed root, source EvidenceType and application source. It reuses existing artifact,
+Query side-effect, destructive-Mutation and Phase 20 document validators. No operations are
+generated for this stage. Unexecuted or unsafe Mutations never qualify. Usable SUCCESS,
+GRAPHQL_ERROR (including invalid-login outcomes), and structured HTTP 401/403 error baselines
+can qualify. Missing/malformed responses, transport errors, outages, cross-origin baselines and
+already-observed control signals are ineligible. Baseline selection sends zero requests.
+
+Immutable domain models compose OperationAnalysis and retain exact request material, source
+evidence reference, baseline classification/status and fixed planned count. Existing authentication,
+password-management, recovery and token/session categories take precedence, followed by existing
+interest priority and stable Phase 7 order; there is no new score or vulnerability severity.
+
+The CLI runs this stage after generic Mutation execution. One explicit index (Enter for none),
+an exact selected preview, operator-policy declaration and one separate default-NO
+`Execute rate limiting / abuse-control validation?` confirmation are required. The preview warns
+that a Mutation may cause repeated side effects without rollback or deduplication. Other ACTIVE
+confirmations do not authorize Phase 27. Non-interactive, declined or unselected runs send zero
+repeats. All input interaction remains in the CLI.
+
+`AbuseControlSession` owns one canonical selection and a terminal fixed budget: at most five
+additional Query attempts or three additional Mutation attempts. Before every send it revalidates
+enablement, ACTIVE mode, current eligible ordinary baseline, exact typed variables/document,
+selection, safety and unchanged target settings. Caller-modified previews cannot expand the plan.
+Literal confirmation is required; a completed or declined session cannot restart. Requests are
+sequential identical POST payloads without operationName. Fresh centralized clients prevent
+response Cookies from changing the next request context. Phase 14 timeouts, proxy, TLS,
+trust_env=False, body limits and redirect/header stripping apply unchanged. Cross-origin final
+responses are indeterminate. Network attempts consume the budget. No retries, replacement
+attempts, sleeps, concurrency, additional operations, credential guesses, header/token rotation,
+automatic login, threshold ramps or changed variables are supported.
+
+`graphql/abuse_controls.py` reuses Phase 9 execution classification. Explicit signals are HTTP 429
+or exact normalized GraphQL extension codes RATE_LIMITED / TOO_MANY_REQUESTS / THROTTLED,
+ACCOUNT_LOCKED / USER_LOCKED, and CAPTCHA_REQUIRED / CHALLENGE_REQUIRED. Exact whole-message
+fallbacks without an explicit code are: too many requests, rate limit exceeded, too many attempts,
+try again later, account locked, temporarily locked, captcha required. Existing identifier
+normalization handles spelling separators/case without arbitrary substring matching. Retry-After
+alone, timing, body sizes/hashes and returned business data are never detection inputs.
+
+Repeat outcomes are CONTROL_SIGNAL_OBSERVED, NO_CONTROL_SIGNAL, INDETERMINATE or NETWORK_FAILURE.
+Without an explicit signal, a usable response must preserve the baseline HTTP status and execution
+classification to count as NO_CONTROL_SIGNAL. A material status/shape change is indeterminate.
+The first signal satisfies the policy and stops; ambiguity or transport failure stops unresolved.
+Only a full consistent fixed sequence without a signal violates the operator expectation and
+creates ABUSE_CONTROL_POLICY_VIOLATION. Findings reference the baseline, all actual attempts,
+policy and planned/actual count, with no CVSS, CWE, severity or global-security conclusion.
+Mandatory limitations explain higher thresholds/other windows were not tested, earlier scan
+requests may affect server state and a signal's attempt index is not the server threshold.
+
+Only actual attempts create ABUSE_CONTROL_PROBE evidence: exact document/variables, POST,
+timestamp, duration, bounded response/status/allowlisted headers, normalized transport error,
+baseline reference, execution classification, signal and operator policy reference. No evidence
+is fabricated for selection, decline or unsent repeats. The existing Phase 26 privacy capture
+boundary is shared in `infrastructure/probe_evidence.py`: no outgoing request-header values or
+proxy credentials are persisted; a response containing known request-secret material is withheld
+whole with an explicit marker. This is not generic redaction and does not rewrite prior evidence.
+Exact GraphQL variables and existing baseline artifacts remain potentially sensitive.
+
+`ActiveExecutionScanResult.rate_limiting_abuse_controls` and the optional canonical report field
+retain candidates, selection, confirmation, attempt results, first-signal index, scoped Findings
+and limitations. Disabled JSON omits the field. Console and human reports add Rate Limiting &
+Abuse Controls and conditional Rate Limiting / Abuse-Control Findings, before the final single
+Safety Notice. AIContext, prompts and Ollama call counts are unchanged and exclude Phase 27.
+
+Offline mock tests and `tests/fixtures/phase27_target.py --smoke` cover exact replay, independent
+consent, strict budgets and canonical-plan checks, prior-probe exclusion, all control classes,
+invalid-login baselines, early stops, secret canaries, redirects, unchanged cookie/header context,
+CLI and all reports. The loopback-only fixture uses fake inputs and no real accounts or external
+target. No later vulnerability families or unbounded abuse automation are included.
+
 ## 35. MVP definition
 
 The first meaningful MVP should be able to:
@@ -2955,7 +3035,7 @@ Potential future improvements include:
 - Batch query analysis.
 - Alias abuse detection.
 - General query-cost/complexity analysis beyond the single bounded Phase 18 depth probe.
-- Rate-limit observation.
+- Broader rate-limit analysis beyond the fixed operator-policy sequence implemented in Phase 27.
 - GraphQL subscription support.
 - Active file-upload checks (local schema indicators are implemented in Phase 16).
 - JWT inspection.

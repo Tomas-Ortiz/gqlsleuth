@@ -20,7 +20,7 @@ no target requests.
 
 ACTIVE mode offers independently confirmed Query-shape checks, Query-depth checks, bounded
 sequential object discovery, IDOR/BOLA detection, Mutation authorization validation,
-Sensitive Input Validation, Authentication & Token Security and explicitly selected Mutation
+Sensitive Input Validation, Authentication & Token Security, Rate Limiting & Abuse Controls and explicitly selected Mutation
 execution. Reports support JSON, Markdown and HTML; optional local interpretation uses Ollama
 and `qwen3:8b`. Console output is
 compact by default, with detailed output available through `--verbose`.
@@ -28,6 +28,76 @@ compact by default, with detailed output available through `--verbose`.
 Target HTTP headers, authentication, timeouts, proxy and TLS settings remain separate from local
 Ollama. Review candidates require manual validation and are not vulnerability findings. Developer
 roadmap details are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Rate Limiting & Abuse Controls
+
+For an authorized target, opt in with ACTIVE mode:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --rate-limit-review
+gqlsleuth scan https://example.com/graphql --mode active -H "Cookie: session=TOKEN" --rate-limit-review
+```
+
+This tests one explicit **operator-supplied abuse-control expectation**. It supports the existing
+anonymous or `-H` request context, with no authentication mechanism assumption. SAFE mode and
+named `--auth-context` combinations are rejected before scanning. Omission changes nothing.
+
+After the ordinary workflow, select **one already attempted Query or generic ACTIVE Mutation**.
+Candidate previews retain the exact document/variables, interest priority, categories, baseline
+classification/HTTP status and evidence reference. Authentication, password-management, recovery
+and token/session categories are listed first, using existing interest metadata within that group.
+An invalid-login `GRAPHQL_ERROR` baseline can qualify; success is not required. Unexecuted,
+destructive, malformed, already-controlled or unavailable operations and prior security probes
+cannot become baselines. No extra baseline request is sent.
+
+Selection declares that this exact request should expose a rate-limit, lockout or challenge signal
+within the fixed sequence. A separate **Execute rate limiting / abuse-control validation? [y/N]**
+confirmation defaults to NO. Other confirmations never authorize these requests. Empty selection,
+decline, cancellation and non-interactive runs add zero repeats. There is no execute-all option.
+
+- At most **5 additional Query requests or 3 additional Mutation requests**, sequentially.
+  The document, variables and target HTTP settings remain identical. No value, credential,
+  header, Cookie, IP-header or User-Agent rotation occurs. Existing timeout, TLS, proxy,
+  response-size and cross-origin header protections remain in force.
+- A repeated Mutation may cause repeated application side effects. The selected preview warns
+  explicitly about this; GQLSleuth performs no rollback or deduplication. Generic Mutation
+  consent alone never authorizes repetition, and destructive operations remain blocked.
+- Stop immediately on an explicit signal, indeterminate change or network failure. Failed
+  attempts consume the budget. No replacement requests, retries, concurrency, configurable
+  thresholds, waits, credential guessing, flooding or evasion are implemented.
+- HTTP 429 or exact normalized GraphQL codes `RATE_LIMITED`, `TOO_MANY_REQUESTS`, `THROTTLED`,
+  `ACCOUNT_LOCKED`, `USER_LOCKED`, `CAPTCHA_REQUIRED` or `CHALLENGE_REQUIRED` are explicit signals.
+  A small exact-message fallback applies only without an explicit code: `too many requests`,
+  `rate limit exceeded`, `too many attempts`, `try again later`, `account locked`,
+  `temporarily locked`, `captcha required`. Arbitrary substrings, `Retry-After` alone, timing,
+  response sizes and business-data differences are not signals.
+
+This capability does not use aliases/batching or attempt to bypass CAPTCHA or account lockout.
+
+The policy is SATISFIED when a control signal appears, VIOLATED only when every fixed attempt
+completes consistently without a signal, and otherwise UNRESOLVED. A violation creates the scoped
+`ABUSE_CONTROL_POLICY_VIOLATION` Finding with baseline and attempt evidence references. It does
+**not** establish that no rate limit exists at higher thresholds or over other time windows.
+Earlier scan requests may contribute to server state; the first signal's attempt index is not
+the server's rate-limit threshold. No vulnerability severity or application-wide impact is inferred.
+
+Only actual repeats create `ABUSE_CONTROL_PROBE` evidence. JSON and human reports retain selection,
+confirmation, planned/actual counts, classifications, control signals, policy and scoped Findings.
+Canonical evidence retains exact documents/variables and bounded response facts; it never copies
+outgoing header values, Cookies or proxy credentials. The existing probe privacy boundary withholds
+whole response bodies containing known request-secret material and marks that omission; it does
+not introduce generic redaction or rewrite baseline evidence. GraphQL variables remain exact and
+reports may contain sensitive application data. Human reports end with Safety Notice. Phase 27
+data does not enter AIContext and no additional Ollama calls are made.
+
+Development validation uses only fake inputs and a controlled loopback fixture:
+
+```bash
+uv run python tests/fixtures/phase27_target.py --smoke
+```
+
+It checks HTTP/GraphQL rate signals, lockout, challenge, no-signal sequences, server and transport
+failures, declined/non-interactive runs, request counts and destructive-Mutation exclusion.
 
 ## Authentication & Token Security
 

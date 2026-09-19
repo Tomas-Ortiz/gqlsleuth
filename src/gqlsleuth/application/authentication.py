@@ -6,7 +6,6 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from time import perf_counter
-from urllib.parse import unquote, urlsplit
 
 from graphql import GraphQLError
 
@@ -37,6 +36,16 @@ from gqlsleuth.graphql.object_authorization import validate_object_document
 from gqlsleuth.graphql.safe_execution import classify_execution_response, validate_safe_artifact
 from gqlsleuth.graphql.schema_parser import load_introspection_schema
 from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings, HttpRequest
+from gqlsleuth.infrastructure.probe_evidence import (
+    capture_probe_response,
+    request_context_material,
+)
+from gqlsleuth.infrastructure.probe_evidence import (
+    contains_request_material as _contains_material,
+)
+from gqlsleuth.infrastructure.probe_evidence import (
+    same_origin as _same_origin,
+)
 from gqlsleuth.rules.token_security import available_jwt_probes, inspect_bearer, token_variant
 
 
@@ -57,41 +66,13 @@ def bearer_token(settings: HttpClientSettings) -> str:
     return match[1]
 
 
-def _same_origin(left: str, right: str) -> bool:
-    def origin(url: str) -> tuple[str, str | None, int | None]:
-        parsed = urlsplit(url)
-        return (
-            parsed.scheme,
-            parsed.hostname,
-            parsed.port or (443 if parsed.scheme == "https" else 80),
-        )
-
-    return origin(left) == origin(right)
-
-
 def _request_material(settings: HttpClientSettings) -> tuple[str, ...]:
     """Transient carrier/variant material for this capability's explicit capture boundary."""
     token = bearer_token(settings)
-    values = [value for _, value in settings.custom_headers if value]
+    values = list(request_context_material(settings))
     values.append(token)
     values.extend(token_variant(token, probe) for probe in available_jwt_probes(token))
-    for name, value in settings.custom_headers:
-        if name.lower() == "cookie":
-            values.extend(
-                part.partition("=")[2].strip() for part in value.split(";") if "=" in part
-            )
-    if settings.proxy:
-        proxy = urlsplit(settings.proxy)
-        values.extend(
-            (settings.proxy, unquote(proxy.username or ""), unquote(proxy.password or ""))
-        )
     return tuple(value for value in values if value)
-
-
-def _contains_material(text: str, material: tuple[str, ...]) -> bool:
-    return any(
-        value in text or json.dumps(value, ensure_ascii=True)[1:-1] in text for value in material
-    )
 
 
 def prepare_authentication_security(
@@ -481,19 +462,7 @@ def _request(
         if outcome is NestedOutcome.EXPLICIT_DENIAL
         else PolicyStatus.UNRESOLVED
     )
-    body = response.body if response else None
-    material = _request_material(settings)
-    # No token/header redaction framework: this capability withholds a whole echoed body and
-    # allowlists non-credential response metadata. Existing scanner evidence is unchanged.
-    withheld = body is not None and _contains_material(
-        body.decode("utf-8", errors="replace"), material
-    )
-    response_headers = {
-        name: value
-        for name, value in (response.headers.items() if response else ())
-        if name.lower() in {"content-type", "content-length", "date", "server", "retry-after"}
-        and not _contains_material(value, material)
-    }
+    response_headers, body, withheld = capture_probe_response(response, _request_material(settings))
     discovery = (
         safe.query_generation.operation_analysis.schema_scan.introspection.detection.discovery
     )
@@ -514,8 +483,8 @@ def _request(
         variables=deepcopy(selected.variables),
         request_method="POST",
         response_status_code=response.status_code if response else None,
-        response_headers=response_headers if response else None,
-        response_body=None if withheld else body,
+        response_headers=response_headers,
+        response_body=body,
         response_material_withheld=withheld,
         duration_seconds=response.duration_seconds if response else perf_counter() - started,
         error_type=error_type,

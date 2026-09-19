@@ -37,6 +37,7 @@ class EvidenceType(StrEnum):
     SENSITIVE_INPUT_PROBE = "sensitive_input_probe"
     IDOR_BOLA_PROBE = "idor_bola_probe"
     AUTHENTICATION_SECURITY_PROBE = "authentication_security_probe"
+    ABUSE_CONTROL_PROBE = "abuse_control_probe"
     HTTP_ERROR = "http_error"
     PARSER_ERROR = "parser_error"
 

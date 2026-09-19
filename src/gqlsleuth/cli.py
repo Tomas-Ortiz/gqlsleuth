@@ -15,6 +15,7 @@ from typer.core import TyperGroup
 
 from gqlsleuth import __version__
 from gqlsleuth.ai.models import AIInterpretationResult
+from gqlsleuth.application.abuse_controls import AbuseControlSession, prepare_abuse_controls
 from gqlsleuth.application.active_execution import (
     ActiveExecutionScanResult,
     ActiveMutationPreviewResult,
@@ -42,6 +43,7 @@ from gqlsleuth.application.sequential_discovery import (
     execute_sequential_discovery,
     prepare_sequential_discovery,
 )
+from gqlsleuth.domain.abuse_controls import AbuseControlResult
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.authentication import AuthenticationProbe, AuthenticationSecurityResult
 from gqlsleuth.domain.authorization_policy import parse_policy_assertions
@@ -67,6 +69,7 @@ from gqlsleuth.domain.sequential_discovery import (
     parse_discovery_seeds,
 )
 from gqlsleuth.infrastructure.http import HttpClientSettings
+from gqlsleuth.presentation.abuse_controls import render_abuse_controls
 from gqlsleuth.presentation.authentication import PROBE_LABELS, render_authentication
 from gqlsleuth.presentation.authorization_policy import render_authorization_policy
 from gqlsleuth.presentation.console import (
@@ -381,6 +384,18 @@ def scan(
             ),
         ),
     ] = None,
+    rate_limit_review: Annotated[
+        bool,
+        typer.Option(
+            "--rate-limit-review",
+            rich_help_panel="Rate Limiting & Abuse Controls",
+            help=(
+                "ACTIVE exact-request repeats: max 5 Query or 3 Mutation requests. "
+                "Separate selection/confirmation required. Default: disabled."
+            ),
+            show_default=False,
+        ),
+    ] = False,
     auth_security_review: Annotated[
         bool,
         typer.Option(
@@ -437,6 +452,8 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        if rate_limit_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
+            raise GQLSleuthError("--rate-limit-review requires ACTIVE mode without --auth-context.")
         if auth_security_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
             raise GQLSleuthError(
                 "--auth-security-review requires ACTIVE mode without --auth-context."
@@ -680,6 +697,13 @@ def scan(
             idor_bola_detection=idor_detection,
             authentication_token_security=authentication,
         )
+        if rate_limit_review:
+            report_result = replace(
+                report_result,
+                rate_limiting_abuse_controls=_run_abuse_control_stage(
+                    report_result, http_settings=http_settings, verbose=verbose
+                ),
+            )
     ai_result = None
     if ai:
         console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
@@ -771,6 +795,51 @@ def _run_multiplicity_stage(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
     render_multiplicity(console, result, verbose=verbose)
+    return result
+
+
+def _run_abuse_control_stage(
+    active: ActiveExecutionScanResult,
+    *,
+    http_settings: HttpClientSettings,
+    verbose: bool = False,
+) -> AbuseControlResult:
+    preview = prepare_abuse_controls(active, enabled=True)
+    render_abuse_controls(console, preview, preview=True)
+    if not preview.candidates:
+        return preview
+    if not _interactive_stdin():
+        message = (
+            "Interactive selection and confirmation required; zero abuse-control repeats execute."
+        )
+        console.print(message)
+        return replace(preview, limitations=(*preview.limitations, message))
+    try:
+        while True:
+            value = typer.prompt(
+                "Select one operation for bounded abuse-control testing (Enter for none)",
+                default="",
+                show_default=False,
+            ).strip()
+            if not value:
+                return preview
+            indices = {str(item.index): item.index for item in preview.candidates}
+            if value in indices:
+                break
+            console.print("Choose exactly one listed candidate index, or Enter for none.")
+        session = AbuseControlSession(
+            active, http_settings=http_settings, enabled=True, selected_index=indices[value]
+        )
+        preview = session.preview
+        render_abuse_controls(console, preview, preview=True)
+        confirmed = typer.confirm(
+            "Execute rate limiting / abuse-control validation?", default=False
+        )
+    except (typer.Abort, EOFError, KeyboardInterrupt):
+        console.print("Abuse-control selection/confirmation cancelled; zero repeats execute.")
+        return preview
+    result = session.execute(preview=preview, confirmed=confirmed)
+    render_abuse_controls(console, result, verbose=verbose)
     return result
 
 
