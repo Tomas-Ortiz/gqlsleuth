@@ -182,7 +182,10 @@ def test_scan_help_documents_defaults_without_duplicate_metadata():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
     assert result.exit_code == 0
     output = " ".join(result.stdout.replace("│", " ").replace("|", " ").split())
-    assert output.lower().count("default:") == 21
+    assert output.lower().count("default:") == 23
+    assert "--federation-review" in output
+    assert "--federation-sdl-expect-deny" in output
+    assert "--federation-entity-case" in output
     assert "--file-upload-review" in output
     assert "--rate-limit-review" in output
     assert "--auth-security-review" in output

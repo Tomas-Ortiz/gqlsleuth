@@ -21,7 +21,7 @@ no target requests.
 ACTIVE mode offers independently confirmed Query-shape checks, Query-depth checks, bounded
 sequential object discovery, IDOR/BOLA detection, Mutation authorization validation,
 Sensitive Input Validation, Authentication & Token Security, Rate Limiting & Abuse Controls,
-File Upload Security and explicitly selected Mutation
+File Upload Security, Federation Security and explicitly selected Mutation
 execution. Reports support JSON, Markdown and HTML; optional local interpretation uses Ollama
 and `qwen3:8b`. Console output is
 compact by default, with detailed output available through `--verbose`.
@@ -29,6 +29,64 @@ compact by default, with detailed output available through `--verbose`.
 Target HTTP headers, authentication, timeouts, proxy and TLS settings remain separate from local
 Ollama. Review candidates require manual validation and are not vulnerability findings. Developer
 roadmap details are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Federation Security
+
+On an authorized target, opt into bounded runtime validation of a retained Phase 16
+`FEDERATION_SURFACE`:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --federation-review
+gqlsleuth scan https://example.com/graphql --mode active --federation-review --federation-sdl-expect-deny
+gqlsleuth scan https://example.com/graphql --mode active -H "Authorization: Bearer TOKEN" --federation-review --federation-entity-case '{"__typename":"User","id":"123"}'
+```
+
+Explicitly select **one endpoint**, even when only one is available, then select the service
+and/or entity probe. Enter selects none. The exact anonymous Query, variables, policies and
+two-request maximum appear before the separate **Execute federation security validation? [y/N]**
+confirmation. Disabled, declined and non-interactive runs send zero federation probes. Ordinary
+anonymous or Phase 14 headers are supported; named authentication contexts are rejected.
+
+The fixed service probe is `query { _service { sdl } }`. By default this is **OBSERVE**:
+returning SDL is not automatically a vulnerability and creates no Finding. Only the explicit
+`--federation-sdl-expect-deny` policy can produce **Federation service metadata exposure** when
+nonempty SDL is returned successfully. It may be intentionally public in the deployment;
+GQLSleuth does not infer a private-service policy. Human output shows only byte count and SHA-256;
+full bounded SDL remains in response evidence, never as duplicated semantic metadata.
+
+An entity case itself asserts **DENY**. Supply exactly one flat JSON object, at most 1024 UTF-8
+bytes, containing `__typename` and one to three direct keys. Duplicate keys, nesting, lists,
+nulls and floats are rejected. The type must be a concrete retained `_Entity` union member.
+Every key must be a direct argument-free ID, String, Int, Boolean or Enum field with a compatible
+value. Int is signed 32-bit and excludes Booleans; Enum values are exact. ID compares exact textual
+identity using the existing object-authorization helper: `"001"` differs from `1`.
+
+The AST-built `_entities` Query uses one representation and one inline fragment selecting only
+`__typename` and all supplied keys. Only a successful error-free response with exactly one entity,
+the exact typename and all typed key matches can produce **Federation entity authorization weakness**
+under that DENY policy. An explicit authorization denial satisfies DENY; missing, null, mismatched,
+generic-error or transport-failed outcomes remain unresolved. No ownership, tenant, role hierarchy,
+cross-user policy, IDOR/BOLA classification or federation-wide conclusion is inferred.
+
+At most **two requests**, service first and entity second, execute sequentially without retries,
+concurrency or fallback. Failures count and do not cancel the other selected probe. Retained schema,
+Phase 16 provenance, exact plan and request settings are rechecked before every send. No entity
+enumeration, representation guessing, `@key` exploration, multiple representations, ID mutation,
+response-derived requests, SDL parsing, subgraph discovery or Apollo/vendor inference occurs.
+
+Only actual attempts create `FEDERATION_SECURITY_PROBE` evidence. JSON retains exact request and
+bounded response facts plus policy, source references and classification. Human reports add
+Federation Security and conditional Federation Security Findings before the final Safety Notice.
+Outgoing credentials/proxy settings remain runtime-only; the existing probe capture boundary
+withholds responses echoing supplied credentials. Operator-supplied entity keys intentionally
+appear in previews/evidence/reports. AI context and call count are unchanged; no new federation
+data is sent to AI or used as a repetition baseline. No severity, CVSS or CWE is assigned.
+
+Offline tests and the loopback-only manual fixture need no real credentials or external target:
+
+```bash
+uv run python tests/fixtures/phase29_target.py --smoke
+```
 
 ## File Upload Security
 
@@ -877,8 +935,9 @@ uv run python tests/fixtures/phase17_target.py --smoke
 ```
 
 Without `--smoke`, the test-only server prints a loopback URL for manual CLI testing. No real
-credentials or public services are needed. General complexity, rate-limit, upload, subscription,
-federation and Mutation multiplicity runtime checks are not implemented.
+credentials or public services are needed. These multiplicity probes do not perform general
+complexity, rate-limit, upload, subscription, federation or Mutation multiplicity checks.
+Federation Security is the separate, explicitly enabled capability documented above.
 
 The `scan` command first makes conservative HTTP GET requests to endpoint candidates and reuses
 those responses for signal analysis. An inconclusive candidate receives at most one static POST

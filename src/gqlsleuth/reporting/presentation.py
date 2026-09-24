@@ -336,6 +336,10 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             sections.append(sensitive_review_section(report.sensitive_input_review))
         if report.sensitive_input_validation:
             sections.append(sensitive_validation_section(report.sensitive_input_validation))
+    if report.federation_security is not None:
+        from gqlsleuth.reporting.federation import federation_sections
+
+        sections.extend(federation_sections(report.federation_security))
     if report.file_upload_security is not None:
         from gqlsleuth.reporting.file_upload import file_upload_sections
 

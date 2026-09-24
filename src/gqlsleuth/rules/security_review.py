@@ -272,14 +272,30 @@ def _collection_facts(
 
 
 def _federation_facts(schema: ParsedSchema, types: dict[str, SchemaNamedType]) -> tuple[str, ...]:
+    service, entities = federation_surfaces(schema, types)
+    return (("Query._service returns _Service", "_Service.sdl: String") if service else ()) + (
+        (
+            "Query._entities returns [_Entity]",
+            "_Entity union",
+            "_Any scalar",
+            "_entities(representations: [_Any])",
+        )
+        if entities
+        else ()
+    )
+
+
+def federation_surfaces(
+    schema: ParsedSchema, types: dict[str, SchemaNamedType]
+) -> tuple[bool, bool]:
+    """Shared Phase 16 structural signals, independent of runtime probe compatibility."""
     root = types.get(schema.query_root)
     fields = {field.name: field for field in root.fields} if root else {}
     service = fields.get("_service")
     service_type = types.get("_Service")
     entities = fields.get("_entities")
     any_type, entity_type = types.get("_Any"), types.get("_Entity")
-    facts: list[str] = []
-    if (
+    service_available = bool(
         service
         and service.type.named_type == "_Service"
         and service_type
@@ -288,9 +304,8 @@ def _federation_facts(schema: ParsedSchema, types: dict[str, SchemaNamedType]) -
             field.name == "sdl" and field.type.named_type == "String"
             for field in service_type.fields
         )
-    ):
-        facts.extend(("Query._service returns _Service", "_Service.sdl: String"))
-    if (
+    )
+    entities_available = bool(
         entities
         and entities.type.is_list
         and entities.type.named_type == "_Entity"
@@ -302,16 +317,8 @@ def _federation_facts(schema: ParsedSchema, types: dict[str, SchemaNamedType]) -
             arg.name == "representations" and arg.type.is_list and arg.type.named_type == "_Any"
             for arg in entities.arguments
         )
-    ):
-        facts.extend(
-            (
-                "Query._entities returns [_Entity]",
-                "_Entity union",
-                "_Any scalar",
-                "_entities(representations: [_Any])",
-            )
-        )
-    return tuple(facts)
+    )
+    return service_available, entities_available
 
 
 def _input_facts(

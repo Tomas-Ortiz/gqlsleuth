@@ -39,6 +39,7 @@ class EvidenceType(StrEnum):
     AUTHENTICATION_SECURITY_PROBE = "authentication_security_probe"
     ABUSE_CONTROL_PROBE = "abuse_control_probe"
     FILE_UPLOAD_PROBE = "file_upload_probe"
+    FEDERATION_SECURITY_PROBE = "federation_security_probe"
     HTTP_ERROR = "http_error"
     PARSER_ERROR = "parser_error"
 

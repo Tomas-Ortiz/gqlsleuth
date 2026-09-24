@@ -2119,8 +2119,9 @@ accepted/rejected/ambiguous handlers with offline MockTransport tests. Its `--sm
 real local HTTP and CLI confirmation with exactly two probes per run and no Mutations. No public
 target is required for testing or CI, and no runtime dependency was added.
 
-Phase 18 adds the separate bounded depth check below. General cost/complexity analysis, rate
-limiting, subscriptions, uploads and federation runtime behavior remain future possibilities.
+Phase 18 adds the separate bounded depth check below. General cost/complexity analysis and
+subscriptions remain future possibilities. Separate bounded rate, upload and federation
+capabilities are documented in Phases 27–29; none are part of these multiplicity probes.
 
 ### Phase 18 — Controlled Query Depth Validation
 
@@ -2188,8 +2189,9 @@ AIContext, prompt, schema, allowlist, transport and the single optional inferenc
 Phase 18 data is excluded from AI. Phase 9, Mutation controls and the Phase 17 two-request budget
 remain independent. `tests/fixtures/phase18_target.py --smoke` provides deterministic loopback
 accepted/rejected/indeterminate and unselected runs; MockTransport covers network failure and
-request isolation. No dependencies were added. General cost analysis, rate limits, uploads,
-subscriptions and federation remain unimplemented. Phase 19's separate SAFE named-context
+request isolation. No dependencies were added. General cost analysis and subscriptions remain
+unimplemented; bounded rate, upload and federation capabilities are separate Phases 27–29.
+Phase 19's separate SAFE named-context
 workflow is described below.
 
 ### Phase 19 — Nested Authorization Review
@@ -3109,6 +3111,83 @@ Tests use MockTransport and a stdlib multipart-parsing loopback fixture:
 with fake headers, deterministic baseline and variant acceptance/rejection, ambiguity, exact budgets,
 changed files and independent consent. No public target, real credentials or new dependency is needed.
 
+### Phase 29 — Federation Security
+
+Implemented as an opt-in ACTIVE capability. `--federation-review` uses existing Phase 16
+`FEDERATION_SURFACE` candidates, schema evidence and retained introspection. The shared pure
+`federation_surfaces` helper preserves Phase 16 detection facts and ordering; runtime compatibility
+checks validate the exact fixed requests against that schema. No second name/vendor heuristic is
+introduced. Preparation and canonical revalidation are local and send no requests.
+
+The CLI requires explicit selection of one retained endpoint (including a single available endpoint)
+and explicit service/entity probe indices, followed by a separate default-NO
+`Execute federation security validation?` confirmation. Empty selection, non-interactive execution,
+decline or disabled capability sends zero Phase 29 requests. Ordinary anonymous and Phase 14
+header contexts are supported; named contexts and SAFE mode are rejected for this opt-in capability.
+
+`domain/federation.py` owns typed candidates, plans, outcomes, policies, evidence and scoped Findings.
+`graphql/federation.py` builds anonymous documents using graphql-core AST nodes and validates them
+against the native retained schema. The application-owned terminal `FederationSecuritySession`
+rebuilds selected canonical plans before every send and checks schema/source provenance, request
+settings, strict variables, selection and its hard two-attempt budget. Caller previews cannot
+introduce additional fields/types/representations or documents. A finished session cannot run again.
+
+The service probe is exactly `query { _service { sdl } }`, without variables or operationName.
+Default OBSERVE never evaluates DENY or creates a Finding. `--federation-sdl-expect-deny` explicitly
+asserts DENY. SDL_RETURNED requires successful HTTP/GraphQL, no errors and nonempty String SDL;
+EXPLICIT_DENIAL reuses exact authorization signals; null/empty/missing/malformed/generic-error
+responses are INDETERMINATE; normalized transport failure is NETWORK_FAILURE. Semantic metadata
+retains only returned state, UTF-8 byte length and SHA-256. Full SDL remains only in bounded response
+evidence; it is not parsed for keys, URLs, subgraphs or further requests.
+
+`--federation-entity-case` accepts exactly one 1024-byte UTF-8 JSON object: valid GraphQL `__typename`
+and one to three flat direct string/integer/Boolean keys; no duplicate keys, floats, nulls, lists
+or nested values. It carries explicit operator DENY. The typename must be a concrete retained
+`_Entity` member. Keys must be direct argument-free ID/String/Int/Boolean/Enum output fields and
+schema-compatible values. Int is signed 32-bit excluding bool, String and Enum use exact matching,
+and ID reuses Phase 20 textual identity (`001` is distinct from `1`). Custom scalars and composite,
+list, Float or argument-bearing key fields are not supported. The tool does not discover `@key`.
+
+The entity probe uses the actual schema representations argument type, a one-element variables
+array and one inline fragment selecting `__typename` plus every supplied key in deterministic
+order. Successful HTTP/GraphQL without errors, a one-element non-null entity array, exact typename
+and every typed key match are required for ENTITY_RETURNED. Mismatched/missing keys or typename,
+wrong scalar types, unexpected array sizes and generic business errors are INDETERMINATE.
+Applicable explicit authorization signals reuse the existing denial helper.
+
+DENY plus returned SDL/entity is VIOLATED; explicit denial is SATISFIED; other outcomes UNRESOLVED.
+Only those violations produce `FEDERATION_SDL_POLICY_VIOLATION` (Federation service metadata exposure)
+or `FEDERATION_ENTITY_AUTHORIZATION_FAILURE` (Federation entity authorization weakness). Policies are
+operator supplied and need independent validation. No ownership, tenant, role hierarchy, cross-user
+policy, privacy assumption, IDOR/BOLA label, severity/CVSS/CWE or federation-wide claim is inferred.
+
+The centralized HttpClient sends at most one service and one entity JSON POST, sequentially in that
+order. Attempts include failures; one failed probe does not prevent the other selected probe. There
+are no retries, concurrency, enumeration, key guessing, ID mutation, multi-representation requests,
+response-derived IDs, SDL-driven follow-ups, subgraph discovery or vendor-specific checks. Existing
+timeout, proxy, TLS, redirect and response bounds remain intact. Cross-origin final responses cannot
+establish access; existing credential stripping and request-context response capture are reused.
+
+Only attempted requests create `FEDERATION_SECURITY_PROBE` Evidence with ACTIVE mode, selected
+endpoint/probe, Phase 16 and schema source references, exact query/variables, timestamp, POST,
+bounded response/status/headers/duration, normalized error, outcome, policy and optional evaluation.
+Entity keys are deliberate operator request data; outgoing auth headers and proxy credentials are
+not persisted. Known credential echoes are withheld by the existing probe-specific capture boundary,
+without generic redaction or changes to earlier evidence.
+
+`ActiveExecutionScanResult.federation_security` and reporting composition are additive and omitted
+from canonical JSON when disabled. The stage follows earlier independently consented active stages;
+evidence ordering for those stages is preserved. Human sections are Federation Security and
+conditional Federation Security Findings, always before the final single Safety Notice. AIContext,
+prompts and inference count are unchanged; all new federation content stays excluded. Phase 27
+continues consuming only ordinary execution containers, never federation probes.
+
+MockTransport tests and `uv run python tests/fixtures/phase29_target.py --smoke` exercise only loopback
+with fake headers: observation, DENY violations, denials, null/wrong identity, independent network
+failure, exact budgets and zero-request disabled/declined/non-interactive paths. No dependency,
+public target or real credentials are required. Apollo-specific functionality, subscriptions,
+WebSocket, query-cost analysis and other future federation families remain out of scope.
+
 ## 35. MVP definition
 
 The first meaningful MVP should be able to:
@@ -3143,7 +3222,7 @@ Potential future improvements include:
 - GraphQL subscription support.
 - Further file-upload checks beyond the benign, bounded policy validation implemented in Phase 28.
 - JWT inspection.
-- Active federation checks (local schema indicators are implemented in Phase 16).
+- Further federation checks beyond the bounded SDL/entity policy probes implemented in Phase 29.
 - Apollo-specific checks.
 - GraphQL over WebSocket.
 - Burp Suite integration.

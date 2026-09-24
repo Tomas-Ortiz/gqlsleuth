@@ -148,7 +148,9 @@ def build_report(
                 "Findings are scoped to explicit operator policy and retained probe evidence; "
                 + (
                     "independently validate the policy and tested request context."
-                    if result.rate_limiting_abuse_controls or result.file_upload_security
+                    if result.rate_limiting_abuse_controls
+                    or result.file_upload_security
+                    or result.federation_security
                     else "independently validate the policy and tested authentication path."
                 ),
             )
@@ -157,6 +159,7 @@ def build_report(
                 result.authentication_token_security
                 or result.rate_limiting_abuse_controls
                 or result.file_upload_security
+                or result.federation_security
             )
             else SAFETY_NOTICE.replace(
                 "This report creates no vulnerability findings.",
@@ -173,6 +176,9 @@ def build_report(
         if isinstance(result, ActiveExecutionScanResult)
         else None,
         rate_limiting_abuse_controls=result.rate_limiting_abuse_controls
+        if isinstance(result, ActiveExecutionScanResult)
+        else None,
+        federation_security=result.federation_security
         if isinstance(result, ActiveExecutionScanResult)
         else None,
         file_upload_security=result.file_upload_security

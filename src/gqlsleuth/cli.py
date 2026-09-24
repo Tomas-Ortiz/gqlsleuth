@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import JsonValue
 from rich.console import Console
 from rich.text import Text
 from typer._click import Context, HelpFormatter
@@ -30,6 +31,7 @@ from gqlsleuth.application.authentication import (
 )
 from gqlsleuth.application.authorization_policy import evaluate_authorization_policy
 from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
+from gqlsleuth.application.federation import FederationSecuritySession
 from gqlsleuth.application.file_upload import FileUploadSecuritySession
 from gqlsleuth.application.idor import IdorSession
 from gqlsleuth.application.multiplicity import execute_multiplicity, prepare_multiplicity
@@ -49,6 +51,7 @@ from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.authentication import AuthenticationProbe, AuthenticationSecurityResult
 from gqlsleuth.domain.authorization_policy import parse_policy_assertions
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
+from gqlsleuth.domain.federation import FederationSecurityResult, parse_entity_case
 from gqlsleuth.domain.file_upload import (
     UPLOAD_VARIANTS,
     FileUploadCase,
@@ -93,6 +96,7 @@ from gqlsleuth.presentation.console import (
     render_scan,
     render_state_warning,
 )
+from gqlsleuth.presentation.federation import render_federation
 from gqlsleuth.presentation.file_upload import render_file_upload
 from gqlsleuth.presentation.idor import render_idor
 from gqlsleuth.presentation.multiplicity import render_multiplicity, render_probe_previews
@@ -393,6 +397,42 @@ def scan(
             ),
         ),
     ] = None,
+    federation_review: Annotated[
+        bool,
+        typer.Option(
+            "--federation-review",
+            rich_help_panel="Federation Security",
+            show_default=False,
+            help=(
+                "ACTIVE federation validation, one selected endpoint, at most two requests; "
+                "separate confirmation. Default: disabled."
+            ),
+        ),
+    ] = False,
+    federation_sdl_expect_deny: Annotated[
+        bool,
+        typer.Option(
+            "--federation-sdl-expect-deny",
+            rich_help_panel="Federation Security",
+            show_default=False,
+            help=(
+                "Explicit operator DENY policy for SDL; requires --federation-review. "
+                "Default: observe only."
+            ),
+        ),
+    ] = False,
+    federation_entity_case: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--federation-entity-case",
+            rich_help_panel="Federation Security",
+            show_default=False,
+            help=(
+                "One flat JSON representation (__typename plus 1–3 keys), expected DENY; "
+                "requires --federation-review."
+            ),
+        ),
+    ] = None,
     file_upload_review: Annotated[
         bool,
         typer.Option(
@@ -504,6 +544,13 @@ def scan(
         raise typer.Exit(code=2)
     try:
         selected_upload_case = None
+        if (
+            federation_sdl_expect_deny or federation_entity_case is not None
+        ) and not federation_review:
+            raise GQLSleuthError("Federation policy/case requires --federation-review.")
+        if federation_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
+            raise GQLSleuthError("Federation review requires ACTIVE mode without --auth-context.")
+        federation_case = parse_entity_case(federation_entity_case or [])
         if (
             upload_case is not None or upload_file is not None or upload_content_type is not None
         ) and not file_upload_review:
@@ -780,6 +827,16 @@ def scan(
                     report_result, http_settings=http_settings, verbose=verbose
                 ),
             )
+        if federation_review:
+            report_result = replace(
+                report_result,
+                federation_security=_run_federation_stage(
+                    result,
+                    entity_case=federation_case,
+                    deny_sdl=federation_sdl_expect_deny,
+                    http_settings=http_settings,
+                ),
+            )
     ai_result = None
     if ai:
         console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
@@ -871,6 +928,76 @@ def _run_multiplicity_stage(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
     render_multiplicity(console, result, verbose=verbose)
+    return result
+
+
+def _run_federation_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    entity_case: dict[str, JsonValue] | None,
+    deny_sdl: bool,
+    http_settings: HttpClientSettings,
+) -> FederationSecurityResult:
+    session = FederationSecuritySession(
+        safe, enabled=True, entity_case=entity_case, deny_sdl=deny_sdl, http_settings=http_settings
+    )
+    preview = session.preview
+    render_federation(console, preview, preview=True)
+    if not preview.candidates:
+        console.print("No retained federation candidates; zero federation requests.")
+        return preview
+    if not _interactive_stdin():
+        message = (
+            "Interactive federation endpoint/probe selection and confirmation required; "
+            "zero federation requests."
+        )
+        console.print(message)
+        return replace(preview, limitations=(*preview.limitations, message))
+    try:
+        while True:
+            value = typer.prompt(
+                "Select one federation endpoint (Enter for none)", default="", show_default=False
+            ).strip()
+            if not value:
+                return preview
+            if value in {str(i) for i in range(1, len(preview.candidates) + 1)}:
+                break
+            console.print("Choose one listed endpoint index, or Enter for none.")
+        candidate = preview.candidates[int(value) - 1]
+        for index, plan in enumerate(candidate.plans, 1):
+            console.print(f"[{index}] {plan.probe.value}; policy {plan.expected.value.upper()}")
+        if not candidate.plans:
+            console.print("No compatible federation probes for this endpoint.")
+            return preview
+        while True:
+            value = typer.prompt(
+                "Select federation probes (comma-separated, max 2, Enter for none)",
+                default="",
+                show_default=False,
+            ).strip()
+            if not value:
+                return session.select(candidate.endpoint, ())
+            tokens = [token.strip() for token in value.split(",")]
+            if (
+                len(tokens) <= 2
+                and len(set(tokens)) == len(tokens)
+                and all(
+                    token in {str(i) for i in range(1, len(candidate.plans) + 1)}
+                    for token in tokens
+                )
+            ):
+                break
+            console.print("Choose only listed probe indices, without duplicates or ranges.")
+        preview = session.select(
+            candidate.endpoint, tuple(candidate.plans[int(token) - 1].probe for token in tokens)
+        )
+        render_federation(console, preview, preview=True)
+        confirmed = typer.confirm("Execute federation security validation?", default=False)
+    except (typer.Abort, EOFError, KeyboardInterrupt):
+        console.print("Federation confirmation cancelled; zero federation requests.")
+        return preview
+    result = session.execute(preview=preview, confirmed=confirmed)
+    render_federation(console, result)
     return result
 
 
