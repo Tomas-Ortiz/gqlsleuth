@@ -20,7 +20,8 @@ no target requests.
 
 ACTIVE mode offers independently confirmed Query-shape checks, Query-depth checks, bounded
 sequential object discovery, IDOR/BOLA detection, Mutation authorization validation,
-Sensitive Input Validation, Authentication & Token Security, Rate Limiting & Abuse Controls and explicitly selected Mutation
+Sensitive Input Validation, Authentication & Token Security, Rate Limiting & Abuse Controls,
+File Upload Security and explicitly selected Mutation
 execution. Reports support JSON, Markdown and HTML; optional local interpretation uses Ollama
 and `qwen3:8b`. Console output is
 compact by default, with detailed output available through `--verbose`.
@@ -28,6 +29,88 @@ compact by default, with detailed output available through `--verbose`.
 Target HTTP headers, authentication, timeouts, proxy and TLS settings remain separate from local
 Ollama. Review candidates require manual validation and are not vulnerability findings. Developer
 roadmap details are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## File Upload Security
+
+Use one known-valid **benign** local file to validate an explicitly selected Upload Mutation on
+an authorized target:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --file-upload-review --upload-case "uploadAvatar:input.file" --upload-file "./avatar.png"
+gqlsleuth scan https://example.com/graphql --mode active -H "Authorization: Bearer TOKEN" --file-upload-review --upload-case "uploadAvatar:input.file" --upload-file "./avatar.png"
+```
+
+This requires an existing schema-derived FILE_UPLOAD_SURFACE and the exact custom scalar
+`Upload` or `Upload!`. Names such as `file` or `avatar` alone do not qualify. The case grammar is
+`OPERATION:ARGUMENT[.FIELD...]`, with at most three nested field levels after the argument.
+Only one Mutation, one non-list Upload leaf and one local file are supported. Lists, multiple
+required Upload values, Query/Subscription uploads and String/base64 APIs are unsupported.
+Optional unrelated Upload fields stay omitted. Current destructive-Mutation safety still applies.
+
+The separate `--upload-file` path must identify a readable, nonempty regular file, at most
+**1 MiB**. Reads are bounded to that limit plus one byte. The original basename is used; full
+parent paths are runtime-only. MIME is inferred deterministically from the filename, falling back
+to `application/octet-stream`. Override it with `--upload-content-type image/png` (plain type/subtype,
+no parameters or control characters). The tester declares this file benign and expected **ALLOW**;
+GQLSleuth does not infer the application's file policy or perform malware analysis.
+
+The preview shows exact generated Mutation/variables, multipart map, basename, size, SHA-256,
+MIME, policies and maximum request count. Select any of these fixed variants as expected **DENY**:
+
+- **Content mismatch:** preserve filename and MIME; replace bytes with the fixed benign UTF-8
+  text `GQLSleuth benign file-upload validation payload.` followed by a newline.
+- **MIME mismatch:** preserve bytes and filename; use `text/plain`, or `application/octet-stream`
+  when the original MIME is already `text/plain`.
+- **Extension mismatch:** preserve bytes and MIME; use a safe `.txt` alternate filename, or `.bin`
+  for an original `.txt`. Other stem dots are replaced to avoid double extensions.
+
+Enter means baseline only; comma-separated indices select variants, duplicates are deduplicated,
+and execution order is fixed. There are no wildcards, ranges or execute-all shortcut. The separate
+**Execute file upload security validation? [y/N]** confirmation defaults to NO. It warns that these
+Mutations may create files, records, emails or jobs; no cleanup, deletion or rollback is attempted.
+Generic Mutation confirmation never authorizes uploads, and the generic Mutation need not have
+executed first. Non-interactive and declined runs send zero upload requests.
+
+The baseline executes first. Only a successful HTTP/GraphQL response with the selected non-null
+Mutation root and no errors confirms it. Rejected, ambiguous or failed baselines are
+BASELINE_UNUSABLE and prevent all variants. After a confirmed baseline, selected variants execute
+independently in content/MIME/extension order, continuing after an ambiguous result or transport
+failure without retrying it. Hard maximum: **four attempts total**, sequentially, with no retry,
+concurrency, fallback files or business-input guessing. File size/hash, schema, exact plan and
+HTTP context are rechecked before every attempt; changed approved files are not uploaded.
+
+Explicit file rejection uses HTTP 413/415 or exact file-validation GraphQL codes; message-only
+fallbacks must be scoped to the selected root/input path. Generic business/authentication errors,
+missing/null roots, malformed responses and ambiguous partial data are INDETERMINATE. For each
+selected DENY variant: acceptance is VIOLATED, explicit file rejection is SATISFIED, and ambiguity
+or transport failure is UNRESOLVED. Only a confirmed baseline followed by an accepted selected
+DENY variant creates a **File upload validation weakness** Finding with baseline/variant evidence.
+The operator's application-specific policy must be validated independently. Acceptance proves
+only a non-null successful Mutation response, not persistence, retrieval, rendering or execution.
+No severity, CVSS, CWE, stored-XSS or arbitrary-file-execution claim is made.
+
+The centralized HTTP client sends GraphQL multipart `operations`, `map` and one `0` file part.
+Only the selected Upload variable becomes null; all unrelated variables and existing header,
+timeout, proxy, TLS and redirect protections are preserved. HTTPX owns the multipart boundary.
+Named authentication contexts are unsupported here; existing Phase 15/25 rules are unchanged.
+
+JSON/Markdown/HTML retain safe file metadata, logical requests, selection, confirmation, counts,
+outcomes, policies, Findings and provenance. Only actual attempts create FILE_UPLOAD_PROBE
+evidence. Local bytes, full local paths and outgoing credential/settings values are not serialized.
+Echoed known file/path/credential material causes the whole response to be withheld with an explicit
+marker, without rewriting prior evidence or adding generic redaction. Other raw response evidence
+remains potentially sensitive. Safety Notice is the final human-report section. AIContext and
+Ollama call counts are unchanged; upload artifacts and Findings never enter AI.
+
+There are no generated executable/script payloads, webshells, malicious SVG/HTML, traversal names,
+polyglots, archive bombs, overwrite tests or size-limit searches. Returned URLs/IDs are never fetched,
+rendered or handed to authorization/IDOR/rate-limit testing. No authentication changes occur.
+
+Loopback-only development smoke, using a tiny PNG and fake credentials:
+
+```bash
+uv run python tests/fixtures/phase28_target.py --smoke
+```
 
 ## Rate Limiting & Abuse Controls
 

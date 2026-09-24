@@ -185,6 +185,29 @@ def generate_collection_bound(
     return None
 
 
+def generate_input_path(
+    schema: ParsedSchema,
+    reference: TypeReference,
+    path: tuple[str, ...],
+    *,
+    input_name: str,
+) -> JsonValue:
+    """Materialize one explicit input path using the existing required-input placeholders."""
+    value, _ = _placeholder(
+        schema, reference, input_name=input_name, active_input_types=frozenset()
+    )
+    if not path:
+        return value
+    named = schema.type_named(reference.named_type)
+    if reference.is_list or named is None or not isinstance(value, dict):
+        raise QueryGenerationError("Selected input path requires non-list input objects.")
+    child = next((item for item in named.input_fields if item.name == path[0]), None)
+    if child is None:
+        raise QueryGenerationError("Selected input path is unavailable.")
+    value[child.name] = generate_input_path(schema, child.type, path[1:], input_name=child.name)
+    return value
+
+
 def _placeholder(
     schema: ParsedSchema,
     reference: TypeReference,

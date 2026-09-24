@@ -336,6 +336,10 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             sections.append(sensitive_review_section(report.sensitive_input_review))
         if report.sensitive_input_validation:
             sections.append(sensitive_validation_section(report.sensitive_input_validation))
+    if report.file_upload_security is not None:
+        from gqlsleuth.reporting.file_upload import file_upload_sections
+
+        sections.extend(file_upload_sections(report.file_upload_security))
     if report.rate_limiting_abuse_controls is not None:
         from gqlsleuth.reporting.abuse_controls import abuse_control_sections
 

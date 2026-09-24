@@ -3005,6 +3005,110 @@ invalid-login baselines, early stops, secret canaries, redirects, unchanged cook
 CLI and all reports. The loopback-only fixture uses fake inputs and no real accounts or external
 target. No later vulnerability families or unbounded abuse automation are included.
 
+### Phase 28 — File Upload Security
+
+Implemented as opt-in ACTIVE `--file-upload-review`, requiring exactly one strict
+`--upload-case OPERATION:ARGUMENT[.FIELD...]` and one `--upload-file PATH`. At most three nested
+field levels follow the root argument; arrays, wildcards, ranges, alternate grammar and whitespace
+normalization are unsupported. Optional `--upload-content-type` accepts a plain MIME type/subtype.
+Named authentication contexts are rejected; ordinary anonymous/Phase 14 header contexts are reused.
+Invalid CLI combinations and unusable/oversized local files fail before scanning.
+
+`application/file_upload.py` composes an immutable upload plan/result and owns a terminal session.
+It selects the existing retained Mutation/schema through the Phase 23/24 helper, requires retained
+Phase 16 FILE_UPLOAD_SURFACE provenance for that operation, and independently resolves the exact
+non-list Upload scalar path. Phase 16 semantics and zero-request analysis are unchanged. Lists,
+multiple populated Upload leaves, non-Upload custom scalars and Query/Subscription roots are
+unsupported. Optional unrelated Upload inputs remain absent.
+
+Phase 10 generation supplies required business inputs, deterministic semantic placeholders and
+minimal output selection. A small shared Phase 8 input-path helper uses the existing placeholder
+algorithm for the selected optional path and any required siblings. No second Mutation generator
+is introduced. The Phase 20 AST substitution helper recovers actual variable names, rejects shared
+variables and preserves unrelated values/types. Existing anonymous single-Mutation/root, native
+schema validation and destructive-name safety checks apply. No aliases, fragments, directives,
+unexpected definitions or roots are accepted. The selected placeholder alone becomes null for
+multipart mapping; native validation occurs on the canonical placeholder representation before
+that protocol-required substitution.
+
+`infrastructure/upload_file.py` reads only regular readable nonempty files, with a fixed 1 MiB
+ceiling and at most limit+1 bytes read. MIME inference uses Python's built-in filename mappings
+without platform-specific MIME overrides; fallback is application/octet-stream. Basenames are
+unchanged for baseline requests; path separators, control characters and encoded separators are
+rejected. Full paths and bytes remain runtime-only. Persistent metadata is basename, MIME, size
+and SHA-256. The operator supplies a known-valid benign file; this is not a malware-analysis engine.
+
+The target HTTP adapter gains only `SingleFileMultipart`: text fields and one binary file part,
+restricted to POST without a JSON body. HTTPX frames the multipart boundary/content length/type;
+caller Content-Type cannot override it. Logical GraphQL `operations` and `map` JSON plus file part
+`0` follow the multipart convention, without operationName. Existing JSON requests are unchanged.
+TLS, timeout, proxy, trust_env=False, User-Agent, custom headers, body limits, redirect limits,
+same-origin credentials and cross-origin stripping remain centralized. Cross-origin final upload
+responses are indeterminate. No upload-response URL or ID causes additional requests.
+
+The ACTIVE CLI inserts File Upload Security after generic Mutation interaction and before the
+existing abuse-control stage. Generic Mutation execution is not a prerequisite. A local plan
+preview, explicit variant selection and one separate default-NO `Execute file upload security
+validation?` confirmation are required. Enter selects baseline only; comma-separated 1/2/3 indices
+are deduplicated and ordered canonically. No earlier confirmation authorizes uploads. The final
+plan shows the logical request/map, safe file metadata, policies, selected probes and maximum count,
+with an explicit warning about Mutation side effects and absent cleanup/rollback. Non-interactive
+or declined execution adds zero uploads.
+
+The fixed sequence is one ALLOW baseline followed, only when confirmed, by selected DENY variants:
+
+- CONTENT_MISMATCH: identical filename/MIME, fixed benign text plus newline.
+- MIME_MISMATCH: identical bytes/filename, text/plain or application/octet-stream alternate.
+- EXTENSION_MISMATCH: identical bytes/MIME, safe .txt or .bin extension, no double extensions.
+
+Maximum four attempts, sequentially, no retries or fallback. Size/hash, current schema/provenance,
+generator output, destructive safety, exact variables/map, selected probes, settings and strict
+confirmation are revalidated before every send against the original approved plan. Changed files
+or caller-edited previews cannot supply new request material. Session completion/decline is terminal.
+Failures consume attempts. A baseline rejection, ambiguity or transport failure stops all variants.
+After a confirmed baseline, independently selected variants continue after an ambiguous/failed
+variant, within the original budget; the failed probe is never retried.
+
+The upload-specific classifier accepts only successful HTTP/GraphQL responses containing the
+selected non-null Mutation root without nonempty errors. Explicit rejection uses HTTP 413/415
+or normalized exact INVALID_FILE_TYPE, FILE_TYPE_NOT_ALLOWED, UNSUPPORTED_FILE_TYPE,
+UNSUPPORTED_MEDIA_TYPE, INVALID_UPLOAD, FILE_EXTENSION_NOT_ALLOWED codes on this single-file request.
+An unrelated error path never qualifies. Exact message fallback (without an explicit code) requires
+the selected root or Upload input path: unsupported file type, file type not allowed, invalid file
+type, unsupported media type, file extension not allowed, invalid file extension. Partial non-null
+data/errors, generic authorization/business errors, null/missing roots and malformed responses
+remain INDETERMINATE. Normalized transport errors are NETWORK_FAILURE. Authorization denial
+semantics are not repurposed for file validation.
+
+Baseline evaluations are BASELINE_CONFIRMED or BASELINE_UNUSABLE, with NOT_EXECUTED before attempts.
+DENY variants use existing PolicyStatus: acceptance VIOLATED, explicit file rejection SATISFIED,
+otherwise UNRESOLVED. FILE_UPLOAD_VALIDATION_POLICY_VIOLATION Findings require both a confirmed
+baseline and an accepted selected DENY variant. They retain operation/path, subtype, operator-policy
+provenance and baseline/variant evidence references. Every Finding states that application policy
+was operator supplied, and persistence/retrieval/rendering/execution were not verified. No severity,
+CVSS/CWE, executable-upload, stored-XSS or global-validation inference is introduced.
+
+Only attempted requests create FILE_UPLOAD_PROBE evidence. It preserves ACTIVE mode, exact logical
+document/operations/map, variable path, file metadata/hash, schema source IDs, probe/policy, timestamp,
+HTTP status, bounded response/header facts, duration, normalized error and outcome/evaluation. It
+does not serialize multipart boundaries, raw file bytes, full local paths or outgoing headers/settings.
+The shared probe capture boundary withholds whole responses echoing known supplied file/path or
+credential material and marks the omission; this is not generic redaction and does not alter prior
+evidence. Remaining response artifacts may still be sensitive.
+
+`ActiveExecutionScanResult.file_upload_security` and the optional report projection are additive;
+disabled JSON omits the field. Human sections are File Upload Security and conditional File Upload
+Findings, before the final single Safety Notice. AIContext, prompts and calls are unchanged and
+exclude all upload metadata, requests, responses and Findings. Phase 27 consumes only ordinary
+execution containers, so upload probes cannot become repetition baselines. No cross-capability
+handoff, authentication change, response-derived file fetch, dangerous payload generation, filename
+traversal, overwrite/polyglot/archive/size abuse or later upload family is implemented.
+
+Tests use MockTransport and a stdlib multipart-parsing loopback fixture:
+`uv run python tests/fixtures/phase28_target.py --smoke`. It handles a tiny PNG entirely in memory,
+with fake headers, deterministic baseline and variant acceptance/rejection, ambiguity, exact budgets,
+changed files and independent consent. No public target, real credentials or new dependency is needed.
+
 ## 35. MVP definition
 
 The first meaningful MVP should be able to:
@@ -3037,7 +3141,7 @@ Potential future improvements include:
 - General query-cost/complexity analysis beyond the single bounded Phase 18 depth probe.
 - Broader rate-limit analysis beyond the fixed operator-policy sequence implemented in Phase 27.
 - GraphQL subscription support.
-- Active file-upload checks (local schema indicators are implemented in Phase 16).
+- Further file-upload checks beyond the benign, bounded policy validation implemented in Phase 28.
 - JWT inspection.
 - Active federation checks (local schema indicators are implemented in Phase 16).
 - Apollo-specific checks.

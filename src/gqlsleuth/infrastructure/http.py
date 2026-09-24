@@ -1,14 +1,14 @@
 """Central synchronous HTTPX adapter with conservative transport limits."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter
 from types import TracebackType
 from typing import Self
 from urllib.parse import urlsplit
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
 from gqlsleuth import __version__
 from gqlsleuth.domain.exceptions import (
@@ -134,6 +134,16 @@ def _restrict_redirect_headers(request: httpx.Request) -> None:
         request.headers = httpx.Headers([*request.headers.multi_items(), *scope.cookies])
 
 
+@dataclass(frozen=True)
+class SingleFileMultipart:
+    """Runtime-only one-file body. HTTPX owns multipart framing and boundary selection."""
+
+    fields: dict[str, str]
+    filename: str
+    content_type: str
+    content: bytes = field(repr=False)
+
+
 class HttpRequest(BaseModel):
     """GQLSleuth-owned input for a single HTTP request."""
 
@@ -143,7 +153,14 @@ class HttpRequest(BaseModel):
     url: str
     headers: dict[str, str] = Field(default_factory=dict)
     json_body: JsonValue | None = None
+    multipart: SingleFileMultipart | None = Field(default=None, repr=False, exclude=True)
     timeout_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def one_body(self) -> Self:
+        if self.multipart is not None and (self.json_body is not None or self.method != "POST"):
+            raise ValueError("Multipart requires POST and no JSON body.")
+        return self
 
 
 class HttpResponse(BaseModel):
@@ -203,6 +220,16 @@ class HttpClient:
                 request.url,
                 headers=headers,
                 json=request.json_body,
+                data=request.multipart.fields if request.multipart else None,
+                files={
+                    "0": (
+                        request.multipart.filename,
+                        request.multipart.content,
+                        request.multipart.content_type,
+                    )
+                }
+                if request.multipart
+                else None,
                 timeout=timeout,
                 extensions={"gqlsleuth_header_scope": scope},
             ) as response:
@@ -232,9 +259,9 @@ class HttpClient:
         self._client.close()
 
     def _request_headers(self, request: HttpRequest) -> list[tuple[str, str]]:
-        """Keep repeated custom fields; scanner fields and JSON framing take precedence."""
+        """Keep repeated custom fields; scanner fields and body framing take precedence."""
         owned = {name.lower() for name in request.headers}
-        if request.json_body is not None:
+        if request.json_body is not None or request.multipart is not None:
             owned.add("content-type")
         headers = [
             (name, value)
@@ -244,9 +271,10 @@ class HttpClient:
         headers.extend(
             (name, value)
             for name, value in request.headers.items()
-            if request.json_body is None or name.lower() != "content-type"
+            if (request.json_body is None and request.multipart is None)
+            or name.lower() != "content-type"
         )
-        # HTTPX supplies the JSON Content-Type and computes Content-Length itself.
+        # HTTPX supplies JSON/multipart Content-Type and computes Content-Length itself.
         return headers
 
     def __enter__(self) -> Self:

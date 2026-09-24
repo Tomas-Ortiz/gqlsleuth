@@ -18,6 +18,7 @@ from gqlsleuth.domain.analysis import OperationAnalysis, OperationKind
 from gqlsleuth.domain.authentication import AuthenticationSecurityResult
 from gqlsleuth.domain.exceptions import GQLSleuthError, HttpError, QueryGenerationError
 from gqlsleuth.domain.execution import QueryExecutionStatus
+from gqlsleuth.domain.file_upload import FileUploadSecurityResult
 from gqlsleuth.domain.idor import IdorDetectionResult
 from gqlsleuth.domain.models import Evidence, ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
@@ -84,6 +85,7 @@ class ActiveExecutionScanResult:
     idor_bola_detection: IdorDetectionResult | None = None
     authentication_token_security: AuthenticationSecurityResult | None = None
     rate_limiting_abuse_controls: AbuseControlResult | None = None
+    file_upload_security: FileUploadSecurityResult | None = None
 
     @property
     def safe_execution(self) -> SafeExecutionScanResult:
@@ -114,6 +116,7 @@ class ActiveExecutionScanResult:
             + mutation_auth
             + sensitive
             + self.execution_evidence
+            + (self.file_upload_security.evidence if self.file_upload_security else ())
             + (
                 self.rate_limiting_abuse_controls.evidence
                 if self.rate_limiting_abuse_controls

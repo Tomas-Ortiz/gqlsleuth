@@ -94,6 +94,7 @@ def _json_value(value: object) -> JsonValue:
                     "idor_bola_detection",
                     "authentication_token_security",
                     "rate_limiting_abuse_controls",
+                    "file_upload_security",
                 }
                 and getattr(value, field.name) is None
             )

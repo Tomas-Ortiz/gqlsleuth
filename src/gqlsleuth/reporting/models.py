@@ -11,6 +11,7 @@ from gqlsleuth.domain.analysis import OperationAnalysis
 from gqlsleuth.domain.authentication import AuthenticationSecurityResult
 from gqlsleuth.domain.authorization_policy import AuthorizationPolicyResult
 from gqlsleuth.domain.differential import ContextPairReview
+from gqlsleuth.domain.file_upload import FileUploadSecurityResult
 from gqlsleuth.domain.idor import IdorDetectionResult
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, ScanMode, Target
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
@@ -122,6 +123,7 @@ class ReportContext:
     idor_bola_detection: IdorDetectionResult | None = None
     authentication_token_security: AuthenticationSecurityResult | None = None
     rate_limiting_abuse_controls: AbuseControlResult | None = None
+    file_upload_security: FileUploadSecurityResult | None = None
 
 
 @dataclass(frozen=True)

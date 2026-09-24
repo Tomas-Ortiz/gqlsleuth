@@ -148,12 +148,16 @@ def build_report(
                 "Findings are scoped to explicit operator policy and retained probe evidence; "
                 + (
                     "independently validate the policy and tested request context."
-                    if result.rate_limiting_abuse_controls
+                    if result.rate_limiting_abuse_controls or result.file_upload_security
                     else "independently validate the policy and tested authentication path."
                 ),
             )
             if isinstance(result, ActiveExecutionScanResult)
-            and (result.authentication_token_security or result.rate_limiting_abuse_controls)
+            and (
+                result.authentication_token_security
+                or result.rate_limiting_abuse_controls
+                or result.file_upload_security
+            )
             else SAFETY_NOTICE.replace(
                 "This report creates no vulnerability findings.",
                 "IDOR/BOLA Findings rely on explicit operator-supplied DENY policy and exact "
@@ -169,6 +173,9 @@ def build_report(
         if isinstance(result, ActiveExecutionScanResult)
         else None,
         rate_limiting_abuse_controls=result.rate_limiting_abuse_controls
+        if isinstance(result, ActiveExecutionScanResult)
+        else None,
+        file_upload_security=result.file_upload_security
         if isinstance(result, ActiveExecutionScanResult)
         else None,
         ai_interpretation=ai_interpretation,

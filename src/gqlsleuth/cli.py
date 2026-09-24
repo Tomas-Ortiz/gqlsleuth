@@ -30,6 +30,7 @@ from gqlsleuth.application.authentication import (
 )
 from gqlsleuth.application.authorization_policy import evaluate_authorization_policy
 from gqlsleuth.application.differential_review import DifferentialScanResult, run_differential_scan
+from gqlsleuth.application.file_upload import FileUploadSecuritySession
 from gqlsleuth.application.idor import IdorSession
 from gqlsleuth.application.multiplicity import execute_multiplicity, prepare_multiplicity
 from gqlsleuth.application.mutation_authorization import MutationAuthorizationSession
@@ -48,6 +49,12 @@ from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.authentication import AuthenticationProbe, AuthenticationSecurityResult
 from gqlsleuth.domain.authorization_policy import parse_policy_assertions
 from gqlsleuth.domain.exceptions import GQLSleuthError, ReportingError
+from gqlsleuth.domain.file_upload import (
+    UPLOAD_VARIANTS,
+    FileUploadCase,
+    FileUploadSecurityResult,
+    parse_upload_case,
+)
 from gqlsleuth.domain.idor import IdorDetectionResult
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityValidationResult
@@ -69,6 +76,7 @@ from gqlsleuth.domain.sequential_discovery import (
     parse_discovery_seeds,
 )
 from gqlsleuth.infrastructure.http import HttpClientSettings
+from gqlsleuth.infrastructure.upload_file import read_upload_file
 from gqlsleuth.presentation.abuse_controls import render_abuse_controls
 from gqlsleuth.presentation.authentication import PROBE_LABELS, render_authentication
 from gqlsleuth.presentation.authorization_policy import render_authorization_policy
@@ -85,6 +93,7 @@ from gqlsleuth.presentation.console import (
     render_scan,
     render_state_warning,
 )
+from gqlsleuth.presentation.file_upload import render_file_upload
 from gqlsleuth.presentation.idor import render_idor
 from gqlsleuth.presentation.multiplicity import render_multiplicity, render_probe_previews
 from gqlsleuth.presentation.mutation_authorization import render_mutation_authorization
@@ -384,6 +393,48 @@ def scan(
             ),
         ),
     ] = None,
+    file_upload_review: Annotated[
+        bool,
+        typer.Option(
+            "--file-upload-review",
+            rich_help_panel="File Upload Security",
+            show_default=False,
+            help=(
+                "ACTIVE single-file baseline and selected DENY variants; separate confirmation. "
+                "Default: disabled."
+            ),
+        ),
+    ] = False,
+    upload_case: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--upload-case",
+            rich_help_panel="File Upload Security",
+            show_default=False,
+            help="One OPERATION:ARGUMENT[.FIELD...] Upload path; requires --file-upload-review.",
+        ),
+    ] = None,
+    upload_file: Annotated[
+        list[Path] | None,
+        typer.Option(
+            "--upload-file",
+            rich_help_panel="File Upload Security",
+            show_default=False,
+            help="One benign known-valid local file, maximum 1 MiB; requires --file-upload-review.",
+        ),
+    ] = None,
+    upload_content_type: Annotated[
+        str | None,
+        typer.Option(
+            "--upload-content-type",
+            rich_help_panel="File Upload Security",
+            show_default=False,
+            help=(
+                "Baseline MIME type/subtype; otherwise inferred from filename, "
+                "then application/octet-stream."
+            ),
+        ),
+    ] = None,
     rate_limit_review: Annotated[
         bool,
         typer.Option(
@@ -452,6 +503,20 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        selected_upload_case = None
+        if (
+            upload_case is not None or upload_file is not None or upload_content_type is not None
+        ) and not file_upload_review:
+            raise GQLSleuthError("Upload options require --file-upload-review.")
+        if file_upload_review:
+            if mode is not ScanMode.ACTIVE or auth_context is not None:
+                raise GQLSleuthError(
+                    "File upload review requires ACTIVE mode without --auth-context."
+                )
+            selected_upload_case = parse_upload_case(upload_case or [])
+            if not upload_file or len(upload_file) != 1:
+                raise GQLSleuthError("File upload review requires exactly one --upload-file.")
+            read_upload_file(upload_file[0], upload_content_type)
         if rate_limit_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
             raise GQLSleuthError("--rate-limit-review requires ACTIVE mode without --auth-context.")
         if auth_security_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
@@ -697,6 +762,17 @@ def scan(
             idor_bola_detection=idor_detection,
             authentication_token_security=authentication,
         )
+        if selected_upload_case is not None and upload_file:
+            report_result = replace(
+                report_result,
+                file_upload_security=_run_file_upload_stage(
+                    result,
+                    case=selected_upload_case,
+                    file_path=upload_file[0],
+                    content_type=upload_content_type,
+                    http_settings=http_settings,
+                ),
+            )
         if rate_limit_review:
             report_result = replace(
                 report_result,
@@ -795,6 +871,74 @@ def _run_multiplicity_stage(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
     render_multiplicity(console, result, verbose=verbose)
+    return result
+
+
+def _run_file_upload_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    case: FileUploadCase,
+    file_path: Path,
+    content_type: str | None,
+    http_settings: HttpClientSettings,
+) -> FileUploadSecurityResult:
+    try:
+        session = FileUploadSecuritySession(
+            safe,
+            case=case,
+            file_path=file_path,
+            content_type=content_type,
+            http_settings=http_settings,
+            enabled=True,
+        )
+    except GQLSleuthError:
+        result = FileUploadSecurityResult(
+            case, limitations=("Upload file is no longer usable; zero uploads sent.",)
+        )
+        render_file_upload(console, result)
+        return result
+    preview = session.preview
+    render_file_upload(console, preview, preview=True)
+    if not preview.plan:
+        return preview
+    if not _interactive_stdin():
+        message = "Interactive upload selection and confirmation required; zero uploads execute."
+        console.print(message)
+        return replace(preview, limitations=(*preview.limitations, message))
+    descriptions = (
+        "Same filename/MIME, fixed benign content",
+        "Same bytes/filename, altered MIME",
+        "Same bytes/MIME, safe alternate extension",
+    )
+    for index, (probe, description) in enumerate(
+        zip(UPLOAD_VARIANTS, descriptions, strict=True), 1
+    ):
+        console.print(
+            f"[{index}] {probe.value.replace('_', ' ').title()} — {description}; expected DENY"
+        )
+    try:
+        while True:
+            value = typer.prompt(
+                "Select upload-validation probes (comma-separated, max 3, Enter for baseline only)",
+                default="",
+                show_default=False,
+            ).strip()
+            tokens = value.split(",") if value else []
+            if all(token.strip() in {"1", "2", "3"} for token in tokens):
+                break
+            console.print(
+                "Choose only listed indices separated by commas, or Enter for baseline only."
+            )
+        preview = session.select_variants(
+            tuple(UPLOAD_VARIANTS[int(token.strip()) - 1] for token in tokens)
+        )
+        render_file_upload(console, preview, preview=True)
+        confirmed = typer.confirm("Execute file upload security validation?", default=False)
+    except (typer.Abort, EOFError, KeyboardInterrupt):
+        console.print("Upload confirmation cancelled; zero uploads sent.")
+        return preview
+    result = session.execute(preview=preview, confirmed=confirmed)
+    render_file_upload(console, result)
     return result
 
 
