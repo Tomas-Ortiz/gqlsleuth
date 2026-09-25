@@ -151,6 +151,7 @@ def build_report(
                     if result.rate_limiting_abuse_controls
                     or result.file_upload_security
                     or result.federation_security
+                    or result.subscription_security
                     else "independently validate the policy and tested authentication path."
                 ),
             )
@@ -160,6 +161,7 @@ def build_report(
                 or result.rate_limiting_abuse_controls
                 or result.file_upload_security
                 or result.federation_security
+                or result.subscription_security
             )
             else SAFETY_NOTICE.replace(
                 "This report creates no vulnerability findings.",
@@ -176,6 +178,9 @@ def build_report(
         if isinstance(result, ActiveExecutionScanResult)
         else None,
         rate_limiting_abuse_controls=result.rate_limiting_abuse_controls
+        if isinstance(result, ActiveExecutionScanResult)
+        else None,
+        subscription_security=result.subscription_security
         if isinstance(result, ActiveExecutionScanResult)
         else None,
         federation_security=result.federation_security

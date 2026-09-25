@@ -25,6 +25,7 @@ from gqlsleuth.domain.schema import SchemaSummary
 from gqlsleuth.domain.security_review import GraphQLSecurityReviewResult
 from gqlsleuth.domain.sensitive_input import SensitiveInputCandidate, SensitiveInputValidationResult
 from gqlsleuth.domain.sequential_discovery import SequentialDiscoveryResult
+from gqlsleuth.domain.subscriptions import SubscriptionSecurityResult
 from gqlsleuth.infrastructure.http import HttpResponse
 from gqlsleuth.presentation.object_lookup import ObjectLookupFollowUpHint
 
@@ -126,6 +127,7 @@ class ReportContext:
     rate_limiting_abuse_controls: AbuseControlResult | None = None
     file_upload_security: FileUploadSecurityResult | None = None
     federation_security: FederationSecurityResult | None = None
+    subscription_security: SubscriptionSecurityResult | None = None
 
 
 @dataclass(frozen=True)

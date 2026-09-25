@@ -340,6 +340,10 @@ def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
         from gqlsleuth.reporting.federation import federation_sections
 
         sections.extend(federation_sections(report.federation_security))
+    if report.subscription_security is not None:
+        from gqlsleuth.reporting.subscriptions import subscription_sections
+
+        sections.extend(subscription_sections(report.subscription_security))
     if report.file_upload_security is not None:
         from gqlsleuth.reporting.file_upload import file_upload_sections
 

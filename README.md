@@ -21,7 +21,7 @@ no target requests.
 ACTIVE mode offers independently confirmed Query-shape checks, Query-depth checks, bounded
 sequential object discovery, IDOR/BOLA detection, Mutation authorization validation,
 Sensitive Input Validation, Authentication & Token Security, Rate Limiting & Abuse Controls,
-File Upload Security, Federation Security and explicitly selected Mutation
+File Upload Security, Federation Security, Subscription/WebSocket review and explicitly selected Mutation
 execution. Reports support JSON, Markdown and HTML; optional local interpretation uses Ollama
 and `qwen3:8b`. Console output is
 compact by default, with detailed output available through `--verbose`.
@@ -29,6 +29,63 @@ compact by default, with detailed output available through `--verbose`.
 Target HTTP headers, authentication, timeouts, proxy and TLS settings remain separate from local
 Ollama. Review candidates require manual validation and are not vulnerability findings. Developer
 roadmap details are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Subscriptions & GraphQL over WebSocket
+
+Opt in only against an authorized target:
+
+```bash
+gqlsleuth scan https://example.com/graphql --mode active --subscription-review
+gqlsleuth scan https://example.com/graphql --mode active --subscription-review --subscription-expect-deny
+gqlsleuth scan https://example.com/graphql --mode active -H "Authorization: Bearer TOKEN" --subscription-review --subscription-expect-deny
+gqlsleuth scan https://example.com/graphql --mode active --subscription-review --subscription-init-payload '{"Authorization":"Bearer TOKEN"}'
+```
+
+Phase 30 reuses the retained Phase 16 `SUBSCRIPTION_SURFACE` and schema. Select exactly **one**
+Subscription index, inspect its anonymous document and exact variables, then answer the separate
+**Execute subscription / WebSocket security validation? [y/N]** confirmation. Enter selects none;
+disabled, declined and non-interactive runs open zero WebSocket connections. SAFE and named
+authentication contexts are unsupported for this capability. Other ACTIVE confirmations do not
+authorize it.
+
+Generation reuses minimal selections, required inputs, deterministic placeholders and recursion
+guards. `--subscription-variables '{"conversationId":"123"}'` may override only existing generated
+variables for the selected field, subject to retained-schema validation. Each variables/init option
+accepts one JSON object of at most 4096 UTF-8 bytes, without duplicate keys or non-finite numbers.
+Placeholders may require manual adjustment; GQLSleuth never discovers or mutates subscription IDs.
+
+The retained HTTP endpoint maps to `ws://` or `wss://`, preserving port, path and query. An explicit
+`--subscription-ws-url wss://example.com/events` must share its HTTP credential origin, including
+scheme security and effective port. There is no path guessing or redirect following. Phase 14
+headers, TLS verification, explicit HTTP(S) proxy and finite target timeout apply; environment
+proxies are ignored. Handshake headers and optional connection-init payload values stay private,
+outside previews, reports, AI and logs. Only supplied-state/byte-count metadata is retained for init.
+An event echoing known request-secret material is withheld whole from evidence, without rewriting it.
+
+One handshake offers `graphql-transport-ws` first and legacy `graphql-ws` second. Modern connections
+use init → ACK → subscribe → next/error/complete, with bounded ping/pong handling and complete
+cleanup. Legacy connections use init → ACK → start → data/error/complete, with bounded keepalives
+and stop/terminate cleanup. Hard limits are **one connection, one subscription and at most one
+application event**, with a 20-inbound-frame budget (including controls) and 1 MiB message cap.
+Handshake, ACK and event waits are each capped at 10 seconds, or a smaller explicit target timeout.
+No protocol fallback reconnect occurs.
+
+Default **OBSERVE** creates no Finding. Only explicit `--subscription-expect-deny` plus actual
+non-null data for the selected root, without GraphQL errors, creates **Subscription authorization
+weakness**, scoped to the current supplied request context and operator policy. ACK alone is not
+access. HTTP 401/403, modern protocol close 4401/4403, or recognized explicit authorization errors
+establish denial. Silence is `NO_EVENT_BEFORE_TIMEOUT` and **UNRESOLVED**, not proof of protection;
+null, malformed, unsupported and generic error outcomes are indeterminate.
+
+JSON retains exact requests and bounded attempt evidence with source references. Markdown/HTML
+show protocol/state/outcome details and conditional Subscription Security Findings before the final
+Safety Notice. AI remains unchanged. There is no event-trigger Mutation, enumeration, reconnect,
+concurrency, multiplexing, flooding, Origin/CSWSH testing, fuzzing, cross-user comparison,
+ownership/tenant/role inference or severity/CVSS/CWE assignment.
+
+The sole added dependency is `websockets`, providing a centralized synchronous transport. Run
+`uv run python tests/fixtures/phase30_target.py --smoke` for mocked HTTP discovery plus real loopback
+WebSocket scenarios using fake credentials only; no public target is required.
 
 ## Federation Security
 
@@ -956,7 +1013,8 @@ It normally omits optional/defaulted arguments, creates deterministic placeholde
 small response field path with a maximum internal depth of three and cycle protection. Custom
 scalar placeholders use the string `"test"` and are marked as potentially requiring manual
 adjustment. SAFE generates Query documents only. ACTIVE reuses this same generation algorithm
-for Mutation-root fields after completing the safe workflow. Subscriptions are never generated.
+for Mutation-root fields after completing the safe workflow. Explicit Phase 30 selection also
+reuses it for retained Subscription fields; ordinary scans do not generate Subscriptions.
 
 For collection Queries, Query generation may also populate one recognized optional `Int` quantity bound
 with **1**. It shares the structural review schema inspection of direct composite lists, one-level

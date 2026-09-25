@@ -167,7 +167,8 @@ Even in active mode, the tool must:
 There are no per-Mutation confirmation prompts. Non-interactive stdin never prompts, selects,
 or confirms: previews are retained, a clear message is printed, and zero Mutations execute.
 Generic Mutation execution has a hard limit of five attempted requests per scan. Phase 23 has
-an independent one-attempt budget and consent boundary. Subscriptions remain out of scope.
+an independent one-attempt budget and consent boundary. Phase 30 separately gates one bounded
+Subscription behind `--subscription-review`, individual selection and its own default-NO consent.
 
 Phase 22 adds a separate read-only ACTIVE capability behind `--idor-discovery` and explicit
 numeric `--idor-seed` values. Its own default-NO confirmation permits only a seed baseline and
@@ -1472,6 +1473,7 @@ Responsible for:
 Responsible for:
 
 - HTTPX integration.
+- WebSocket transport integration.
 - File access.
 - Configuration loading.
 - Report serialization.
@@ -1533,6 +1535,7 @@ This structure is a target architecture. Directories and modules should only be 
 - **CLI:** Typer, Rich
 - **Data validation and configuration:** Pydantic, pydantic-settings
 - **HTTP:** HTTPX
+- **WebSocket:** websockets
 - **GraphQL:** graphql-core
 - **Reporting:** Jinja2
 - **JWT analysis:** PyJWT
@@ -2119,9 +2122,9 @@ accepted/rejected/ambiguous handlers with offline MockTransport tests. Its `--sm
 real local HTTP and CLI confirmation with exactly two probes per run and no Mutations. No public
 target is required for testing or CI, and no runtime dependency was added.
 
-Phase 18 adds the separate bounded depth check below. General cost/complexity analysis and
-subscriptions remain future possibilities. Separate bounded rate, upload and federation
-capabilities are documented in Phases 27–29; none are part of these multiplicity probes.
+Phase 18 adds the separate bounded depth check below. General cost/complexity analysis remains
+future work. Separate bounded rate, upload, federation and Subscription capabilities are documented
+in Phases 27–30; none are part of these multiplicity probes.
 
 ### Phase 18 — Controlled Query Depth Validation
 
@@ -2189,8 +2192,8 @@ AIContext, prompt, schema, allowlist, transport and the single optional inferenc
 Phase 18 data is excluded from AI. Phase 9, Mutation controls and the Phase 17 two-request budget
 remain independent. `tests/fixtures/phase18_target.py --smoke` provides deterministic loopback
 accepted/rejected/indeterminate and unselected runs; MockTransport covers network failure and
-request isolation. No dependencies were added. General cost analysis and subscriptions remain
-unimplemented; bounded rate, upload and federation capabilities are separate Phases 27–29.
+request isolation. No dependencies were added in Phase 18. General cost analysis remains
+unimplemented; bounded rate, upload, federation and Subscription capabilities are separate Phases 27–30.
 Phase 19's separate SAFE named-context
 workflow is described below.
 
@@ -3185,8 +3188,92 @@ continues consuming only ordinary execution containers, never federation probes.
 MockTransport tests and `uv run python tests/fixtures/phase29_target.py --smoke` exercise only loopback
 with fake headers: observation, DENY violations, denials, null/wrong identity, independent network
 failure, exact budgets and zero-request disabled/declined/non-interactive paths. No dependency,
-public target or real credentials are required. Apollo-specific functionality, subscriptions,
-WebSocket, query-cost analysis and other future federation families remain out of scope.
+public target or real credentials are required. Apollo-specific functionality, query-cost analysis
+and other future federation families remain out of scope. Phase 30 independently introduces bounded
+Subscription/WebSocket validation.
+
+### Phase 30 — Subscriptions & GraphQL over WebSocket Security
+
+Implemented as an additive ACTIVE capability, disabled by default. `--subscription-review` requires
+ordinary anonymous or Phase 14 header context; named authentication contexts are rejected. Dependent
+options are `--subscription-expect-deny`, `--subscription-variables`, `--subscription-init-payload`
+and `--subscription-ws-url`. The CLI explicitly selects one eligible retained Subscription and shows
+its exact document, variables, policy, endpoint, protocol offers and bounds before the independent
+**Execute subscription / WebSocket security validation? [y/N]** prompt. Non-interactive, empty,
+declined and disabled paths open zero connections. Other phases' consent never authorizes Phase 30.
+
+`graphql/subscriptions.py` validates local inputs/documents; `application/subscriptions.py` composes
+the existing safe result into a terminal `SubscriptionSecuritySession`. Candidate sources are exact
+retained Phase 16 `SUBSCRIPTION_SURFACE` records, rechecked against the Phase 6 parsed schema and raw
+introspection. Query/Mutation fields cannot become candidates and Phase 7 interest rules are unchanged.
+The shared Phase 8 field-document generator handles required inputs, semantic placeholders, minimal
+selections and recursion guards. Subscription generation is local, independent per field and never
+adds collection bounds. Native schema validation checks exactly one anonymous Subscription root.
+
+Variables overrides replace only existing generated keys after selection. Native input coercion is
+used for validation; original valid JSON types/values remain the transmitted request. Variables and
+init inputs each accept one object, at most 4096 UTF-8 bytes, without duplicate keys or non-finite
+values. Init values remain private session state and appear only in `connection_init.payload`.
+No default auth keys are invented and headers are not copied into init. Public models retain only
+the presence/byte count of init material. Handshake headers remain private under Phase 14 rules.
+
+WebSocket URLs derive by http→ws / https→wss with the retained port/path/query. Explicit overrides
+must match the selected HTTP credential origin (host, effective port and security scheme), with no
+userinfo or fragment. No endpoint/path discovery, cross-origin forwarding or redirect following is
+allowed. Origin and WebSocket negotiation headers supplied through `-H` are rejected before connect;
+this phase is not Origin/CSWSH testing. The centralized `infrastructure/websocket.py` adapter uses
+the synchronous `websockets` API, the only added dependency, rather than custom WebSocket framing.
+It offers `graphql-transport-ws`, then `graphql-ws`, in one handshake, honors explicit HTTP(S) proxy,
+TLS and headers, disables environment proxies, compression and periodic client pings, and uses a
+private non-propagating logger. Unsupported/no protocol terminates without fallback or reconnect.
+
+The modern sequence is init → ACK → subscribe (`id=1`) → next/error/complete; supported JSON pings
+receive canonical empty pong responses and terminal cleanup sends complete. Legacy uses init → ACK
+→ start (`id=1`) → data/error/complete, counts keepalives and cleans up with stop/connection_terminate.
+Both send the exact document and variables without operationName. Hard budgets are one connection,
+one selected Subscription, one start and at most one application event. Twenty inbound frames,
+including transport controls/keepalives, and a maximum 1 MiB message size bound the exchange. Excess
+traffic terminates as indeterminate. Handshake, ACK and first-event waits are capped at 10 seconds
+each or the smaller target timeout; an 11-second socket write guard avoids an unbounded send while
+allowing application receive deadlines to classify silence. Close has a one-second timeout.
+
+Canonical schema/provenance/plan/variables/private init/settings are rebuilt and compared immediately
+before connection and again after ACK before start. A changed plan or request context cannot obtain
+an additional start. The session is terminal even after decline/failure; no retries, concurrency,
+reconnects, multiplexing or downstream stage handoffs exist. It never triggers a Mutation/event,
+enumerates subscriptions/IDs, or derives follow-ups from response data.
+
+`EVENT_RETURNED` requires GraphQL data containing the selected root with a non-null value and no
+errors. ACK alone, start alone, null, complete-before-event, malformed frames and generic errors do
+not establish access. `EXPLICIT_DENIAL` requires HTTP 401/403, modern protocol close 4401/4403, or the
+existing exact authorization-error classifier. Generic legacy close codes aren't promoted to denial.
+`NO_EVENT_BEFORE_TIMEOUT` means no event was observed, never protection; protocol ambiguity is
+`INDETERMINATE` and normalized transport failure is `NETWORK_FAILURE`.
+
+Default OBSERVE retains observations without policy evaluation or Findings. Explicit operator DENY
+plus EVENT_RETURNED is VIOLATED and produces only `SUBSCRIPTION_AUTHORIZATION_FAILURE`, human label
+**Subscription authorization weakness**. Explicit denial satisfies DENY; other outcomes remain
+UNRESOLVED. Wording is scoped to the selected endpoint/field/current supplied context and operator
+expectation, without inferred ownership, identity, tenancy, roles or global subscription policy.
+No severity/CVSS/CWE is assigned.
+
+Only an actual connection attempt creates `SUBSCRIPTION_SECURITY_PROBE`, preserving exact query and
+variables, source schema references, time/duration, safe handshake status, negotiated protocol,
+ACK/start/event/frame counts, close code, outcome/evaluation and one bounded terminal frame. Init,
+handshake credentials and arbitrary wire logs are excluded; the established explicit request-secret
+boundary withholds a complete echoed frame rather than editing its contents. Prior evidence remains
+unchanged. `ActiveExecutionScanResult.subscription_security` and its report counterpart are omitted
+when disabled. Console/Markdown/HTML add **Subscriptions & GraphQL over WebSocket**, with conditional
+**Subscription Security Findings**; Safety Notice remains last and appears once. AIContext, prompts,
+inference count and Phase 27 HTTP baselines remain unchanged.
+
+Offline tests combine mocked transports with `tests/fixtures/phase30_target.py`, which mocks HTTP
+schema acquisition and serves real loopback WebSockets. Its `--smoke` path exercises both protocols,
+OBSERVE, DENY violation, explicit denial, null/error/malformed/timeout/disconnect/unsupported protocol
+and private init/header authentication, plus zero-connection disabled/declined/non-interactive cases.
+No public target or real credentials are needed. Origin attacks, protocol fuzzing, duplicate init,
+ID collisions, flooding, cross-user comparisons, JWT mutation, event triggering and general
+WebSocket scanning remain future work.
 
 ## 35. MVP definition
 
@@ -3215,16 +3302,13 @@ Potential future improvements include:
 - Custom endpoint wordlists.
 - JavaScript endpoint extraction.
 - Persisted authentication context profiles (CLI-only named contexts are implemented in Phase 15).
-- Batch query analysis.
-- Alias abuse detection.
 - General query-cost/complexity analysis beyond the single bounded Phase 18 depth probe.
 - Broader rate-limit analysis beyond the fixed operator-policy sequence implemented in Phase 27.
-- GraphQL subscription support.
+- Further Subscription security checks beyond the single bounded Phase 30 policy probe.
 - Further file-upload checks beyond the benign, bounded policy validation implemented in Phase 28.
-- JWT inspection.
 - Further federation checks beyond the bounded SDL/entity policy probes implemented in Phase 29.
 - Apollo-specific checks.
-- GraphQL over WebSocket.
+- Further WebSocket-specific security testing beyond Phase 30's two supported GraphQL protocols.
 - Burp Suite integration.
 - SARIF output.
 - Plugin system.

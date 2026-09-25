@@ -46,6 +46,7 @@ from gqlsleuth.application.sequential_discovery import (
     execute_sequential_discovery,
     prepare_sequential_discovery,
 )
+from gqlsleuth.application.subscriptions import SubscriptionSecuritySession
 from gqlsleuth.domain.abuse_controls import AbuseControlResult
 from gqlsleuth.domain.active import MAX_MUTATION_EXECUTIONS
 from gqlsleuth.domain.authentication import AuthenticationProbe, AuthenticationSecurityResult
@@ -78,6 +79,8 @@ from gqlsleuth.domain.sequential_discovery import (
     SequentialDiscoverySeed,
     parse_discovery_seeds,
 )
+from gqlsleuth.domain.subscriptions import SubscriptionSecurityResult
+from gqlsleuth.graphql.subscriptions import parse_subscription_object
 from gqlsleuth.infrastructure.http import HttpClientSettings
 from gqlsleuth.infrastructure.upload_file import read_upload_file
 from gqlsleuth.presentation.abuse_controls import render_abuse_controls
@@ -104,6 +107,7 @@ from gqlsleuth.presentation.mutation_authorization import render_mutation_author
 from gqlsleuth.presentation.query_depth import render_depth_previews, render_query_depth
 from gqlsleuth.presentation.sensitive_input import render_sensitive_validation
 from gqlsleuth.presentation.sequential_discovery import render_sequential_discovery
+from gqlsleuth.presentation.subscriptions import render_subscriptions
 from gqlsleuth.reporting.models import ReportFormat
 
 
@@ -397,6 +401,54 @@ def scan(
             ),
         ),
     ] = None,
+    subscription_review: Annotated[
+        bool,
+        typer.Option(
+            "--subscription-review",
+            rich_help_panel="Subscriptions & GraphQL over WebSocket",
+            show_default=False,
+            help=(
+                "ACTIVE: one selected Subscription, one socket, one event; "
+                "separate confirmation. Default: disabled."
+            ),
+        ),
+    ] = False,
+    subscription_expect_deny: Annotated[
+        bool,
+        typer.Option(
+            "--subscription-expect-deny",
+            rich_help_panel="Subscriptions & GraphQL over WebSocket",
+            show_default=False,
+            help="Explicit operator DENY policy; requires --subscription-review. Default: observe.",
+        ),
+    ] = False,
+    subscription_variables: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--subscription-variables",
+            rich_help_panel="Subscriptions & GraphQL over WebSocket",
+            show_default=False,
+            help="One JSON object replacing generated variables only; maximum 4096 bytes.",
+        ),
+    ] = None,
+    subscription_init_payload: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--subscription-init-payload",
+            rich_help_panel="Subscriptions & GraphQL over WebSocket",
+            show_default=False,
+            help="One private connection_init JSON object, maximum 4096 bytes; never reported.",
+        ),
+    ] = None,
+    subscription_ws_url: Annotated[
+        str | None,
+        typer.Option(
+            "--subscription-ws-url",
+            rich_help_panel="Subscriptions & GraphQL over WebSocket",
+            show_default=False,
+            help="Explicit ws/wss path on the retained HTTP origin; no endpoint discovery.",
+        ),
+    ] = None,
     federation_review: Annotated[
         bool,
         typer.Option(
@@ -544,6 +596,17 @@ def scan(
         raise typer.Exit(code=2)
     try:
         selected_upload_case = None
+        if (
+            subscription_expect_deny
+            or subscription_variables is not None
+            or subscription_init_payload is not None
+            or subscription_ws_url is not None
+        ) and not subscription_review:
+            raise GQLSleuthError("Subscription options require --subscription-review.")
+        if subscription_review and (mode is not ScanMode.ACTIVE or auth_context is not None):
+            raise GQLSleuthError("Subscription review requires ACTIVE mode without --auth-context.")
+        subscription_overrides = parse_subscription_object(subscription_variables or [])
+        subscription_init = parse_subscription_object(subscription_init_payload or [])
         if (
             federation_sdl_expect_deny or federation_entity_case is not None
         ) and not federation_review:
@@ -837,6 +900,18 @@ def scan(
                     http_settings=http_settings,
                 ),
             )
+        if subscription_review:
+            report_result = replace(
+                report_result,
+                subscription_security=_run_subscription_stage(
+                    result,
+                    deny=subscription_expect_deny,
+                    overrides=subscription_overrides,
+                    init_payload=subscription_init,
+                    ws_url=subscription_ws_url,
+                    http_settings=http_settings,
+                ),
+            )
     ai_result = None
     if ai:
         console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
@@ -928,6 +1003,69 @@ def _run_multiplicity_stage(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
     render_multiplicity(console, result, verbose=verbose)
+    return result
+
+
+def _run_subscription_stage(
+    safe: SafeExecutionScanResult,
+    *,
+    deny: bool,
+    overrides: dict[str, JsonValue] | None,
+    init_payload: dict[str, JsonValue] | None,
+    ws_url: str | None,
+    http_settings: HttpClientSettings,
+) -> SubscriptionSecurityResult:
+    session = SubscriptionSecuritySession(
+        safe,
+        enabled=True,
+        deny=deny,
+        overrides=overrides,
+        init_payload=init_payload,
+        ws_url=ws_url,
+        http_settings=http_settings,
+    )
+    preview = session.preview
+    render_subscriptions(console, preview)
+    if not any(c.failure is None for c in preview.candidates):
+        console.print("No executable retained Subscriptions; zero WebSocket connections.")
+        return preview
+    if not _interactive_stdin():
+        message = (
+            "Interactive Subscription selection and confirmation required; "
+            "zero WebSocket connections."
+        )
+        console.print(message)
+        return replace(preview, limitations=(*preview.limitations, message))
+    try:
+        while True:
+            value = typer.prompt(
+                "Select one Subscription (Enter for none)", default="", show_default=False
+            ).strip()
+            if not value:
+                return preview
+            if value not in {
+                str(i)
+                for i, candidate in enumerate(preview.candidates, 1)
+                if candidate.failure is None
+            }:
+                console.print("Choose one executable Subscription index, or Enter for none.")
+                continue
+            try:
+                preview = session.select(int(value))
+            except GQLSleuthError as error:
+                message = str(error)
+                console.print(Text(message))
+                return replace(preview, limitations=(*preview.limitations, message))
+            break
+        render_subscriptions(console, preview)
+        confirmed = typer.confirm(
+            "Execute subscription / WebSocket security validation?", default=False
+        )
+    except (typer.Abort, EOFError, KeyboardInterrupt):
+        console.print("Subscription confirmation cancelled; zero WebSocket connections.")
+        return preview
+    result = session.execute(preview=preview, confirmed=confirmed)
+    render_subscriptions(console, result)
     return result
 
 

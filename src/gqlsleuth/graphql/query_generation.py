@@ -1,6 +1,6 @@
-"""Generate minimal Query and Mutation documents using shared finite input/output rules."""
+"""Generate minimal operation documents using shared finite input/output rules."""
 
-from graphql import GraphQLError, parse
+from graphql import GraphQLError, OperationType, parse
 from pydantic import JsonValue
 
 from gqlsleuth.domain.active import MutationGenerationResult
@@ -89,11 +89,37 @@ def _generate_document(
     operation: OperationAnalysis,
     max_selection_depth: int,
 ) -> tuple[str, dict[str, JsonValue], tuple[str, ...], None]:
+    return _generate_field_document(
+        schema,
+        _operation_field(schema, operation),
+        OperationType(operation.kind.value),
+        max_selection_depth,
+    )
+
+
+def generate_subscription(
+    schema: ParsedSchema,
+    field: SchemaField,
+) -> tuple[str, dict[str, JsonValue], tuple[str, ...], None]:
+    """Reuse finite input/output rules without extending Phase 7 scoring to Subscriptions."""
+    root = schema.type_named(schema.subscription_root) if schema.subscription_root else None
+    if root is None or field not in root.fields:
+        raise QueryGenerationError("Field is not on the retained Subscription root.")
+    return _generate_field_document(
+        schema, field, OperationType.SUBSCRIPTION, DEFAULT_MAX_SELECTION_DEPTH
+    )
+
+
+def _generate_field_document(
+    schema: ParsedSchema,
+    field: SchemaField,
+    kind: OperationType,
+    max_selection_depth: int,
+) -> tuple[str, dict[str, JsonValue], tuple[str, ...], None]:
     if max_selection_depth < 1:
         raise QueryGenerationError("Maximum selection depth must be at least 1.")
 
     try:
-        field = _operation_field(schema, operation)
         required_arguments = tuple(
             sorted(
                 (argument for argument in field.arguments if _is_required(argument)),
@@ -112,7 +138,7 @@ def _generate_document(
             variables[argument.name] = value
             adjustments.extend(argument_adjustments)
 
-        if operation.kind is OperationKind.QUERY:
+        if kind is OperationType.QUERY:
             bound = generate_collection_bound(schema, field)
             if bound is not None:
                 argument, value, bound_adjustments = bound
@@ -131,7 +157,7 @@ def _generate_document(
             max_depth=max_selection_depth,
             active_types=frozenset(),
         )
-        query_text = _render_query(field, arguments, selection, operation.kind)
+        query_text = _render_query(field, arguments, selection, kind)
         parse(query_text)
     except QueryGenerationError:
         raise
@@ -366,7 +392,7 @@ def _render_query(
     field: SchemaField,
     required_arguments: tuple[SchemaArgument, ...],
     selection: str | None,
-    kind: OperationKind,
+    kind: OperationType,
 ) -> str:
     definitions = ", ".join(
         f"${argument.name}: {argument.type.render()}" for argument in required_arguments

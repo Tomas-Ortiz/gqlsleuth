@@ -28,6 +28,7 @@ from gqlsleuth.domain.query_depth import QueryDepthValidationResult
 from gqlsleuth.domain.schema import ParsedSchema
 from gqlsleuth.domain.sensitive_input import SensitiveInputValidationResult
 from gqlsleuth.domain.sequential_discovery import SequentialDiscoveryResult
+from gqlsleuth.domain.subscriptions import SubscriptionSecurityResult
 from gqlsleuth.graphql.active_execution import assess_mutation
 from gqlsleuth.graphql.query_generation import DEFAULT_MAX_SELECTION_DEPTH, generate_mutation
 from gqlsleuth.graphql.safe_execution import classify_execution_response
@@ -88,6 +89,7 @@ class ActiveExecutionScanResult:
     rate_limiting_abuse_controls: AbuseControlResult | None = None
     file_upload_security: FileUploadSecurityResult | None = None
     federation_security: FederationSecurityResult | None = None
+    subscription_security: SubscriptionSecurityResult | None = None
 
     @property
     def safe_execution(self) -> SafeExecutionScanResult:
@@ -125,6 +127,7 @@ class ActiveExecutionScanResult:
                 else ()
             )
             + (self.federation_security.evidence if self.federation_security else ())
+            + (self.subscription_security.evidence if self.subscription_security else ())
         )
 
 
