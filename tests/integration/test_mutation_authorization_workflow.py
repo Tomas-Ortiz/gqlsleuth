@@ -233,7 +233,7 @@ def test_reports_exact_preview_ai_exclusion_and_privacy(phase_ten_scan, monkeypa
     preview = session.preview
     result = session.execute(preview=preview, confirmed=True)
     composed = replace(active, mutation_authorization=result)
-    assert build_ai_context(composed) == ai
+    assert build_ai_context(composed).operations == ai.operations
     assert composed.evidence[:-1] == active.evidence
     assert composed.evidence[-1] == result.evidence[0]
     assert SECRET not in repr(result)

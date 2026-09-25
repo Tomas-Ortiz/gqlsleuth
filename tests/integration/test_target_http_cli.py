@@ -9,6 +9,7 @@ from graphql import build_schema, introspection_from_schema
 from typer.testing import CliRunner
 
 import gqlsleuth.cli as cli
+from fixtures.ai_response import security_answer_fields
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import AIContext
 from gqlsleuth.ai.prompt import execution_summary
@@ -42,6 +43,7 @@ def configured_cli(monkeypatch, tmp_path):
             payload = json.loads(request.content)
             context = AIContext.model_validate_json(payload["messages"][1]["content"])
             answer = {
+                **security_answer_fields(context),
                 "scan_summary": {"text": execution_summary(context), "operations": []},
                 "operation_review": [],
                 "limitations": [],

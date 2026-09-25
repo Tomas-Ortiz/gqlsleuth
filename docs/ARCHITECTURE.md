@@ -1123,7 +1123,8 @@ The CLI only parses options, invokes the reporting service, and displays paths o
 
 ## 22. Optional AI assistance
 
-Phase 12 implements local, optional interpretation with `scan --ai`. Without the flag, no AI
+Phase 12 introduced local, optional interpretation with `scan --ai`; Phase 31 extends its
+original operation-focused context to whole-scan security facts. Without the flag, no AI
 request or interpretation is created, and Ollama/model availability is irrelevant. The sole
 provider is the user's existing Ollama service at `http://127.0.0.1:11434`, using `qwen3:8b`.
 Installation and model downloads are user-managed; GQLSleuth never installs, pulls, runs shell
@@ -1151,7 +1152,9 @@ includes mode, confirmation state, aggregate numeric schema/failure/request coun
 endpoint labels, root names, operation kind/name/base return-type name, existing Phase 7
 priority/score/categories, generation/manual-adjustment flags, HTTP status, execution
 classifications, and Mutation safety/selection/attempt/decision states. Query and Mutation
-operations with the same field name remain independent.
+operations with the same field name remain independent. Phase 31 additionally projects typed
+security facts and capability coverage from retained single-context results through Phase 30
+(see the dedicated roadmap entry). No differential/named-context AI is enabled.
 
 It excludes URLs, all headers/authentication values, exact variables, raw request/response bodies,
 arbitrary errors/reasons/stack traces, Evidence objects/payloads, raw introspection, full parsed
@@ -1159,12 +1162,15 @@ schemas, and schema descriptions. Generated documents are omitted because struct
 are sufficient for this initial interpretation and require no review of embedded literal values.
 Unsafe objects are never serialized and then redacted. There is no generic redaction subsystem.
 
-Input has a hard maximum of 20 operations and 12,000 serialized UTF-8 bytes using the same
-serialization path as the actual request. Stable Phase 7 priority/score ordering comes first;
-at most ten schema summaries are retained, and byte-limit reduction removes summaries before
-lower-priority operations. Identifiers must be valid GraphQL names of at most 128 characters;
-otherwise they are omitted. Metadata records total/included/omitted operations, total/included
-schemas, and whether context was truncated. No extra inference is made for omitted context.
+Input has a hard maximum of 12 ordinary operations and 12,000 serialized UTF-8 bytes, including
+metadata, using the same serializer as the outgoing request. Stable tiers retain Findings before
+policy violations without Findings, scoped controls/satisfied policies, unresolved/runtime
+observations, structural candidates and ordinary operations. Ordinary operations are removed
+first, then schema summaries, then security facts from the lowest remaining tier. Phase 7 order
+is retained within operations; at most ten schema summaries remain. Valid GraphQL names are
+limited to 128 characters and paths to eight names. Metadata records complete numeric Finding/
+policy totals, total/included/omitted security facts and operations, schema counts, exact byte
+size and truncation. There is no second inference for omitted data.
 
 The stable system prompt treats all target-derived strings as untrusted data and instructs the
 model to ignore embedded instructions, use only supplied facts, distinguish interest from
@@ -1175,19 +1181,19 @@ and scoring. Operation references must be placed in dedicated fields rather than
 The adapter uses Ollama's JSON-schema `format`, `stream: false`, and `think: false`, with temperature
 zero, an 8192-token model context, and a 2048-token output cap. This follows the local
 [Ollama structured-output API](https://docs.ollama.com/capabilities/structured-outputs).
-Pydantic strictly validates the final `message.content` into `AIInterpretation`: an execution
-summary, up to ten operation-review entries, and ten limitations. Each Operation Review paragraph
-combines the supplied review interest, apparent role, relevant recorded outcome, reason for
-attention, and a concrete, non-destructive manual review direction. Priority wording explicitly
-indicates review interest (for example, HIGH-interest), never vulnerability severity.
-The validated Execution Summary and model-generated Limitations remain separate.
-Text fields are limited to 600 characters; unknown properties
-and invalid structures are rejected. Every dedicated operation reference, including those in
-summary/review/limitations, must exactly match an endpoint/kind/name identifier supplied
-in the bounded input. Unknown references reject the entire response, without partial acceptance
-or retry. Model-generated prose is interpretation requiring manual validation, not verified fact.
+Pydantic strictly validates final `message.content` into `AIInterpretation`: the canonical
+ordinary execution summary plus Security Summary, Security Fact Reviews, Security Controls
+Observed, Cross-Capability Analysis, Operation Review and Limitations. The Phase 31 roadmap entry
+specifies per-section bounds. Operation reviews combine supplied review interest, apparent role,
+recorded outcome and non-destructive follow-up; interest never becomes severity. Only supplied
+operation refs and locally generated `SF1`, `SF2`, ... references are accepted. Unknown/missing
+references, duplicates within a section, extra fields and invalid structures reject the entire
+response. Correlations require distinct facts from at least two capabilities. Control entries
+must reference an existing explicit control or satisfied policy. Model prose remains unverified
+interpretation requiring manual validation, not fact or proven causality.
 
-Execution totals are calculated from the complete results before input truncation. A canonical
+Ordinary Phase 9/10 execution totals are calculated from complete results before truncation;
+specialized probe outcomes remain separate security facts and coverage counts. A canonical
 summary distinguishes attempted requests, SUCCESS, each error classification, Query safety/limit
 skips, and unexecuted Mutation candidates. Its exact text is constrained in the per-request JSON
 schema and checked again after parsing; modified counts or paraphrases reject the whole response.
@@ -1862,7 +1868,10 @@ Optional AI interpretations are produced separately by Phase 12 and passed into 
 
 ### Phase 12 — AI assistance
 
-Implemented:
+Implemented originally as operation-focused assistance. Phase 31 extends its safe context and
+structured output; the provider, optional behavior and single-inference boundary are retained.
+
+Original deliverables:
 
 - Opt-in `--ai`, after the complete deterministic SAFE/ACTIVE workflow and before reports.
 - Fixed local Ollama adapter using installed `qwen3:8b`, with one bounded structured inference.
@@ -2114,8 +2123,8 @@ report field follows report schema version 1's optional-field convention, absent
 Markdown/HTML show Controlled GraphQL Multiplicity Validation and reuse bounded response display;
 Safety Notice remains final. Evidence is canonical and lossless in JSON. These observations are
 not Findings or vulnerability claims and cannot establish higher limits or global resolver policy.
-AIContext, prompts, schema, validation and the single optional Ollama inference remain unchanged;
-Phase 17 data is deliberately excluded. Phase 16 remains solely schema-derived.
+Phase 31 projects only safe probe types/counts/outcomes into the existing single AI inference. Phase
+16 remains solely schema-derived.
 
 `tests/fixtures/phase17_target.py` is a loopback-only development target sharing deterministic
 accepted/rejected/ambiguous handlers with offline MockTransport tests. Its `--smoke` exercises
@@ -2188,8 +2197,8 @@ Query Depth Validation and reuse bounded human response rendering only for attem
 Notice is still the final section exactly once. Console previews use neutral headings and cyan
 references; verbose results include bounded responses. No Findings are created.
 
-AIContext, prompt, schema, allowlist, transport and the single optional inference remain untouched.
-Phase 18 data is excluded from AI. Phase 9, Mutation controls and the Phase 17 two-request budget
+Phase 31 projects only safe depth numbers/outcomes into the existing single AI inference. Phase 9,
+Mutation controls and the Phase 17 two-request budget
 remain independent. `tests/fixtures/phase18_target.py --smoke` provides deterministic loopback
 accepted/rejected/indeterminate and unselected runs; MockTransport covers network failure and
 request isolation. No dependencies were added in Phase 18. General cost analysis remains
@@ -2302,7 +2311,7 @@ values remain textual, non-empty, at most 256 UTF-8 bytes, without unsafe contro
 are deduplicated in first-seen order. Invalid input errors identify the argument index without
 echoing IDs. CLI and application independently validate operating forms and limits before HTTP.
 ACTIVE, common headers and missing flag/case combinations are rejected. Existing named-context AI
-restrictions remain. Single anonymous SAFE AI remains unchanged and excludes all Phase 20 data.
+restrictions remain. Phase 31 allows safe single-context object outcome facts in AI without IDs.
 
 `application/object_authorization.py` composes existing SAFE/DifferentialScanResult instances with
 an optional `object_authorization_review`; it does not implement another scanner. Preparation is
@@ -2357,8 +2366,8 @@ POST, response status/headers/bytes/duration, normalized error and identity/outc
 authentication settings are not stored. Raw target responses remain potentially sensitive canonical
 evidence. Optional report fields are omitted when disabled, preserving existing JSON semantics.
 Human reports add Controlled Object Authorization Validation after nested review when present,
-without dumping business response bodies. Safety Notice remains final exactly once. AIContext,
-prompts, model calls and transport are untouched.
+without dumping business response bodies. Safety Notice remains final exactly once. Phase 31
+adds safe single-context operation/argument/outcome facts, never object IDs or business responses.
 
 `tests/fixtures/phase20_target.py --smoke` provides anonymous returns/denials, shared exact objects,
 enforced policy, owner-null short circuit, mismatched IDs and unrelated varying business data on
@@ -2429,8 +2438,9 @@ omitted from canonical JSON when disabled. Existing evidence properties remain u
 JSON retains references rather than copying Phase 20 response bytes. Console and shared human
 report presentation add Authorization Policy Validation immediately after object review; reports
 keep Safety Notice final exactly once. Authentication values/configuration and raw business bodies
-are absent from policy projections. AIContext, prompts, transport, validation and call counts are
-untouched, and named-context AI stays unsupported. The disabled path retains previous behavior.
+are absent from policy projections. Phase 31 projects single-context policy enums/provenance
+without identifiers. Named-context AI stays unsupported and inference count stays one. The disabled
+path retains previous behavior.
 
 `tests/fixtures/phase21_smoke.py` reuses the existing Phase 20 loopback server. Offline tests and
 local smoke compare exact request sequences for anonymous, single bare, two/three named contexts,
@@ -2518,8 +2528,8 @@ response evidence remains potentially sensitive. Results retain configured seeds
 confirmation, executions, candidates, limitations and attempted count. Active results compose this
 as optional `sequential_object_discovery`, with evidence ordered after Phase 18 and before Mutations.
 JSON omits the field when disabled; human reports distinguish supplied/generated IDs without raw
-business-body dumps. Safety Notice remains final once. No prompt, model call, AIContext allowlist,
-model endpoint or transport changes; Phase 22 data is excluded from AI.
+business-body dumps. Safety Notice remains final once. Phase 31 includes bounded counts/outcomes
+in the existing AI inference, never seeds, neighbors or returned IDs.
 
 There is no recursive expansion (a returned 124 never yields 125 from seed 123), response-ID
 harvesting, random/UUID mutation, range scanning, business-value comparison or automatic follow-up.
@@ -2614,7 +2624,7 @@ Active scan/report results compose optional `mutation_authorization`, omitted fr
 disabled. Evidence order is previous SAFE/probes → sequential discovery → Mutation authorization
 → generic Mutation executions. Console and Markdown/HTML use capability names, preserve complete
 request facts without unrelated raw business bodies, and keep Safety Notice final exactly once.
-AIContext/prompts/schema/allowlist, model transport and inference count are untouched. Phase 20/21
+Phase 31 adds safe policy/outcome facts without IDs/variables to the same AI inference. Phase 20/21
 cases/policies and Phase 22 discovered IDs are never automatically consumed.
 
 `tests/fixtures/phase23_target.py --smoke` validates loopback success, explicit denial, business
@@ -2731,8 +2741,9 @@ configuration is excluded; canonical business response data follows existing evi
 
 Reports add `sensitive_input_review` only when candidates exist and `sensitive_input_validation`
 only when enabled. Named SAFE reports retain local review per context without ACTIVE validation.
-Human output uses capability names and keeps Safety Notice final exactly once. AIContext, prompts,
-schema/allowlist, model, transport and call count are unchanged. Existing request sequences, Phase
+Human output uses capability names and keeps Safety Notice final exactly once. Phase 31 includes
+safe input paths/categories and policy/outcome facts, never supplied or business values. Existing
+request sequences, Phase
 16 semantics and all authorization/discovery behavior remain unchanged when validation is disabled.
 
 `tests/fixtures/phase24_target.py --smoke` is loopback-only with fake headers; it covers Boolean/enum
@@ -2828,8 +2839,8 @@ is preserved, adding IDOR evidence before later Mutation capabilities when enabl
 JSON omits the field when disabled. Shared human presentation adds IDOR / BOLA Detection and
 conditional IDOR / BOLA Findings, without raw business-body dumps. Safety Notice remains final
 once and qualifies policy-backed Findings when this capability is present. Renderers create no
-Findings or new classifications. AIContext, prompts, schema/allowlist, transport and call count
-remain unchanged; IDOR data stays outside AI.
+Findings or new classifications. Phase 31 projects existing IDOR Finding types, context mode and
+policy outcomes, never identifiers or ownership data, within the same single inference.
 
 `tests/fixtures/phase25_target.py --smoke` reuses the Phase 22 schema/loopback server infrastructure
 with explicit test scenarios and fake headers. It covers anonymous/supplied-context success,
@@ -2921,8 +2932,9 @@ only, not duplicated into the Phase 26 projection.
 `ActiveExecutionScanResult.authentication_token_security` and the additive report field preserve
 local metadata, selection, consent, attempted counts, decisions and Findings. Disabled reports omit
 the field. Shared human presentation adds Authentication & Token Security and conditional
-Authentication & Token Findings before the final single Safety Notice. No token data, metadata,
-probe outcomes or Findings enter AIContext; AI transport, prompts and call counts stay unchanged.
+Authentication & Token Findings before the final single Safety Notice. Phase 31 projects safe
+token kind/algorithm/presence/temporal enums and outcomes/Findings, never token/claim values.
+The local provider and single-inference boundary are unchanged.
 
 Offline tests use mock transports and `tests/fixtures/phase26_target.py --smoke`, a loopback-only
 target with fake signing material. Coverage includes strict consent, exact replay, canonical-plan
@@ -3002,7 +3014,8 @@ Exact GraphQL variables and existing baseline artifacts remain potentially sensi
 retain candidates, selection, confirmation, attempt results, first-signal index, scoped Findings
 and limitations. Disabled JSON omits the field. Console and human reports add Rate Limiting &
 Abuse Controls and conditional Rate Limiting / Abuse-Control Findings, before the final single
-Safety Notice. AIContext, prompts and Ollama call counts are unchanged and exclude Phase 27.
+Safety Notice. Phase 31 projects safe counts/control types/policy outcomes and Findings into the
+same AI inference, never credentials, variables or response messages.
 
 Offline mock tests and `tests/fixtures/phase27_target.py --smoke` cover exact replay, independent
 consent, strict budgets and canonical-plan checks, prior-probe exclusion, all control classes,
@@ -3103,8 +3116,9 @@ evidence. Remaining response artifacts may still be sensitive.
 
 `ActiveExecutionScanResult.file_upload_security` and the optional report projection are additive;
 disabled JSON omits the field. Human sections are File Upload Security and conditional File Upload
-Findings, before the final single Safety Notice. AIContext, prompts and calls are unchanged and
-exclude all upload metadata, requests, responses and Findings. Phase 27 consumes only ordinary
+Findings, before the final single Safety Notice. Phase 31 adds safe paths, variant enums, baseline
+and policy outcomes/Findings, excluding files, MIME values, hashes, variables and responses. Phase
+27 consumes only ordinary
 execution containers, so upload probes cannot become repetition baselines. No cross-capability
 handoff, authentication change, response-derived file fetch, dangerous payload generation, filename
 traversal, overwrite/polyglot/archive/size abuse or later upload family is implemented.
@@ -3181,8 +3195,9 @@ without generic redaction or changes to earlier evidence.
 `ActiveExecutionScanResult.federation_security` and reporting composition are additive and omitted
 from canonical JSON when disabled. The stage follows earlier independently consented active stages;
 evidence ordering for those stages is preserved. Human sections are Federation Security and
-conditional Federation Security Findings, always before the final single Safety Notice. AIContext,
-prompts and inference count are unchanged; all new federation content stays excluded. Phase 27
+conditional Federation Security Findings, always before the final single Safety Notice. Phase 31
+projects safe service/entity policy facts, typename/key names and Findings, never SDL/key values.
+Phase 27
 continues consuming only ordinary execution containers, never federation probes.
 
 MockTransport tests and `uv run python tests/fixtures/phase29_target.py --smoke` exercise only loopback
@@ -3264,8 +3279,9 @@ handshake credentials and arbitrary wire logs are excluded; the established expl
 boundary withholds a complete echoed frame rather than editing its contents. Prior evidence remains
 unchanged. `ActiveExecutionScanResult.subscription_security` and its report counterpart are omitted
 when disabled. Console/Markdown/HTML add **Subscriptions & GraphQL over WebSocket**, with conditional
-**Subscription Security Findings**; Safety Notice remains last and appears once. AIContext, prompts,
-inference count and Phase 27 HTTP baselines remain unchanged.
+**Subscription Security Findings**; Safety Notice remains last and appears once. Phase 31 includes
+safe protocol/presence/ACK/event-count/outcome/policy facts and Findings, never URLs, variables,
+init values or frames. Inference count and Phase 27 HTTP baselines remain unchanged.
 
 Offline tests combine mocked transports with `tests/fixtures/phase30_target.py`, which mocks HTTP
 schema acquisition and serves real loopback WebSockets. Its `--smoke` path exercises both protocols,
@@ -3274,6 +3290,84 @@ and private init/header authentication, plus zero-connection disabled/declined/n
 No public target or real credentials are needed. Origin attacks, protocol fuzzing, duplicate init,
 ID collisions, flooding, cross-user comparisons, JWT mutation, event triggering and general
 WebSocket scanning remain future work.
+
+### Phase 31 — Whole-Scan AI Security Interpretation
+
+Implemented as an additive interpretation-only extension of optional `--ai`, after all
+single-context deterministic work. It adds no target HTTP/WebSocket activity, probes, payloads,
+Findings, Evidence, scores or security decisions. The deterministic engine remains authoritative.
+Named-context/differential AI (including Phase 19 and the special named IDOR route) remains
+unsupported. No new dependency or command/option is introduced.
+
+`ai/security_context.py` explicitly reads named project-owned fields into typed `AISecurityFact`
+and `AICapabilityCoverage` models. It never serializes a result graph/report/Evidence and redacts
+it afterward. `ai/context.py` composes these with existing operation/schema context. Safe fields
+are enums, validated GraphQL identifiers/paths, bounded counts, presence Booleans, operator-policy
+provenance and local references. Structural reason prose and target values are excluded.
+
+| Source | Safe semantic projection |
+| --- | --- |
+| Phase 16 | All nine candidate enums, related operation kind/name/type; review candidates only |
+| Phase 17/18 | Probe type, fixed multiplicity/depth/list-edge counts, classified outcome |
+| Phase 20/21/22 | Operation/argument, object outcome, expected policy/evaluation/provenance, seed/attempt/candidate counts |
+| Phase 23/24 | Mutation/input path/category, expected DENY and outcome/evaluation; no automatic Finding |
+| Phase 25 | Existing IDOR Finding type, anonymous/supplied-context mode, baseline/policy outcomes |
+| Phase 26 | JWT/opaque kind, allowlisted algorithm, presence-only header/claim names, temporal enums, probe outcomes/Findings |
+| Phase 27 | Ordinary baseline classification, fixed planned/actual counts, scoped control type, policy and Finding |
+| Phase 28 | Mutation/Upload path, variant, baseline state, policy outcome/Finding |
+| Phase 29 | Service SDL-returned Boolean/policy; entity typename/key names, outcome/policy/Findings |
+| Phase 30 | Subscription name/protocol, header/init presence, ACK/start Booleans, event count, outcome/policy/Finding |
+| Ordinary Phase 9/10 | Existing priorities/categories, generation, selection, decision and exact execution classification |
+
+Coverage distinguishes not_enabled, not_present, prepared, partial, executed and local_only.
+No unsupported differential coverage is manufactured. AI fact categories are FINDING,
+POLICY_VIOLATION, POLICY_SATISFIED, SECURITY_OBSERVATION, UNRESOLVED and REVIEW_CANDIDATE, not
+severities. Tier assignment only arranges existing classifications for presentation; it does not
+reevaluate policies or create Findings. Existing Finding references are used locally to avoid
+prioritizing the same associated violation twice. Policy counts count evaluations, not their
+accompanying Finding twice.
+
+Each fact receives a stable locally generated `SF1`, `SF2`, ... reference after deterministic
+tier ordering. Findings precede unaccompanied policy violations, explicit controls/satisfied
+policies, unresolved/runtime observations, structural reviews and ordinary operations. Retained
+workflow order is stable within each tier; ordinary operations retain Phase 7 ordering. Reduction
+removes operations first, schema summaries second, lowest-tier facts last. Exact outgoing UTF-8
+serialization, including self-counting metadata, must be at most **12,000 bytes**, with at most
+**12 ordinary operations**. The unchanged 8192-token context/2048-token output settings are kept;
+the original byte cap is deliberately not increased while prompt/schema grow. Bytes are a hard
+payload bound, not an exact tokenizer measurement. Oversized context is reduced deterministically
+rather than sent; truncated model output is rejected without another call.
+
+Output retains the canonical ordinary execution summary and adds security_summary (800 chars),
+security_fact_reviews (8 entries, interpretation 450/manual follow-up 350 chars),
+control_observations (6 entries/400 chars), cross_capability_insights (4 entries/500 chars,
+2–4 distinct fact references across capabilities), operation_review (8 entries/600 chars), and
+limitations (8 entries/500 chars). Every reference must exist in the final bounded input;
+unknown/missing/duplicate references, extra fields or oversized output reject the whole response.
+Controls must reference supplied explicit controls/satisfied policies. Aggregate security counts
+are local metadata outside model prose; ordinary execution counts require exact canonical text.
+Model correlations remain uncertain interpretations requiring manual validation, never new facts,
+Findings, severity, CWE, CVSS or proven causality.
+
+AI receives no credentials, tokens/claim values/signatures, object or neighbor IDs, business
+values, variables/documents, upload paths/names/bytes/hashes, federation SDL, target/WebSocket
+URLs, init/event/frame values, raw responses/errors, schema descriptions or Evidence UUIDs/objects.
+GraphQL names remain untrusted data. The same local-only Ollama adapter makes at most one call,
+with stream=false, think=false, temperature=0, no retries, finite timeout and no tools. Invalid
+projection, unavailable provider or invalid output is non-fatal to scanning and reporting.
+
+Shared `ai/sections.py` supplies only the existing AI section in console and human reports:
+validated execution facts, Security Summary, Security Fact Reviews, Security Controls Observed,
+Cross-Capability Analysis, Operation Review and Limitations. JSON persists validated interpretation
+and safe context metadata under optional `ai_interpretation`; raw AI input/result graphs are not
+persisted there. Report schema version remains 1. Safety Notice stays final exactly once.
+
+Offline `tests/fixtures/whole_scan_ai.py` composes real project-owned results with fake canaries;
+`tests/unit/test_whole_scan_ai.py` captures the exact mocked Ollama request and exercises all
+supported capabilities, privacy, stable truncation, scoped outcomes, reference rejection and
+report/isolation behavior. Existing CLI regressions cover disabled AI, one inference and identical
+scanner request sequences. No public target or real credentials are used. No Phase 32 UI redesign
+or future vulnerability functionality is implemented.
 
 ## 35. MVP definition
 

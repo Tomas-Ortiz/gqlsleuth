@@ -170,4 +170,8 @@ def test_disabled_noninteractive_identical_http_and_ai(controlled, monkeypatch):
         on = CliRunner().invoke(cli.app, [*args, "--subscription-review"])
         assert on.exit_code == 0, (on.exception, on.output)
         assert baseline == [(r.method, str(r.url), r.content, dict(r.headers)) for r in controlled]
-        assert target.connections == 0 and len(contexts) == 2 and contexts[0] == contexts[1]
+        assert (
+            target.connections == 0
+            and len(contexts) == 2
+            and contexts[0].operations == contexts[1].operations
+        )

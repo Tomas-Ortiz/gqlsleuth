@@ -14,8 +14,9 @@ from typer.testing import CliRunner
 
 import gqlsleuth.application.query_generation as generation_module
 import gqlsleuth.cli as cli
+from fixtures.ai_response import security_answer_fields
 from fixtures.phase16_smoke import SDL
-from gqlsleuth.ai.context import build_ai_context, serialize_context
+from gqlsleuth.ai.context import build_ai_context
 from gqlsleuth.ai.models import AIAnalysisStatus
 from gqlsleuth.ai.prompt import execution_summary
 from gqlsleuth.application.active_execution import (
@@ -67,9 +68,11 @@ def test_exact_request_generation_execution_and_ai_equivalence(phase_ten_scan, m
     assert [(item.operation_name, item.status, item.attempted) for item in scan.executions] == [
         (item.operation_name, item.status, item.attempted) for item in baseline.executions
     ]
-    assert serialize_context(build_ai_context(scan)) == serialize_context(
-        build_ai_context(baseline)
+    assert (
+        build_ai_context(scan).counts["query_requests"]
+        == build_ai_context(baseline).counts["query_requests"]
     )
+    assert any(f.capability == "structural_review" for f in build_ai_context(scan).security_facts)
     assert [item.evidence_type for item in scan.evidence] == [
         item.evidence_type for item in baseline.evidence
     ]
@@ -93,8 +96,9 @@ def test_exact_request_generation_execution_and_ai_equivalence(phase_ten_scan, m
         assert [(item.decision, item.status) for item in results[0].executions] == [
             (item.decision, item.status) for item in results[1].executions
         ]
-        assert serialize_context(build_ai_context(results[0])) == serialize_context(
-            build_ai_context(results[1])
+        assert (
+            build_ai_context(results[0]).counts["mutation_requests"]
+            == build_ai_context(results[1]).counts["mutation_requests"]
         )
     assert scan == before
 
@@ -144,6 +148,7 @@ def test_console_reports_and_ai_remain_local(phase_ten_scan, monkeypatch):
                     "role": "assistant",
                     "content": json.dumps(
                         {
+                            **security_answer_fields(context),
                             "scan_summary": {"text": execution_summary(context), "operations": []},
                             "operation_review": [],
                             "limitations": [],

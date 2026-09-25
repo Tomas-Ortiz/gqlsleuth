@@ -587,22 +587,28 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
         facts.add_row(
             Text(scope if separator else "Summary"), Text(values if separator else clause)
         )
-    _render_table(console, facts)
-    collections = (
-        (
-            "Operation Review",
-            tuple(
-                ((item.operation,), item.explanation) for item in interpretation.operation_review
-            ),
-        ),
-        ("Limitations", tuple((item.operations, item.text) for item in interpretation.limitations)),
+    metadata = result.context_metadata
+    facts.add_row(
+        "Security policy facts",
+        f"{metadata.deterministic_findings} Findings; "
+        f"{metadata.policy_violations} violations; {metadata.policy_satisfied} satisfied; "
+        f"{metadata.policy_unresolved} unresolved",
     )
+    facts.add_row(
+        "AI context",
+        f"{metadata.security_facts_included} security facts supplied; "
+        f"{metadata.security_facts_omitted} omitted; {metadata.serialized_bytes} bytes",
+    )
+    _render_table(console, facts)
+    from gqlsleuth.ai.sections import interpretation_sections
+
+    collections = interpretation_sections(interpretation)
     for title, entries in collections:
         _section(console, title)
         if not entries:
             console.print("  None supplied.", style="gql.secondary")
             continue
-        table = _table("Operation", "Interpretation")
+        table = _table("Reference", "Interpretation")
         for references, prose in entries if verbose else entries[:5]:
             table.add_row(
                 Text("\n".join(references) or "-", style="gql.metadata"),

@@ -1,7 +1,8 @@
 """Construct AI input from an explicit allowlist, without serializing scan objects."""
 
-import re
+import json
 
+from gqlsleuth.ai.identifiers import identifier as _identifier
 from gqlsleuth.ai.models import (
     MAX_AI_OPERATIONS,
     MAX_CONTEXT_BYTES,
@@ -10,6 +11,7 @@ from gqlsleuth.ai.models import (
     AIOperation,
     AISchemaSummary,
 )
+from gqlsleuth.ai.security_context import ordered_security_context
 from gqlsleuth.application.active_execution import ActiveExecutionScanResult
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult
 from gqlsleuth.domain.analysis import PRIORITY_RANK, OperationKind
@@ -19,14 +21,24 @@ from gqlsleuth.domain.models import EvidenceType
 
 def serialize_context(context: AIContext) -> str:
     """The single serialization path used for byte limits and the actual Ollama request."""
-    return context.model_dump_json()
+    value = context.model_dump(mode="json")
+    value["security_facts"] = [
+        fact.model_dump(mode="json", exclude_none=True) for fact in context.security_facts
+    ]
+    return json.dumps(
+        value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")
+    )
 
 
 def build_ai_context(result: SafeExecutionScanResult | ActiveExecutionScanResult) -> AIContext:
     """Read named fields only. No URLs, documents, variables, descriptions, or error text."""
+    if not isinstance(result, (SafeExecutionScanResult, ActiveExecutionScanResult)):
+        raise ValueError("AI interpretation supports single-context completed scans only.")
     active = result if isinstance(result, ActiveExecutionScanResult) else None
     safe = active.safe_execution if active else result
     assert isinstance(safe, SafeExecutionScanResult)
+    security_facts, coverage = ordered_security_context(safe, active)
+    security_facts_total = len(security_facts)
     analysis = safe.query_generation.operation_analysis
     schema_scan = analysis.schema_scan
     introspection = schema_scan.introspection
@@ -144,6 +156,17 @@ def build_ai_context(result: SafeExecutionScanResult | ActiveExecutionScanResult
             else 0
         )
     schemas = schemas[:10]
+    counts.update(
+        {
+            "deterministic_findings": sum(f.category.value == "finding" for f in security_facts),
+            "policy_violations": sum(f.evaluation == "violated" for f in security_facts),
+            "policy_satisfied": sum(f.evaluation == "satisfied" for f in security_facts),
+            "policy_unresolved": sum(f.evaluation == "unresolved" for f in security_facts),
+            "security_observations": sum(
+                f.category.value == "security_observation" for f in security_facts
+            ),
+        }
+    )
     while True:
         context = AIContext(
             mode=introspection.detection.discovery.mode,
@@ -154,20 +177,39 @@ def build_ai_context(result: SafeExecutionScanResult | ActiveExecutionScanResult
                 operations_omitted=len(operations) - len(included),
                 schemas_total=schemas_total,
                 schemas_included=len(schemas),
-                context_truncated=len(included) < len(operations) or len(schemas) < schemas_total,
+                security_facts_total=security_facts_total,
+                security_facts_included=len(security_facts),
+                security_facts_omitted=security_facts_total - len(security_facts),
+                deterministic_findings=counts["deterministic_findings"],
+                policy_violations=counts["policy_violations"],
+                policy_satisfied=counts["policy_satisfied"],
+                policy_unresolved=counts["policy_unresolved"],
+                context_truncated=(
+                    len(included) < len(operations)
+                    or len(schemas) < schemas_total
+                    or len(security_facts) < security_facts_total
+                ),
             ),
             operations=tuple(included),
             schemas=tuple(schemas),
             counts=counts,
+            security_facts=tuple(security_facts),
+            capability_coverage=coverage,
         )
+        # Include the byte-count field itself: converge on its exact serialized digit width.
+        while context.metadata.serialized_bytes != len(serialize_context(context).encode("utf-8")):
+            size = len(serialize_context(context).encode("utf-8"))
+            context = context.model_copy(
+                update={"metadata": context.metadata.model_copy(update={"serialized_bytes": size})}
+            )
         if len(serialize_context(context).encode("utf-8")) <= MAX_CONTEXT_BYTES:
             return context
-        # Preserve the most important operations first; summaries have lower priority.
-        if schemas:
-            schemas.pop()
-        else:
+        # Security facts have reserved capacity ahead of every ordinary operation.
+        if included:
             included.pop()
-
-
-def _identifier(value: str | None) -> str | None:
-    return value if value and re.fullmatch(r"[_A-Za-z][_0-9A-Za-z]{0,127}", value) else None
+        elif schemas:
+            schemas.pop()
+        elif security_facts:
+            security_facts.pop()
+        else:
+            raise ValueError("AI summary exceeds the bounded context size.")

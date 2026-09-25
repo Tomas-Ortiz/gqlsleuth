@@ -266,7 +266,7 @@ def test_local_and_active_reports_ai_and_secret_boundaries(phase_ten_scan, monke
     stripped = replace(
         safe, query_generation=replace(safe.query_generation, sensitive_input_review=())
     )
-    assert build_ai_context(safe) == build_ai_context(stripped)
+    assert build_ai_context(safe).operations == build_ai_context(stripped).operations
     requests = []
 
     def handler(request):
@@ -291,7 +291,7 @@ def test_local_and_active_reports_ai_and_secret_boundaries(phase_ten_scan, monke
     )
     result = session.execute(preview=session.preview, confirmed=True)
     composed = replace(active, sensitive_input_validation=result)
-    assert build_ai_context(composed) == build_ai_context(active)
+    assert build_ai_context(composed).operations == build_ai_context(active).operations
     assert composed.evidence == active.evidence + result.evidence
     for width in (45, 100):
         output = io.StringIO()

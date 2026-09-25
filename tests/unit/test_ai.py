@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
+from fixtures.ai_response import security_answer_fields
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import MAX_AI_OPERATIONS, MAX_CONTEXT_BYTES, AIAnalysisStatus
 from gqlsleuth.ai.prompt import execution_summary, validate_interpretation
@@ -29,6 +30,7 @@ from gqlsleuth.reporting.renderers import render_report
 def answer(context):
     operation = context.operations[0].operation if context.operations else None
     return {
+        **security_answer_fields(context),
         "scan_summary": {"text": execution_summary(context), "operations": []},
         "operation_review": [
             {
@@ -265,16 +267,17 @@ def test_canaries_are_excluded_from_exact_ollama_request_by_construction(complet
             "scan_summary",
             "operation_review",
             "limitations",
+            "security_summary",
+            "security_fact_reviews",
+            "control_observations",
+            "cross_capability_insights",
         }
         prompt = payload["messages"][0]["content"]
         assert "operation_review: Write one concise paragraph per operation" in prompt
-        assert "relevant observed execution/result context" in prompt
-        assert "manual review direction" in prompt
-        assert "why it deserves attention" in prompt
-        assert "Always express priority as review" in prompt
+        assert "recorded outcome, reason for attention and non-destructive manual review" in prompt
+        assert "Express priority only as" in prompt
         assert "CRITICAL-interest, HIGH-interest, MEDIUM-interest" in prompt
-        assert 'Never write "this operation is CRITICAL"' in prompt
-        assert '"this mutation is HIGH"' in prompt
+        assert "never 'this operation is CRITICAL'" in prompt
         assert "review_focus" not in prompt
         assert "operation_explanations" not in prompt
         assert "manual_review_suggestions" not in prompt
@@ -450,7 +453,7 @@ def test_ai_reports_are_additive_escaped_and_exclude_thinking(completed, monkeyp
     assert "ai_interpretation" not in deterministic
     ai_json = additive.pop("ai_interpretation")
     assert ai_json["status"] == "success"
-    assert ai_json["interpretation"] == payload
+    assert ai_json["interpretation"] == result.interpretation.model_dump(mode="json")
     assert additive == deterministic
     for format in ReportFormat:
         rendered = render_report(after, format)

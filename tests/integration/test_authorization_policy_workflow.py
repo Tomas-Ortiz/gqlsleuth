@@ -239,8 +239,9 @@ def test_ai_context_and_one_call_unchanged(controlled, monkeypatch):
         CliRunner().invoke(cli.app, [*args, "--auth-policy-review", "--expect-deny", "1"]).exit_code
         == 0
     )
-    assert len(contexts) == 2 and contexts[0] == contexts[1]
-    assert "authorization_policy" not in contexts[0].model_dump_json()
+    assert len(contexts) == 2 and contexts[0].operations == contexts[1].operations
+    assert not any(f.capability == "authorization_policy" for f in contexts[0].security_facts)
+    assert any(f.capability == "authorization_policy" for f in contexts[1].security_facts)
 
 
 def test_evaluator_import_boundary():

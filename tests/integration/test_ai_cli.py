@@ -8,6 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 import gqlsleuth.cli as cli
+from fixtures.ai_response import security_answer_fields
 from gqlsleuth.ai.models import AIContext
 from gqlsleuth.ai.prompt import execution_summary
 from gqlsleuth.application.active_execution import execute_selected_mutations
@@ -51,6 +52,7 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
             raise httpx.ConnectError("Private error detail", request=request)
         context = AIContext.model_validate_json(ai_requests[-1]["messages"][1]["content"])
         payload = {
+            **security_answer_fields(context),
             "scan_summary": {"text": execution_summary(context), "operations": []},
             "operation_review": [],
             "limitations": [],
@@ -135,7 +137,7 @@ def test_one_ai_inference_follows_completed_safe_and_active_behavior(
     assert context["counts"]["mutation_requests"] == mutation_count
     prompt = ai_requests[0]["messages"][0]["content"]
     assert f"{mutation_count} Mutation requests" in prompt
-    assert ("ZERO Mutations were attempted" in prompt) is (mutation_count == 0)
+    assert ("ZERO ordinary Phase 10 Mutations were attempted" in prompt) is (mutation_count == 0)
     if mode == "active":
         assert results[-1].selected_indices == ((1,) if mutation_count else ())
         assert results[-1].confirmed is bool(mutation_count)

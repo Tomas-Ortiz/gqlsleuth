@@ -203,7 +203,7 @@ def test_reports_ai_and_console_do_not_send_or_leak(phase_ten_scan, monkeypatch)
     detection = workflow.execute(preview=workflow.preview, confirmed=True)
     original = ActiveExecutionScanResult(ActiveMutationPreviewResult(safe, ()), (), False, (), ())
     active = replace(original, idor_bola_detection=detection)
-    assert build_ai_context(active) == build_ai_context(original)
+    assert build_ai_context(active).operations == build_ai_context(original).operations
     assert active.evidence[: len(safe.evidence)] == safe.evidence
     report = build_report(active)
     assert human_sections(report)[-1].title == "Safety Notice"

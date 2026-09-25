@@ -231,7 +231,7 @@ def test_reports_exact_evidence_and_ai_exclusion(phase_ten_scan, selected, confi
         shape = execute_multiplicity(prepare_multiplicity(safe), client=client)
     before = replace(active, multiplicity=shape)
     after = replace(before, query_depth=result)
-    assert build_ai_context(before) == build_ai_context(after)
+    assert build_ai_context(before).operations == build_ai_context(after).operations
     assert after.multiplicity == before.multiplicity and after.safe_execution is safe
     assert (
         tuple(

@@ -449,21 +449,21 @@ def ai_section(result: AIInterpretationResult) -> ReportSection:
     entries = []
     interpretation = result.interpretation
     if interpretation is not None:
+        from gqlsleuth.ai.sections import interpretation_sections
+
         entries = [
             ReportEntry(
                 "Execution Summary (validated facts)",
                 paragraphs=(_ai_statement(interpretation.scan_summary),),
             ),
-            ReportEntry(
-                "Operation Review",
-                paragraphs=tuple(
-                    f"{item.operation}: {item.explanation}"
-                    for item in interpretation.operation_review
-                ),
-            ),
-            ReportEntry(
-                "Limitations",
-                paragraphs=tuple(_ai_statement(item) for item in interpretation.limitations),
+            *(
+                ReportEntry(
+                    title,
+                    paragraphs=tuple(
+                        (", ".join(refs) + ": " if refs else "") + text for refs, text in rows
+                    ),
+                )
+                for title, rows in interpretation_sections(interpretation)
             ),
         ]
     return ReportSection(
@@ -474,6 +474,13 @@ def ai_section(result: AIInterpretationResult) -> ReportSection:
             ("AI status", result.status.value.upper()),
             ("Operations supplied", str(result.context_metadata.operations_included)),
             ("Operations omitted", str(result.context_metadata.operations_omitted)),
+            ("Security facts supplied", str(result.context_metadata.security_facts_included)),
+            ("Security facts omitted", str(result.context_metadata.security_facts_omitted)),
+            ("Deterministic Findings", str(result.context_metadata.deterministic_findings)),
+            ("Policy violations", str(result.context_metadata.policy_violations)),
+            ("Satisfied policies", str(result.context_metadata.policy_satisfied)),
+            ("Unresolved policies", str(result.context_metadata.policy_unresolved)),
+            ("Context bytes", str(result.context_metadata.serialized_bytes)),
             ("Context truncated", "Yes" if result.context_metadata.context_truncated else "No"),
         ),
         entries=tuple(entries),

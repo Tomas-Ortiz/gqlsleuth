@@ -160,7 +160,7 @@ def test_phase27_does_not_add_ai_calls(controlled, monkeypatch):
     result = CliRunner().invoke(cli.app, ["scan", TARGET, *OPTIONS, "--ai"], input="\n1\ny\n")
     assert result.exit_code == 0, (result.exception, result.output)
     assert len(calls) == 1
-    assert "abuse_control" not in repr(calls[0]).lower()
+    assert any(f.capability == "abuse_controls" for f in calls[0].security_facts)
 
 
 def test_help_exposes_only_fixed_budget_flag():

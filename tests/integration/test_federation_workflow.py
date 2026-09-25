@@ -139,7 +139,7 @@ def test_disabled_noninteractive_baseline_requests_ai_unchanged(controlled, monk
     on = CliRunner().invoke(cli.app, [*options, "--federation-review", *CASE])
     assert on.exit_code == 0, (on.exception, on.output)
     assert original == [(r.method, str(r.url), r.content, dict(r.headers)) for r in controlled]
-    assert len(contexts) == 2 and contexts[0] == contexts[1]
+    assert len(contexts) == 2 and contexts[0].operations == contexts[1].operations
     assert "PHASE29_CLI_CANARY" not in str(contexts)
 
 

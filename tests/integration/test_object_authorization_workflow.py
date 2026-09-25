@@ -200,9 +200,9 @@ def test_anonymous_modes_enabled_gate_and_ai_exclusion(retained, transport):
     assert not disabled.evidence and not transport[0]
     result = application.execute_object_authorization(safe, cases=cases, enabled=True)
     assert result.attempted_request_count == 3 and len(result.candidates) == 1
-    assert build_ai_context(safe) == build_ai_context(
-        replace(safe, object_authorization_review=result)
-    )
+    context = build_ai_context(replace(safe, object_authorization_review=result))
+    assert build_ai_context(safe).operations == context.operations
+    assert any(f.capability == "object_authorization" for f in context.security_facts)
     named = application.execute_object_authorization(
         safe, cases=(cases[0],), contexts=(NamedAuthContext("foo"),), enabled=True
     )

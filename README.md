@@ -79,7 +79,8 @@ null, malformed, unsupported and generic error outcomes are indeterminate.
 
 JSON retains exact requests and bounded attempt evidence with source references. Markdown/HTML
 show protocol/state/outcome details and conditional Subscription Security Findings before the final
-Safety Notice. AI remains unchanged. There is no event-trigger Mutation, enumeration, reconnect,
+Safety Notice. Optional whole-scan AI receives only safe semantic facts. There is no event-trigger
+Mutation, enumeration, reconnect,
 concurrency, multiplexing, flooding, Origin/CSWSH testing, fuzzing, cross-user comparison,
 ownership/tenant/role inference or severity/CVSS/CWE assignment.
 
@@ -136,8 +137,8 @@ bounded response facts plus policy, source references and classification. Human 
 Federation Security and conditional Federation Security Findings before the final Safety Notice.
 Outgoing credentials/proxy settings remain runtime-only; the existing probe capture boundary
 withholds responses echoing supplied credentials. Operator-supplied entity keys intentionally
-appear in previews/evidence/reports. AI context and call count are unchanged; no new federation
-data is sent to AI or used as a repetition baseline. No severity, CVSS or CWE is assigned.
+appear in previews/evidence/reports. Optional whole-scan AI receives only safe federation facts; no
+federation probe is used as a repetition baseline. No severity, CVSS or CWE is assigned.
 
 Offline tests and the loopback-only manual fixture need no real credentials or external target:
 
@@ -214,8 +215,9 @@ outcomes, policies, Findings and provenance. Only actual attempts create FILE_UP
 evidence. Local bytes, full local paths and outgoing credential/settings values are not serialized.
 Echoed known file/path/credential material causes the whole response to be withheld with an explicit
 marker, without rewriting prior evidence or adding generic redaction. Other raw response evidence
-remains potentially sensitive. Safety Notice is the final human-report section. AIContext and
-Ollama call counts are unchanged; upload artifacts and Findings never enter AI.
+remains potentially sensitive. Safety Notice is the final human-report section. Optional whole-scan
+AI receives scoped upload outcomes/Findings, never upload artifacts; the single-call limit is
+unchanged.
 
 There are no generated executable/script payloads, webshells, malicious SVG/HTML, traversal names,
 polyglots, archive bombs, overwrite tests or size-limit searches. Returned URLs/IDs are never fetched,
@@ -285,8 +287,8 @@ Canonical evidence retains exact documents/variables and bounded response facts;
 outgoing header values, Cookies or proxy credentials. The existing probe privacy boundary withholds
 whole response bodies containing known request-secret material and marks that omission; it does
 not introduce generic redaction or rewrite baseline evidence. GraphQL variables remain exact and
-reports may contain sensitive application data. Human reports end with Safety Notice. Phase 27
-data does not enter AIContext and no additional Ollama calls are made.
+reports may contain sensitive application data. Human reports end with Safety Notice. Optional
+whole-scan AI receives bounded abuse-control facts; no additional Ollama calls are made.
 
 Development validation uses only fake inputs and a controlled loopback fixture:
 
@@ -348,7 +350,8 @@ Cookie value or proxy credential. Its response capture withholds an entire body 
 request credential material and records that limitation; only non-credential response metadata is
 retained. This boundary does not rewrite prior scanner evidence. Baseline evidence is referenced,
 not copied. Reports remain sensitive artifacts, and Safety Notice remains the final human section.
-This capability does not enter AIContext or add Ollama calls.
+Optional whole-scan AI receives allowlisted token metadata and outcomes, never tokens or claim
+values, within the same single inference.
 
 Offline development smoke with fixture-only credentials:
 
@@ -432,8 +435,9 @@ and exact attempt evidence. Markdown/HTML include **IDOR / BOLA Detection** and,
 **IDOR / BOLA Findings**; Safety Notice remains last. Each Finding references its exact attempt,
 plus the confirmed baseline for authenticated alternates. Only actual probes create
 `IDOR_BOLA_PROBE` evidence. Outgoing authentication values/settings never enter these results or
-human output; retained response evidence may still contain application data. IDOR data is excluded
-from AIContext. Reporting performs no additional requests.
+human output; retained response evidence may still contain application data. Optional whole-scan AI
+can interpret IDOR outcomes/Findings, never identifiers or ownership data. Reporting performs no
+additional requests.
 
 For deterministic development checks using only loopback and fake credentials:
 
@@ -530,8 +534,8 @@ Console and JSON/Markdown/HTML keep local `sensitive_input_review` separate from
 evidence, retaining exact request/response facts, typed value, target, match states and DENY policy.
 Outgoing header/configuration secrets are not copied into new results or human presentation.
 Complete previewed variables and canonical response evidence remain potentially sensitive pentest
-data. Safety Notice stays last. AIContext, prompts, allowlist, transport and call count are unchanged;
-AI receives no new review/validation data. Disabled validation adds no requests to any workflow.
+data. Safety Notice stays last. Optional whole-scan AI receives safe review/validation facts without
+values; the single-call limit is unchanged. Disabled validation adds no requests to any workflow.
 
 Run the test-only loopback smoke fixture with fake headers and no public target:
 
@@ -608,7 +612,8 @@ evidence with exact request/response facts; the derived violation references tha
 The optional JSON field `mutation_authorization` is absent when disabled. Human reports keep
 Safety Notice final exactly once. New models/presentation never copy outgoing header values or
 HTTP configuration. Previewed variables and canonical response evidence remain potentially
-sensitive pentest data. This capability's data is excluded from AIContext; AI behavior is unchanged.
+sensitive pentest data. Optional whole-scan AI receives only safe Mutation policy/outcome facts,
+without target IDs or business values.
 
 Run the deterministic test-only loopback fixture with fake credentials (no public target):
 
@@ -678,7 +683,7 @@ optionally add authorization policy validation DENY assertions. No case/policy c
 
 The ordinary ACTIVE order is normal Queries → Query-shape validation → Query-depth validation → optional sequential object discovery or IDOR/BOLA Detection → optional Mutation authorization → optional Sensitive Input Validation → generic Mutations →
 optional AI/reports. Each ACTIVE capability keeps its own confirmation and request budget.
-sequential object discovery data is excluded from AIContext; prompts and model-call counts are unchanged.
+Optional whole-scan AI receives bounded discovery counts/outcomes, never seed or neighbor IDs.
 Console and JSON/Markdown/HTML distinguish supplied seeds, generated IDs, plans, actual attempts,
 outcomes and limitations. Only attempts create `SEQUENTIAL_OBJECT_PROBE` evidence with exact
 Query/variables, response bytes and source references. Outgoing header values are never stored
@@ -748,8 +753,9 @@ Console and JSON/Markdown/HTML add **Authorization Policy Validation** after the
 JSON's optional `authorization_policy_validation` contains assertions, evaluations, violations and
 references to existing object authorization evidence; no network evidence is duplicated or invented. Policy
 models contain no authentication configuration. Human reports show no raw business bodies, and
-Safety Notice remains final exactly once. Policy data stays outside AIContext; AI behavior and
-call counts are unchanged. With the policy flag absent, previous behavior and report fields remain
+Safety Notice remains final exactly once. Optional single-context AI receives only safe
+policy/outcome facts within the same single inference. With the policy flag absent, previous
+behavior and report fields remain
 unchanged. ALLOW policies, policy files/matrices and formal Findings are outside this capability's scope.
 
 Run local acceptance and exact request-invariance smoke coverage using the existing object authorization server:
@@ -940,7 +946,8 @@ controls, global protection or an exhaustion risk. No business values or timings
 Only attempted depth requests create `GRAPHQL_BEHAVIOR_PROBE` evidence, retaining source IDs,
 baseline/probe depths, path, exact Query/variables, response bytes and transport facts. Reports
 add **Controlled Query Depth Validation**, with bounded human response display and lossless JSON.
-Safety Notice remains last. Query-depth validation adds nothing to AIContext and makes no Ollama call.
+Safety Notice remains last. Optional whole-scan AI interprets safe depth numbers/outcomes within its
+single post-scan inference.
 
 Run the test-only loopback smoke (accepted, rejected, indeterminate and unselected scenarios):
 
@@ -982,7 +989,8 @@ JSON, Markdown and HTML add **Controlled GraphQL Multiplicity Validation**, pres
 confirmation, decisions and observations. Attempted requests alone create `GRAPHQL_BEHAVIOR_PROBE`
 evidence with exact requests, response bytes and normalized transport errors. Human responses use
 the existing bounded renderer; canonical JSON preserves complete evidence. Safety Notice remains
-last. Query-shape validation is excluded from AIContext and adds no Ollama call. Named authentication-context
+last. Optional whole-scan AI interprets safe multiplicity counts/outcomes without another inference.
+Named authentication-context
 scans remain SAFE-only and do not perform these probes.
 
 Run the controlled loopback acceptance/rejection/ambiguous smoke without public targets:
@@ -1243,7 +1251,8 @@ manual guidance. JSON adds `graphql_security_review` with complete facts, relate
 metadata, limitations, and existing schema-evidence IDs. Markdown/HTML add the same review with
 bounded supporting paths, and keep Safety Notice last. Named-context reports present each
 context's review separately; named-context differential review pairwise comparisons do not compare structural security review candidate sets.
-AI input and the one-inference behavior are unchanged; no structural security review data is sent to Ollama.
+Optional whole-scan AI receives candidate enums and validated identifiers, never schema descriptions
+or arbitrary reason prose.
 
 Run the test-only metadata fixture and generate all report formats locally:
 
@@ -1376,36 +1385,52 @@ ACTIVE selection/confirmation/execution stage, and **before** requested reports.
 confirm, generate, or execute GraphQL operations, change priorities/statuses/evidence, or feed
 instructions back into the scanner. It adds zero requests to the GraphQL target.
 
-The AI context is constructed with an explicit allowlist: effective mode, aggregate schema
-counts/root names, operation kind/name/return-type name, existing interest priorities/scores and
-categories, generation/manual-adjustment flags, HTTP status codes, and deterministic execution
-and Mutation decision states. Endpoint labels are anonymous (`endpoint_1`, etc.). No target URLs,
-headers, credentials, variable values, raw request/response bodies, raw errors/stack traces,
-Evidence objects, descriptions, or complete schema graphs are sent. Generated documents are also
-excluded to keep the input purely structural. This is a dedicated projection, not a generic
-redaction subsystem; existing scanner evidence is untouched.
+Whole-Scan AI Security Interpretation uses an explicit typed allowlist of retained results:
+scan/schema overview and interesting operations; structural security reviews; multiplicity/depth
+observations; object, sequential, Mutation and sensitive-input authorization reviews; operator
+policy results and IDOR/BOLA Findings; authentication/JWT metadata and Findings; abuse controls;
+file uploads; federation; and Subscriptions/WebSocket. Only capabilities present in the completed
+single-context scan contribute facts. Disabled, prepared, executed, partial and local-only
+coverage remain distinct. Named-context/differential AI, including nested authorization and the
+special named IDOR route, remains unsupported.
 
-Input is limited to **20 operations** and **12,000 serialized UTF-8 bytes**, prioritizing existing
-operation interest rankings. Operation names longer than 128 characters are omitted; at most ten
-schema summaries are included. Size reduction removes lower-priority schema summaries before
-operations. Metadata explicitly records included/omitted operations and context truncation.
+The context contains semantic enums, validated GraphQL names, presence-only Booleans, bounded
+counts and safe local references (`SF1`, `SF2`, ...). It excludes credentials, headers, tokens,
+JWT claim values/signatures, object/neighbor IDs, exact variables/documents, uploaded file
+paths/names/bytes/hashes, federation SDL, WebSocket URLs/init payloads/frames/events, target URLs,
+raw responses/errors, Evidence objects/UUIDs and schema descriptions. Endpoint labels are
+anonymous (`endpoint_1`, etc.). Unsafe objects are never serialized and then redacted; existing
+scanner evidence is untouched.
 
-The validated response contains an execution summary, up to ten operation
-reviews, and ten limitations, with text bounded to 600
-characters per entry. Operation references use exact endpoint/kind/name identifiers in dedicated
-fields, including summary/review/limitations. Unknown references reject the whole response;
-malformed JSON, extra fields, and invalid structures are rejected without retries. Model-generated
-prose still requires professional validation. Thinking/reasoning metadata is ignored and never
-displayed or persisted.
+Input is limited to **12 ordinary operations** and **12,000 serialized UTF-8 bytes**, including
+metadata. Findings have first priority, followed by policy violations without Findings, scoped
+controls/satisfied policies, unresolved/runtime observations, structural reviews, and ordinary
+operations. Size reduction removes ordinary operations first, then schema summaries, then the
+lowest remaining security-fact tier. Ordering within each tier is stable. At most ten schema
+summaries are retained. Invalid GraphQL names or names longer than 128 characters are omitted.
+Metadata records complete deterministic counts, included/omitted fact and operation counts,
+exact serialized bytes and truncation. There is no second inference for omitted data.
 
-The execution summary uses canonical text calculated from complete scan classifications before
-context truncation. The response schema requires that exact text, and validation rejects any
-paraphrase or changed count. Attempts, SUCCESS, GraphQL/HTTP/transport errors, and safety/limit
-skips remain distinct; HTTP 200 never overrides a GraphQL error. This summary is labeled as
-validated facts; Qwen generates Operation Review and Limitations. Each Operation Review paragraph
-combines the supplied review interest, apparent role, relevant recorded outcome, reason for
-attention, and a concrete, non-destructive manual review direction. Priority wording explicitly
-indicates review interest (for example, HIGH-interest), never vulnerability severity.
+The AI section contains **Execution Summary (validated facts)**, **Security Summary**,
+**Security Fact Reviews**, **Security Controls Observed**, **Cross-Capability Analysis**,
+**Operation Review**, and **Limitations**. The execution summary retains exact locally calculated
+ordinary Query/Mutation classifications; specialized probe results are separate security facts.
+Attempts, success, errors and safety/limit skips remain distinct. Complete Finding/policy counts
+are calculated locally, not by the model. Review priorities remain interest, never severity.
+
+Structured output bounds are: security summary 800 characters; up to eight fact reviews
+(450-character interpretation and 350-character manual follow-up), six controls (400 characters),
+four correlations (500 characters), eight operation reviews (600 characters), and eight
+limitations (500 characters). Exact operation and security-fact references are validated across
+all sections. Unknown, omitted or duplicate references, malformed JSON, extra fields and invalid
+structures reject the whole response without retry. Each correlation must cite at least two
+distinct facts from different capabilities and remains **model-generated interpretation requiring
+manual validation**, never proven causality or a new Finding. Thinking metadata is ignored.
+
+AI creates no Findings or Evidence and cannot change deterministic scores, policy evaluations or
+outcomes. Operator-supplied policies retain that qualification; ownership is not inferred.
+A rejected probe establishes only its scoped control, and an unexecuted or unresolved capability
+is not a security pass. Human reports keep Safety Notice as their final section exactly once.
 
 Inference uses a finite 180-second timeout (five-second connection timeout), a 128 KiB response
 limit, and no redirects, environment proxies, or retries. Connection failures, timeouts, missing

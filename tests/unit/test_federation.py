@@ -394,7 +394,7 @@ def test_privacy_reports_ai_and_disabled_semantics(safe, wire):
     )
     combined = replace(active, federation_security=result)
     assert combined.evidence[: len(active.evidence)] == active.evidence
-    assert build_ai_context(active) == build_ai_context(combined)
+    assert build_ai_context(active).operations == build_ai_context(combined).operations
     assert prepare_abuse_controls(active) == prepare_abuse_controls(combined)
     baseline = render_report(build_report(active), ReportFormat.JSON)
     assert '"federation_security"' not in baseline

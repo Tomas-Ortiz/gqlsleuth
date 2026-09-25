@@ -15,6 +15,7 @@ from rich.console import Console
 from rich.style import Style
 from rich.table import Table
 
+from fixtures.ai_response import security_answer_fields
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import AIAnalysisStatus, AIInterpretationResult
 from gqlsleuth.ai.prompt import execution_summary, validate_interpretation
@@ -334,6 +335,7 @@ def ai_view(execution_views):
     interpretation = validate_interpretation(
         json.dumps(
             {
+                **security_answer_fields(context),
                 "scan_summary": {"text": execution_summary(context), "operations": []},
                 "operation_review": [{"operation": reference, "explanation": prose}],
                 "limitations": [{"operations": [], "text": "Runtime assessment remains limited."}],
@@ -433,6 +435,10 @@ def test_rendered_titles_and_tables_use_structural_styles(execution_views, ai_vi
         "Mutation Execution",
         "AI-Assisted Interpretation",
         "Execution Summary (validated facts)",
+        "Security Summary",
+        "Security Fact Reviews",
+        "Security Controls Observed",
+        "Cross-Capability Analysis",
         "Operation Review",
         "Limitations",
     ]

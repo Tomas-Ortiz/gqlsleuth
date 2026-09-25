@@ -452,7 +452,7 @@ def test_private_init_header_echo_reports_ai_isolation(safe, wire):
     )
     active = execute_selected_mutations(prepare_active_mutations(safe), confirmed=False)
     combined = replace(active, subscription_security=result)
-    assert build_ai_context(active) == build_ai_context(combined)
+    assert build_ai_context(active).operations == build_ai_context(combined).operations
     assert prepare_abuse_controls(active, enabled=True) == prepare_abuse_controls(
         combined, enabled=True
     )

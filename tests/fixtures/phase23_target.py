@@ -124,7 +124,7 @@ def smoke(target):
         render_mutation_authorization(console, result)
         assert secret not in output.getvalue() and secret not in repr(result)
         composed = replace(active, mutation_authorization=result)
-        assert build_ai_context(composed) == build_ai_context(active)
+        assert build_ai_context(composed).operations == build_ai_context(active).operations
         report = build_report(composed)
         for format in ReportFormat:
             rendered = render_report(report, format)

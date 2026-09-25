@@ -7,6 +7,7 @@ from gqlsleuth.ai.context import build_ai_context
 from gqlsleuth.ai.models import (
     DEFAULT_AI_MODEL,
     AIAnalysisStatus,
+    AIContextMetadata,
     AIInterpretationResult,
     AIServiceError,
 )
@@ -21,9 +22,27 @@ def interpret_completed_scan(
     client: OllamaClient | None = None,
 ) -> AIInterpretationResult:
     """Never call scanner stages or alter results; expected AI failures are non-fatal."""
-    context = build_ai_context(result)
     started = perf_counter()
     generated_at = datetime.now(UTC)
+    try:
+        context = build_ai_context(result)
+    except (ValueError, TypeError, RecursionError):
+        return AIInterpretationResult(
+            AIAnalysisStatus.INVALID_RESPONSE,
+            DEFAULT_AI_MODEL,
+            generated_at,
+            perf_counter() - started,
+            AIContextMetadata(
+                operations_total=0,
+                operations_included=0,
+                operations_omitted=0,
+                schemas_total=0,
+                schemas_included=0,
+                context_truncated=True,
+            ),
+            error_code="invalid_context",
+            error_message="Could not build a safe bounded AI context.",
+        )
     try:
         interpretation = (client or OllamaClient()).interpret(context)
     except AIServiceError as error:

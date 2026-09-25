@@ -49,10 +49,11 @@ class OllamaClient:
         response_schema["properties"]["scan_summary"] = {
             "type": "object",
             "additionalProperties": False,
-            "required": ["text", "operations"],
+            "required": ["text", "operations", "security_facts"],
             "properties": {
                 "text": {"type": "string", "enum": [execution_summary(context)]},
                 "operations": {"type": "array", "items": {"type": "string"}, "maxItems": 0},
+                "security_facts": {"type": "array", "items": {"type": "string"}, "maxItems": 0},
             },
         }
         payload = {

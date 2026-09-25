@@ -197,7 +197,7 @@ def test_direct_reports_console_and_ai_exclusion(phase_ten_scan, monkeypatch, su
     assert all((request.headers.get("x-api-key") == SECRET) is supplied for request in requests)
     active = execute_selected_mutations(prepare_active_mutations(safe))
     enhanced = replace(active, sequential_object_discovery=result)
-    assert build_ai_context(active) == build_ai_context(enhanced)
+    assert build_ai_context(active).operations == build_ai_context(enhanced).operations
     assert enhanced.evidence[: len(safe.evidence)] == safe.evidence
     report = build_report(enhanced)
     assert human_sections(report)[-1].title == "Safety Notice"
@@ -282,4 +282,4 @@ def test_cli_ai_call_count_unchanged(controlled, monkeypatch):
     before = CliRunner().invoke(cli.app, ["scan", TARGET, "--mode", "active", "--ai"], input="\n\n")
     after = CliRunner().invoke(cli.app, ["scan", TARGET, *OPTIONS, "--ai"], input="\ny\n\n")
     assert before.exit_code == after.exit_code == 0, (before.exception, after.exception)
-    assert len(calls) == 2 and calls[0] == calls[1]
+    assert len(calls) == 2 and calls[0].operations == calls[1].operations

@@ -393,7 +393,7 @@ def test_reports_console_ai_and_evidence_composition(active, wire, caplog):
     base = ActiveExecutionScanResult(ActiveMutationPreviewResult(active, ()), (), False, (), ())
     scan = replace(base, authentication_token_security=result)
     assert scan.evidence == (*active.evidence, *result.evidence)
-    assert build_ai_context(base) == build_ai_context(scan)
+    assert build_ai_context(base).operations == build_ai_context(scan).operations
     report = build_report(scan)
     assert human_sections(report)[-1].title == "Safety Notice"
     texts = [repr(result), serialize_context(build_ai_context(scan)), caplog.text]

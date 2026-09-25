@@ -205,7 +205,7 @@ def test_reports_evidence_ai_and_phase_sixteen_isolation(phase_ten_scan, selecte
         )
         before = execute_selected_mutations(prepare_active_mutations(safe), client=client)
     after = replace(before, multiplicity=probes)
-    assert build_ai_context(before) == build_ai_context(after)
+    assert build_ai_context(before).operations == build_ai_context(after).operations
     assert (
         after.safe_execution.query_generation.security_review
         == safe.query_generation.security_review

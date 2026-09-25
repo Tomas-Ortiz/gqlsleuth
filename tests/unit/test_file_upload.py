@@ -507,7 +507,7 @@ def test_reports_ai_provenance_privacy_and_no_cross_capability_handoff(safe, fil
     )
     combined = replace(active, file_upload_security=result)
     assert combined.evidence == (*active.evidence, *result.evidence)
-    assert build_ai_context(combined) == build_ai_context(active)
+    assert build_ai_context(combined).operations == build_ai_context(active).operations
     assert prepare_abuse_controls(combined, enabled=True) == prepare_abuse_controls(
         active, enabled=True
     )

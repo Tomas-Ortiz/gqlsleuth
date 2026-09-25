@@ -390,7 +390,7 @@ def test_reporting_console_ai_and_evidence_are_additive_and_local(active, wire, 
     result = workflow.execute(preview=workflow.preview, confirmed=True)
     combined = replace(active, rate_limiting_abuse_controls=result)
     assert combined.evidence == (*active.evidence, *result.attempts)
-    assert build_ai_context(combined) == build_ai_context(active)
+    assert build_ai_context(combined).operations == build_ai_context(active).operations
     report = build_report(combined)
     sections = human_sections(report)
     assert sections[-1].title == "Safety Notice"

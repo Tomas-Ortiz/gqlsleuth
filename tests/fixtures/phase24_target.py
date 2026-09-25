@@ -162,7 +162,7 @@ def smoke(target):
         render_sensitive_validation(console, result)
         assert secret not in output.getvalue() and secret not in repr(result)
         composed = replace(active, sensitive_input_validation=result)
-        assert build_ai_context(composed) == build_ai_context(active)
+        assert build_ai_context(composed).operations == build_ai_context(active).operations
         for format in ReportFormat:
             rendered = render_report(build_report(composed), format)
             assert secret not in rendered
