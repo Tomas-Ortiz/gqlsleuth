@@ -1556,17 +1556,38 @@ This structure is a target architecture. Directories and modules should only be 
 - **Language:** Python 3.13
 - **Project and dependency management:** uv
 - **CLI:** Typer, Rich
-- **Data validation and configuration:** Pydantic, pydantic-settings
+- **Data validation and configuration:** Pydantic
 - **HTTP:** HTTPX
 - **WebSocket:** websockets
 - **GraphQL:** graphql-core
 - **Reporting:** Jinja2
-- **JWT analysis:** PyJWT
+- **JWT inspection:** bounded standard-library decoding; no PyJWT dependency
 - **Rules and configuration files:** PyYAML
 - **Testing and quality:** pytest, pytest-cov, Ruff, mypy
 - **Optional local AI:** Ollama, Qwen3 8B
 
 Dependencies should be added only when required by the implementation phase.
+
+### Release identity and distribution validation
+
+`[project].version` in `pyproject.toml` is the version authority. Package `__version__`, CLI,
+reports and the HTTP user agent derive the installed version through `importlib.metadata`.
+Source-only imports without metadata report `0+unknown`; development environments should use
+`uv sync --locked`. A version edit requires regenerating lock/install metadata, not a second
+version literal in Python. The current package remains a Beta development version.
+
+The existing uv build backend packages Python sources, YAML rules and Jinja2 templates. The
+sdist also includes the changelog, release checklist and artifact-validation scripts. CI has
+separate source-quality and installed-artifact jobs for Python 3.13 on Ubuntu and Windows;
+passing both platforms is a release prerequisite. macOS and newer Python interpreters are not
+in this test matrix, despite the package's `>=3.13` installation requirement.
+
+The artifact gate builds fresh wheel/sdist files, checks their contents and metadata, and
+rebuilds a wheel from the extracted sdist. Both wheels undergo normal dependency resolution
+in independent environments outside the checkout. Installed CLI, rules and all report formats
+are exercised through a mocked SAFE workflow with socket/DNS guards. Only dependency resolution
+needs package-index access; ordinary pytest remains offline. No publishing is configured.
+See [RELEASING.md](RELEASING.md) for the maintainer procedure.
 
 ## 30. Testing strategy
 

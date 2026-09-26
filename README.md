@@ -1063,6 +1063,10 @@ proof of a vulnerability.
 - Python 3.13
 - [uv](https://docs.astral.sh/uv/)
 
+Release validation targets Python 3.13 on Windows and Ubuntu in CI. macOS is not yet
+CI-validated. The package accepts Python `>=3.13`; newer interpreters are not part of the
+current test matrix.
+
 ## Installation
 
 Clone the repository, enter its directory, and synchronize the locked environment:
@@ -1668,6 +1672,9 @@ uv run pytest
 
 The complete project scope, architecture, safety constraints, and roadmap are documented in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+See the [changelog](CHANGELOG.md) for unreleased product changes and the
+[release procedure](docs/RELEASING.md) for version authority and installed-artifact validation.
 
 ## License
 

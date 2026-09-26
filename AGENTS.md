@@ -807,6 +807,13 @@ chore: configure Ruff and mypy
 
 Do not create commits unless explicitly requested.
 
+Release versions are edited only in `[project].version` in `pyproject.toml`; regenerate the
+lockfile and installed metadata with uv. Do not add a second version literal to Python code.
+When changing packaging or runtime resources, run the installed-artifact gate documented in
+`docs/RELEASING.md`. Resources must work outside the checkout in both the wheel and a wheel
+rebuilt from the sdist. Normal pytest must remain offline; fresh dependency resolution belongs
+to the separate release gate. Validation does not authorize tagging or publication.
+
 ## 25. Updating the specification
 
 `docs/ARCHITECTURE.md` is a living document.
