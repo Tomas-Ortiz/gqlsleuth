@@ -53,6 +53,30 @@ def test_target_rejects_unsupported_schemes() -> None:
         Target.parse("ftp://example.com")
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://FAKE_USERNAME:FAKE_PASSWORD@example.com/graphql",
+        "https://FAKE_USERNAME@example.com/graphql",
+        "http://FAKE_USERNAME:FAKE_PASSWORD@localhost:8000/graphql",
+        "https://FAKE_USERNAME%40mail:FAKE_PASSWORD%3Avalue@example.com/graphql",
+        "https://FAKE_USERNAME:FAKE_PASSWORD@example.com:invalid-port/graphql",
+    ],
+)
+def test_target_rejects_userinfo_without_echoing_credentials(url: str) -> None:
+    with pytest.raises(InvalidUrlError, match="embedded credentials") as error:
+        Target.parse(url)
+    assert "--header" in str(error.value)
+    assert "FAKE_USERNAME" not in str(error.value)
+    assert "FAKE_PASSWORD" not in str(error.value)
+
+
+def test_malformed_url_parser_error_does_not_echo_credentials() -> None:
+    with pytest.raises(InvalidUrlError) as error:
+        Target.parse("https://FAKE_USERNAME:FAKE_PASSWORD@[FAKE_HOST]/graphql")
+    assert "FAKE_" not in str(error.value)
+
+
 def test_evidence_supports_basic_structured_data() -> None:
     target = Target.parse("https://example.com")
     evidence = Evidence(

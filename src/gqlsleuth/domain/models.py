@@ -132,8 +132,15 @@ def _parse_url(value: str) -> SplitResult:
 
     try:
         parsed = urlsplit(value)
-    except ValueError as error:
-        raise InvalidUrlError(f"Invalid target URL: {error}.") from None
+    except ValueError:
+        # Parser diagnostics can contain parts of an invalid credential-bearing URL.
+        raise InvalidUrlError("Invalid target URL.") from None
+
+    if parsed.username is not None or parsed.password is not None:
+        raise InvalidUrlError(
+            "Target URLs must not contain embedded credentials. "
+            "Use --header or supported --auth-context options for authentication."
+        )
 
     if not parsed.scheme:
         raise InvalidUrlError("Target URL must include an HTTP or HTTPS scheme.")

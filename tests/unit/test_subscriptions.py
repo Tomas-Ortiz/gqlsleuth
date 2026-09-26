@@ -345,6 +345,22 @@ def test_protocol_outcomes_never_infer_access(safe, wire, frames, outcome, sent)
     )
 
 
+@pytest.mark.parametrize("after_ack", [False, True])
+def test_deep_json_frame_is_indeterminate_without_retry(safe, wire, after_ack):
+    nested = '{"payload":' + "[" * 5000 + "0" + "]" * 5000 + "}"
+    wire["frames"] = ([ACK] if after_ack else []) + [nested, EVENT]
+    session, preview = selected(safe, deny=True)
+    result = session.execute(preview=preview, confirmed=True)
+    assert len(result.attempts) == 1
+    assert result.attempts[0].outcome.value == "indeterminate"
+    assert result.attempts[0].subscription_sent is after_ack
+    assert not result.findings
+    assert wire["opens"] == wire["closed"] == 1
+    assert wire["frames"] == [EVENT]
+    assert session.execute(preview=preview, confirmed=True) == result
+    assert wire["opens"] == 1
+
+
 @pytest.mark.parametrize(
     "status,code,network,outcome",
     [

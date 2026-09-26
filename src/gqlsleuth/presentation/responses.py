@@ -81,7 +81,14 @@ def present_response_body(body: bytes) -> HumanResponseBody:
             formatted = json.dumps(
                 parsed, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False
             )
-        except (ValueError, RecursionError):
+        except RecursionError:
+            return HumanResponseBody(
+                "",
+                "text",
+                "Response JSON exceeds supported nesting for human-readable presentation. "
+                "Exact bytes remain in canonical JSON evidence.",
+            )
+        except ValueError:
             pass
         else:
             text = formatted

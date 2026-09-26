@@ -1,9 +1,10 @@
 """Static introspection queries and deterministic response classification."""
 
-import json
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import cast
+
+from gqlsleuth.graphql.response_json import response_json_object
 
 MINIMAL_INTROSPECTION_QUERY = """{
   __schema {
@@ -141,7 +142,7 @@ def classify_introspection_response(
             "HTTP 403 denied authorization.",
         )
 
-    document = _json_object(body)
+    document = response_json_object(body)
     if document is not None and _has_schema_object(document):
         return IntrospectionResponseClassification(
             IntrospectionStatus.ENABLED,
@@ -202,16 +203,6 @@ def _error_messages(document: dict[str, object] | None) -> tuple[str, ...]:
         if isinstance(message, str):
             messages.append(message)
     return tuple(messages)
-
-
-def _json_object(body: bytes) -> dict[str, object] | None:
-    try:
-        value: object = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(value, dict):
-        return None
-    return cast(dict[str, object], value)
 
 
 def _short_message(message: str) -> str:

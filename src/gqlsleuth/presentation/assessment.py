@@ -175,9 +175,27 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
         limitations.append("Introspection was unavailable for at least one GraphQL endpoint.")
     if not schemas:
         limitations.append("No parsed schema was available; operation coverage is limited.")
+    transport_messages = {
+        "HttpTransportError": (
+            "A target connection failed. "
+            "Check the URL, network reachability, proxy and TLS settings."
+        ),
+        "HttpTimeoutError": (
+            "A target request timed out. Check network reachability and the target timeout setting."
+        ),
+        "HttpProxyError": (
+            "A target proxy request failed. Check the proxy configuration and reachability."
+        ),
+        "HttpRedirectError": (
+            "A target request exceeded the redirect limit. Check the target URL and redirects."
+        ),
+    }
     for issue in report.errors_and_limitations:
         # Group normalized codes only. Raw target error prose stays in technical details.
         if issue.code in {"skipped_safety", "not_selected", "blocked_safety"}:
+            continue
+        if issue.code in transport_messages:
+            limitations.append(transport_messages[issue.code])
             continue
         limitations.append(
             f"{capability_wording(issue.stage)}: {issue.code.replace('_', ' ').upper()}."

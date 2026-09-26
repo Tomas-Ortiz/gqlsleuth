@@ -1,6 +1,5 @@
 """Extract deterministic GraphQL signals from an HTTP response."""
 
-import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -8,6 +7,7 @@ from enum import StrEnum
 from typing import cast
 
 from gqlsleuth.domain.models import ConfidenceLevel
+from gqlsleuth.graphql.response_json import response_json_object
 
 GRAPHQL_RESPONSE_MEDIA_TYPES = {
     "application/graphql",
@@ -58,7 +58,7 @@ def analyze_graphql_response(
     if content_type in GRAPHQL_RESPONSE_MEDIA_TYPES:
         signals.append(GraphQLSignal.GRAPHQL_CONTENT_TYPE)
 
-    document = _json_object(body)
+    document = response_json_object(body)
     strong_error_reason: str | None = None
     if document is not None:
         data = document.get("data")
@@ -197,16 +197,6 @@ def _content_type(headers: Mapping[str, str]) -> str:
         if name.casefold() == "content-type":
             return value.partition(";")[0].strip().casefold()
     return ""
-
-
-def _json_object(body: bytes) -> dict[str, object] | None:
-    try:
-        value: object = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(value, dict):
-        return None
-    return cast(dict[str, object], value)
 
 
 def _short_message(message: str) -> str:

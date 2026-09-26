@@ -200,7 +200,7 @@ def test_review_and_preview_use_priority_spans(execution_views):
         (b"\xff\x00", "text", "Binary/unrenderable"),
         (b"control\x1b[31m", "text", "Binary/unrenderable"),
         (b"", "text", "Empty response body"),
-        (b"[" * 15000 + b"]" * 15000, "text", None),
+        (b"[" * 15000 + b"]" * 15000, "text", "exceeds supported nesting"),
         (b'{"value":NaN}', "text", None),
     ],
     ids=["json", "plain", "binary", "control", "empty", "deep", "nan"],

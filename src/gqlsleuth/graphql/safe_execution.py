@@ -1,6 +1,5 @@
 """Defensive validation and response classification for safe Query execution."""
 
-import json
 from dataclasses import dataclass
 
 from graphql import GraphQLError, parse
@@ -11,6 +10,7 @@ from gqlsleuth.domain.exceptions import SafeExecutionValidationError
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.query_generation import OperationGenerationResult, QueryGenerationResult
 from gqlsleuth.domain.schema import ParsedSchema, SchemaTypeKind
+from gqlsleuth.graphql.response_json import response_json_object
 from gqlsleuth.rules.operation_analysis import normalize_terms
 
 SIDE_EFFECT_ACTION_TOKENS = (
@@ -121,7 +121,7 @@ def side_effect_tokens(operation_name: str) -> tuple[str, ...]:
 
 def classify_execution_response(status_code: int, body: bytes) -> ResponseClassification:
     """Classify an execution response without treating application errors as crashes."""
-    document = _json_object(body)
+    document = response_json_object(body)
     messages = _graphql_error_messages(document)
     if messages:
         return ResponseClassification(
@@ -142,14 +142,6 @@ def classify_execution_response(status_code: int, body: bytes) -> ResponseClassi
         QueryExecutionStatus.INVALID_RESPONSE,
         "Successful HTTP response is not interpretable GraphQL JSON.",
     )
-
-
-def _json_object(body: bytes) -> dict[str, object] | None:
-    try:
-        value: object = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    return value if isinstance(value, dict) else None
 
 
 def _graphql_error_messages(document: dict[str, object] | None) -> tuple[str, ...]:

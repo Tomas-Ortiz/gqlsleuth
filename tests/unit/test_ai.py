@@ -389,6 +389,9 @@ def test_operation_review_replaces_obsolete_fields_and_retains_bounds(completed,
         ("redirect", AIAnalysisStatus.HTTP_ERROR, "http_error"),
         ("envelope", AIAnalysisStatus.INVALID_RESPONSE, "invalid_response"),
         ("oversized", AIAnalysisStatus.INVALID_RESPONSE, "invalid_response"),
+        ("nested_envelope", AIAnalysisStatus.INVALID_RESPONSE, "invalid_response"),
+        ("nested_content", AIAnalysisStatus.INVALID_RESPONSE, "invalid_response"),
+        ("nested_404", AIAnalysisStatus.INVALID_RESPONSE, "invalid_response"),
     ],
 )
 def test_adapter_failures_are_nonfatal_without_retry_or_raw_error_leaks(
@@ -411,6 +414,11 @@ def test_adapter_failures_are_nonfatal_without_retry_or_raw_error_leaks(
             return httpx.Response(307, headers={"location": "https://remote.example.com/"})
         if failure == "oversized":
             return httpx.Response(200, content=b"x" * (MAX_AI_RESPONSE_BYTES + 1))
+        if failure.startswith("nested_"):
+            nested = '{"SECRET":' + "[" * 5000 + "0" + "]" * 5000 + "}"
+            if failure == "nested_content":
+                return httpx.Response(200, json=envelope(nested))
+            return httpx.Response(404 if failure == "nested_404" else 200, text=nested)
         return httpx.Response(200, json={"done": False, "error": "SECRET error dump"})
 
     result = interpret_completed_scan(

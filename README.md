@@ -1488,7 +1488,10 @@ not rewritten. Model text is rendered as untrusted text, never interpreted as Ri
 ## Configuration
 
 Configuration uses CLI options and built-in defaults only. `--mode safe` remains the default.
-target HTTP configuration supports **one authentication/request context per scan**, through user-supplied headers:
+Target URLs must not contain embedded credentials (including username-only URLs). They are
+rejected before target requests, reports or AI processing, without echoing the credentials.
+Use `--header` / `-H` or supported `--auth-context` options for authentication instead.
+Target HTTP configuration supports **one authentication/request context per scan**, through user-supplied headers:
 
 ```bash
 uv run gqlsleuth scan https://example.com -H "Authorization: Bearer TOKEN" -H "X-Tenant-ID: 123"
@@ -1539,6 +1542,21 @@ generic automatic redaction. Store reports securely and never commit real creden
 
 Environment variables and configuration files are not supported yet. They remain deferred
 until the project has enough settings to justify multiple configuration sources.
+
+### Failure handling and process status
+
+Malformed or excessively nested response JSON produces existing invalid/unusable response
+results rather than aborting the scan. Schema reconstruction failures are retained as schema
+errors. Later eligible operations can continue, and existing bounded response/evidence retention
+is unchanged. Human response views replace JSON nesting failures with a concise notice;
+no generic redaction, retries or additional requests are introduced.
+
+Transport failures include guidance to check the URL, network reachability, proxy and TLS
+settings; `--verbose` retains normalized technical diagnostics without exposing supplied secrets.
+A completed scan still exits **0**, including when all target requests fail or no GraphQL endpoint
+is confirmed. Inspect the results and limitations; exit 0 is not a claim of target availability
+or security. Invalid input exits **2** and report-generation failures exit **1**. A dedicated
+exit status for total operational failure remains a separate release-contract decision.
 
 ## Named HTTP contexts and differential review
 

@@ -211,7 +211,13 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 entries=tuple(
                     ReportEntry(
                         f"{item.stage}: {item.operation_name or item.endpoint}",
-                        details=(("Endpoint", item.endpoint), ("Code", item.code.upper())),
+                        details=(
+                            ("Endpoint", item.endpoint),
+                            (
+                                "Code",
+                                item.code if item.code.startswith("Http") else item.code.upper(),
+                            ),
+                        ),
                         paragraphs=(item.message,),
                     )
                     for item in report.errors_and_limitations

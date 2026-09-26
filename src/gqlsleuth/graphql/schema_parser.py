@@ -52,6 +52,8 @@ def parse_introspection_response(body: bytes) -> ParsedSchema:
     """Validate and map a complete GraphQL introspection HTTP response body."""
     try:
         return _map_schema(load_introspection_schema(body))
+    except RecursionError:
+        raise SchemaParsingError("Introspection schema exceeds supported nesting.") from None
     except (GraphQLError, KeyError, TypeError, ValueError) as error:
         raise SchemaParsingError(
             f"Invalid or incomplete introspection schema: {_short_error(error)}"
@@ -65,6 +67,8 @@ def load_introspection_schema(body: bytes) -> GraphQLSchema:
         schema = build_client_schema(cast(IntrospectionQuery, data))
         assert_valid_schema(schema)
         return schema
+    except RecursionError:
+        raise SchemaParsingError("Introspection schema exceeds supported nesting.") from None
     except (GraphQLError, KeyError, TypeError, ValueError) as error:
         raise SchemaParsingError(
             f"Invalid or incomplete introspection schema: {_short_error(error)}"
@@ -74,7 +78,11 @@ def load_introspection_schema(body: bytes) -> GraphQLSchema:
 def _introspection_data(body: bytes) -> dict[str, object]:
     try:
         document: object = json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except RecursionError:
+        raise SchemaParsingError(
+            "Full introspection response exceeds supported JSON nesting."
+        ) from None
+    except (UnicodeError, ValueError) as error:
         raise SchemaParsingError("Full introspection response is not valid JSON.") from error
     if not isinstance(document, dict):
         raise SchemaParsingError("Full introspection response must be a JSON object.")

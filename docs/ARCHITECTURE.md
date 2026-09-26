@@ -277,6 +277,11 @@ resolve DNS or otherwise check reachability during normalization. If the supplie
 meaningful path, that normalized URL is probed first. The bundled paths are then generated from
 the same origin without recursively combining them with the supplied path.
 
+Before discovery, `Target.parse` rejects URL user information identified by the standard URL
+parser, including username-only and percent-encoded credentials. Errors do not echo the URL or
+credentials. Authentication remains explicit through `--header` or supported `--auth-context`
+options; embedded credentials are never converted to headers or silently stripped to proceed.
+
 Candidates are deduplicated in their stable generation order and probed with safe HTTP GET
 requests through the centralized HTTP client. All HTTP status responses are retained. A
 normalized transport failure is recorded for its candidate without preventing later candidates
@@ -1397,6 +1402,22 @@ The tool must fail gracefully. Expected error categories include:
 - AI service unavailable.
 
 Errors should be represented using project-specific exception classes.
+
+GraphQL detection, introspection and execution share a small response-object JSON decoder that
+treats decoding, Unicode and recursion failures as uninterpretable JSON. Callers retain their
+existing confidence/status precedence (including HTTP error statuses); no network failure or
+Finding is inferred from invalid JSON. Schema decoding/reconstruction normalizes excessive
+nesting into `SchemaParsingError`, preserving prior results. Response-size limits and raw
+response/evidence retention remain unchanged. Human response formatting shows a concise notice
+when nesting cannot be handled. WebSocket and Ollama retain their existing guarded JSON paths,
+without retries, extra connections or inference calls. This adds no generic redaction.
+
+Transport diagnostics present actionable URL/network/proxy/TLS guidance from normalized error
+codes, without rendering supplied credentials or raw exception text. Detailed output retains
+normalized technical codes. Current CLI exit behavior is preserved: completed scans exit 0 even
+when no endpoint is confirmed or every target request fails; invalid input exits 2 and reporting
+failures exit 1. A distinct total-operational-failure exit status is deferred to an explicit
+release-contract decision, not inferred from absence of Findings or endpoint confirmation.
 
 The CLI must display concise messages by default and detailed diagnostic information in verbose mode. A failure in one endpoint candidate should not necessarily terminate the entire discovery process.
 
