@@ -226,7 +226,7 @@ def test_cli_adds_review_without_new_options_or_requests(phase_ten_scan, monkeyp
         ["scan", "https://example.com/graphql", "-f", "json,markdown,html", "-o", str(tmp_path)],
     )
     assert result.exit_code == 0, result.exception
-    assert "GraphQL Security Review" in result.output
+    assert "Manual Review" in result.output
     assert len(list(tmp_path.iterdir())) == 3
 
 

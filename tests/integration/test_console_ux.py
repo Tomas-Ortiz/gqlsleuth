@@ -152,9 +152,9 @@ def test_compact_and_verbose_leave_results_requests_and_all_report_formats_ident
     assert compact.exit_code == verbose.exit_code == long_verbose.exit_code == 0
     assert "Why:" not in compact.stdout
     assert "query {" not in compact.stdout
-    assert "2 additional review candidate(s)" in compact.stdout
-    assert "use --verbose or a report" in compact.stdout
-    assert "Why:" in verbose.stdout and "query {" in verbose.stdout
+    assert "Manual review candidates" in compact.stdout
+    assert "Use --verbose for technical details" in compact.stdout
+    assert "Interest score" in verbose.stdout and "query {" in verbose.stdout
     assert "Query name contains explicit state-changing" in verbose.stdout
     assert len(compact.stdout) < len(verbose.stdout)
     assert verbose.stdout.split("\nReports\n")[0] == long_verbose.stdout

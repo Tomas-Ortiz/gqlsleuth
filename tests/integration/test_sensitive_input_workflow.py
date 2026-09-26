@@ -331,7 +331,9 @@ def test_safe_named_review_and_disabled_no_chaining(controlled, monkeypatch, tmp
             cli.app, ["scan", TARGET, *options, "-f", "markdown,html", "-o", str(tmp_path)]
         )
         assert result.exit_code == 0, (result.exception, result.output)
-        assert "Sensitive Input Review" in result.output
+        assert (
+            "Sensitive Input Review" if "--auth-context" in options else "Manual Review"
+        ) in result.output
         assert "Sensitive Input Validation" not in result.output
     for file in tmp_path.iterdir():
         text = file.read_text(encoding="utf-8")

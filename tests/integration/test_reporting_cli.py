@@ -126,7 +126,8 @@ def test_active_selected_confirmation_and_http_behavior_are_unchanged(report_cli
     assert result.stdout.split("\nReports\n")[0] == baseline.stdout
     assert result.stdout.count("Execute these 1 selected Mutations?") == 1
     confirmation = result.stdout.split("Execute these 1 selected Mutations?", 1)[1]
-    assert ": y\n\nMutation Execution\n" in confirmation
+    assert ": y\n\nGQLSleuth Assessment\n" in confirmation
+    assert "\nMutation Execution\n" in confirmation
     assert report_cli[1] == before + before
     report = json.loads(
         next((tmp_path / "gqlsleuth-reports").glob("*.json")).read_text(encoding="utf-8")
@@ -142,7 +143,7 @@ def test_report_write_failure_occurs_after_scan_with_concise_error(report_cli, t
     result = invoke("--format", "json", "--output", str(path))
     assert result.exit_code == 1
     assert "Query Execution" in result.stdout
-    assert "Attempted 1" in result.stdout
+    assert "SUCCESS 1" in " ".join(result.stdout.split())
     assert "Reporting error:" in result.stderr
     assert "Traceback" not in result.output
     assert path.read_text(encoding="utf-8") == "existing file"

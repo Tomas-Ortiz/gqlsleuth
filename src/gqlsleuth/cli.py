@@ -86,9 +86,9 @@ from gqlsleuth.infrastructure.upload_file import read_upload_file
 from gqlsleuth.presentation.abuse_controls import render_abuse_controls
 from gqlsleuth.presentation.authentication import PROBE_LABELS, render_authentication
 from gqlsleuth.presentation.authorization_policy import render_authorization_policy
+from gqlsleuth.presentation.completed import render_completed_assessment
 from gqlsleuth.presentation.console import (
     CONSOLE_THEME,
-    render_active_execution,
     render_active_gate,
     render_ai,
     render_differential,
@@ -96,15 +96,14 @@ from gqlsleuth.presentation.console import (
     render_mutations,
     render_reports,
     render_root_help,
-    render_scan,
     render_state_warning,
 )
 from gqlsleuth.presentation.federation import render_federation
 from gqlsleuth.presentation.file_upload import render_file_upload
 from gqlsleuth.presentation.idor import render_idor
-from gqlsleuth.presentation.multiplicity import render_multiplicity, render_probe_previews
+from gqlsleuth.presentation.multiplicity import render_probe_previews
 from gqlsleuth.presentation.mutation_authorization import render_mutation_authorization
-from gqlsleuth.presentation.query_depth import render_depth_previews, render_query_depth
+from gqlsleuth.presentation.query_depth import render_depth_previews
 from gqlsleuth.presentation.sensitive_input import render_sensitive_validation
 from gqlsleuth.presentation.sequential_discovery import render_sequential_discovery
 from gqlsleuth.presentation.subscriptions import render_subscriptions
@@ -797,15 +796,6 @@ def scan(
             )
         _finish_reports(result, report_formats, output)
         return
-    render_scan(console, result, verbose=verbose)
-    if result.object_authorization_review is not None:
-        from gqlsleuth.presentation.object_authorization import render_object_authorization
-
-        render_object_authorization(console, result.object_authorization_review, verbose=verbose)
-    if result.authorization_policy_validation is not None:
-        render_authorization_policy(
-            console, result.authorization_policy_validation, verbose=verbose
-        )
     schema_scan = result.query_generation.operation_analysis.schema_scan
     mode = schema_scan.introspection.detection.discovery.mode
     report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result
@@ -826,6 +816,7 @@ def scan(
             (),
             idor_bola_detection=detection,
         )
+        render_completed_assessment(console, report_result, verbose=verbose)
         _finish_reports(report_result, report_formats, output)
         return
     if mode is ScanMode.ACTIVE:
@@ -916,6 +907,8 @@ def scan(
     if ai:
         console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
         ai_result = interpret_completed_scan(report_result)
+    render_completed_assessment(console, report_result, verbose=verbose, ai_result=ai_result)
+    if ai_result is not None:
         render_ai(console, ai_result, verbose=verbose)
     _finish_reports(report_result, report_formats, output, ai_result)
 
@@ -1002,7 +995,6 @@ def _run_multiplicity_stage(
     result = execute_multiplicity(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
-    render_multiplicity(console, result, verbose=verbose)
     return result
 
 
@@ -1065,7 +1057,6 @@ def _run_subscription_stage(
         console.print("Subscription confirmation cancelled; zero WebSocket connections.")
         return preview
     result = session.execute(preview=preview, confirmed=confirmed)
-    render_subscriptions(console, result)
     return result
 
 
@@ -1135,7 +1126,6 @@ def _run_federation_stage(
         console.print("Federation confirmation cancelled; zero federation requests.")
         return preview
     result = session.execute(preview=preview, confirmed=confirmed)
-    render_federation(console, result)
     return result
 
 
@@ -1160,7 +1150,6 @@ def _run_file_upload_stage(
         result = FileUploadSecurityResult(
             case, limitations=("Upload file is no longer usable; zero uploads sent.",)
         )
-        render_file_upload(console, result)
         return result
     preview = session.preview
     render_file_upload(console, preview, preview=True)
@@ -1203,7 +1192,6 @@ def _run_file_upload_stage(
         console.print("Upload confirmation cancelled; zero uploads sent.")
         return preview
     result = session.execute(preview=preview, confirmed=confirmed)
-    render_file_upload(console, result)
     return result
 
 
@@ -1248,7 +1236,6 @@ def _run_abuse_control_stage(
         console.print("Abuse-control selection/confirmation cancelled; zero repeats execute.")
         return preview
     result = session.execute(preview=preview, confirmed=confirmed)
-    render_abuse_controls(console, result, verbose=verbose)
     return result
 
 
@@ -1327,7 +1314,6 @@ def _run_authentication_stage(
         )
         return preview
     result = session.execute(preview=preview, confirmed=confirmed)
-    render_authentication(console, result, verbose=verbose)
     return result
 
 
@@ -1359,7 +1345,6 @@ def _run_idor_stage(
         except (typer.Abort, EOFError, KeyboardInterrupt):
             console.print("IDOR/BOLA confirmation cancelled.")
     result = session.execute(preview=preview, confirmed=confirmed)
-    render_idor(console, result, verbose=verbose)
     return result
 
 
@@ -1394,7 +1379,6 @@ def _run_sequential_stage(
         preview=preview,
         http_settings=http_settings,
     )
-    render_sequential_discovery(console, result, verbose=verbose)
     return result
 
 
@@ -1420,7 +1404,6 @@ def _run_sensitive_stage(
         except (typer.Abort, EOFError, KeyboardInterrupt):
             console.print("Sensitive input confirmation cancelled.")
     result = session.execute(preview=preview, confirmed=confirmed)
-    render_sensitive_validation(console, result)
     return result
 
 
@@ -1448,7 +1431,6 @@ def _run_mutation_authorization_stage(
         except (typer.Abort, EOFError, KeyboardInterrupt):
             console.print("Mutation authorization confirmation cancelled.")
     result = session.execute(preview=preview, confirmed=confirmed)
-    render_mutation_authorization(console, result)
     return result
 
 
@@ -1487,7 +1469,6 @@ def _run_active_stage(
     result = execute_selected_mutations(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
-    render_active_execution(console, result)
     return result
 
 
@@ -1546,7 +1527,6 @@ def _run_depth_stage(
     result = execute_query_depth(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
-    render_query_depth(console, result, verbose=verbose)
     return result
 
 

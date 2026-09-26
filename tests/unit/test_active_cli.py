@@ -69,7 +69,7 @@ def test_empty_selection_displays_previews_and_executes_none(active_cli):
     assert "mutation ($id: ID!)" in output
     assert 'Variables: {"id": "1"}' in output
     assert "Execute these" not in output
-    assert "0 executed" in output
+    assert "Mutation Execution" not in output
     assert active_cli[0] == []
     assert active_cli[1][0].selected_indices == ()
     preview_output = result.stdout.split("Active Mutation candidates:")[1].split(

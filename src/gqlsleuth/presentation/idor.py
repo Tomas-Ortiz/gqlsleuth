@@ -64,7 +64,7 @@ def render_idor(
                 execution.policy_result.value.upper() if execution else "PLANNED",
             )
         console.print(table)
-        if verbose:
+        if preview or verbose:
             for probe in result.probes:
                 if probe.seed == seed:
                     _document(console, probe.query)

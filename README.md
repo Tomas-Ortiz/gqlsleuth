@@ -1147,23 +1147,59 @@ classification, and operation analysis. Generation failures, invalid artifacts, 
 unselected/declined operations, and limit skips remain structured decisions with no fabricated
 execution evidence. Success is not a vulnerability finding or proof of authorization bypass.
 
-Default console output is compact: target/mode, endpoint confidence and introspection status,
-schema counts, the first ten review candidates in existing operation order, Query-generation totals,
-and execution counts with up to five noteworthy error/skip outcomes. Review candidates show
-interest priority, kind, name, and score. The console does not dump generated Queries or rule
-explanations by default. Structured results retain all operations and evidence.
+The completed scan now opens with **GQLSleuth Assessment**: GraphQL overview, Security
+Validation counts, existing Findings, capped Manual Review, Query outcome totals and concise
+attempted Mutation outcomes. It distinguishes Findings, additional policy violations, scoped
+controls, unresolved checks and local review candidates; none becomes a global security rating.
+Default limits are 10 Findings, 8 Manual Review items and 5 important limitations, with explicit
+omitted counts. Manual Review shows additional violations first, then unresolved attempted checks,
+structural candidates and high-interest operations not already represented more strongly.
 
-Use `--verbose` / `-v` for all retained review candidates and rule matches, schema roots,
-generated Query documents/variables/adjustment notes, generation failures, and detailed execution
-outcomes. This is one Boolean display option; it changes neither requests nor report content.
-Full Mutation previews, selected documents, variables, safety reasons, warnings, and the final
-confirmation remain visible without verbose mode.
+Use `--verbose` / `-v` for complete technical investigation detail, grouped into Discovery & Schema,
+Attack Surface, Operations & Execution, Authentication & Authorization, GraphQL Runtime Controls,
+Specialized Surfaces and Evidence / Errors / Limitations. Exact generated artifacts, rule matches,
+policy provenance, evidence references and existing bounded response displays remain available.
+Default output omits response bodies. This display option changes no requests or classifications.
 
-Verbose Query execution shows the observed response body, classification, HTTP status, and
-duration when available. Default SAFE output continues to omit Query bodies. Attempted ACTIVE
-Mutation responses are shown even without verbose mode; the final **Mutation Execution** summary
-focuses on executed/success/error counts. Empty or declined batches report zero executions.
-Skipped, blocked, unselected, and declined operations have no fabricated response.
+Every ACTIVE consent preview still shows the exact selected requests, variables, safety reasons,
+private-data-safe metadata and warnings before its separate default-NO confirmation, regardless of
+verbosity. There is no combined execution approval. Unselected, declined and blocked operations
+have no fabricated response. Consent previews are separate from the completed assessment.
+
+With `--ai`, default output shows validated Security Summary and up to three cross-capability
+insights, labeled model interpretation. Full validated AI sections remain in verbose output and
+human reports. The AI context, validation and single-inference behavior are unchanged.
+
+Illustrative completed SAFE output (counts depend on the retained scan):
+
+```text
+GQLSleuth Assessment
+Mode: SAFE
+GraphQL Overview
+Queries 2; Mutations 1; Subscriptions 0
+Security Validation
+Findings 0; Additional policy violations 0; Unresolved checks 0
+Query Execution
+SUCCESS 2
+Use --verbose for technical details.
+```
+
+An ACTIVE assessment, after independent selections and confirmations, may instead include:
+
+```text
+Security Validation
+Findings 1; Additional policy violations 1; Scoped controls observed 1
+Findings
+Subscription authorization weakness    subscription notificationCreated
+Manual Review
+VIOLATION: Contradicted operator-supplied policy    mutation updateUser
+```
+
+These are scoped results, not an overall verdict. Markdown/HTML put Assessment Summary and existing
+Findings first, followed by review/AI interpretation and grouped detailed technical results. HTML
+uses native collapsed detail groups; Markdown uses nested headings. Safety Notice remains final
+exactly once. Canonical JSON retains its existing complete structure and evidence unchanged.
+Named-context differential views retain their existing pairwise presentation.
 
 Console priorities use one palette everywhere: **CRITICAL** magenta, **HIGH** red, **MEDIUM** yellow,
 **LOW** green, and **INFORMATIONAL** bright blue. Priority remains review interest, not severity.

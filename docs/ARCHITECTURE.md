@@ -1322,26 +1322,22 @@ accepts repeated, comma-separated, and mixed values with stable deduplication. `
 only chooses the report directory. `--verbose` / `-v` is one Boolean console-detail option.
 
 `cli.py` owns argument normalization, application calls, controlled errors, and the existing
-ACTIVE selection/confirmation interaction. `presentation/console.py` owns Rich rendering of
-completed results, with a small shared semantic theme, a target/mode panel, naturally wrapping
-tables, status text, GraphQL syntax highlighting, and a prominent final state-change warning.
-Application/domain modules remain independent from Rich. Console rendering performs no requests
-or new classifications and does not build or alter reports.
+ACTIVE selection/confirmation interaction. Phase 32 renders the completed result once through
+`presentation/completed.py`, using a pure shared assessment projection. The existing capability
+renderers still own exact pre-send consent previews; every independent default-NO confirmation
+remains in its original workflow position. Application/domain modules remain independent of Rich.
 
-Default output shows endpoint/confidence, introspection/schema status and counts, up to ten review
-candidates per retained endpoint in existing Phase 7 order, generation totals, and execution totals
-with up to five noteworthy non-success outcomes. Verbose shows all retained candidates with rule
-matches, generated Query artifacts/notes/failures, schema roots, and detailed execution reasons.
-Default Query output omits response bodies; verbose shows bounded observed responses. Attempted
-Mutation responses are displayed even by default. ACTIVE previews always retain exact executable Mutation
-documents, variables, priorities/categories, adjustment warnings, blocked reasons, and the exact
-selected batch before one default-NO confirmation. AI output remains separately labeled with its
-existing subsections; report paths are grouped by format. No scan, evidence, safety, AI, or report
-semantics change with verbosity.
+Default output presents a compact GraphQL overview, distinct security-result counts, existing
+Findings, capped Manual Review, Query outcome aggregates, attempted Mutation statuses and relevant
+limitations. Response bodies and detailed capability sections move to grouped verbose output.
+Default AI shows Security Summary and at most three cross-capability insights; verbose and reports
+retain all validated AI sections. Report paths remain grouped by format. The Phase 32 roadmap
+entry defines the caps, ordering and human-report hierarchy. No scan, evidence, safety, AI-context,
+request or canonical JSON semantics change with verbosity.
 
 Phase 13.1 groups candidate and selected-batch endpoints in first-seen order while preserving
-candidate indices and within-endpoint order. Post-Mutation output shows runtime counts and
-observed responses, or a concise zero-execution/declined message, without repeating preview totals.
+candidate indices and within-endpoint order. Post-Mutation detail retains runtime counts and
+observed responses; Phase 32 moves this detail into the completed verbose assessment.
 `presentation/priorities.py` centralizes CRITICAL magenta, HIGH red, MEDIUM yellow, LOW green,
 and INFORMATIONAL bright blue for tables, verbose labels, previews, and selected batches. It also
 styles standalone priority words/phrases in AI console text without substring replacement or
@@ -3366,8 +3362,48 @@ Offline `tests/fixtures/whole_scan_ai.py` composes real project-owned results wi
 `tests/unit/test_whole_scan_ai.py` captures the exact mocked Ollama request and exercises all
 supported capabilities, privacy, stable truncation, scoped outcomes, reference rejection and
 report/isolation behavior. Existing CLI regressions cover disabled AI, one inference and identical
-scanner request sequences. No public target or real credentials are used. No Phase 32 UI redesign
-or future vulnerability functionality is implemented.
+scanner request sequences. No public target or real credentials are used. Phase 32 changes only the human presentation described below; no future vulnerability
+functionality is implemented.
+
+### Phase 32 — CLI & Human Reporting UX Simplification
+
+Implemented as a presentation-only progressive-disclosure layer. `build_assessment` consumes the
+existing report-facing projection of completed project-owned results and returns one immutable
+`AssessmentPresentationSummary`. It holds small labels, counts and scoped references, never raw
+Evidence, transport objects or copied capability graphs. It does not inspect response bodies,
+evaluate policy, reinterpret schemas/JWTs/frames, or call AI. Existing report projections provide
+technical details; no second capability analysis is introduced.
+
+Findings count only retained Finding objects. Additional violations exclude policy events already
+represented by those Findings. Scoped controls come from existing satisfied policies, explicit
+denials or supported rejection/control outcomes. Unresolved includes enabled checks with existing
+unresolved/indeterminate/network/timeout/baseline-unusable outcomes, not disabled capabilities or
+schema review candidates. No severity, grade, score or global protection conclusion is created.
+
+Capability order is explicit: Authentication & Tokens, Object Authorization, IDOR / BOLA, Mutation
+Authorization, Sensitive Inputs, Rate Limiting & Abuse Controls, File Upload Security, Federation
+Security, Subscriptions & WebSocket, Query Multiplicity, Query Depth, Sequential Object Discovery.
+Within each source, retained result order is preserved. Structural candidates appear in Manual
+Review. Default caps are 10 Findings, 8 Manual Review items, 5 limitations and 3 AI insights;
+omissions are counted explicitly and verbose output is uncapped. Manual Review prioritizes
+additional policy violations, unresolved attempted checks, structural candidates, then ordinary
+CRITICAL/HIGH-interest operations not already represented more strongly. Findings preserve
+workflow/source order rather than receiving a new severity ranking.
+
+Verbose output and human reports group Discovery & Schema, Attack Surface, Operations & Execution,
+Authentication & Authorization, GraphQL Runtime Controls, Specialized Surfaces and Evidence /
+Errors / Limitations. Existing privacy-aware technical projections and bounded response displays
+are reused. Human reports lead with Assessment Summary, GraphQL Attack Surface and existing
+Security Findings, followed by validation/review and full AI interpretation when present, then
+technical groups. HTML uses native closed `details`; Markdown uses nested headings. Safety Notice
+is final exactly once. Named-context differential presentation remains pairwise.
+
+Canonical JSON/model/evidence relationships and Phase 31 AIContext, prompts, validation, serialized
+Ollama request and inference count are unchanged. No new networking or dependencies. Exact selected
+ACTIVE requests remain visible before each separate default-NO consent, even without verbose.
+Offline tests preserve request traces, privacy canaries, source data, report JSON and AI payloads;
+`uv run python tests/fixtures/phase32_smoke.py` creates eight representative presentation artifacts
+under ignored `reports/phase32`, using only mocked transports and fake data. No Phase 33 scope.
 
 ## 35. MVP definition
 

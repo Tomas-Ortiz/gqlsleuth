@@ -561,6 +561,9 @@ def _render_execution_response(
 
 
 def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool = False) -> None:
+    if not verbose:
+        _render_ai_summary(console, result)
+        return
     _section(console, "AI-Assisted Interpretation")
     console.print(AI_NOTICE, markup=False, style="gql.secondary")
     console.print(f"Model: {result.model}", markup=False)
@@ -620,6 +623,44 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
                 "  Additional entries available with --verbose or in reports.",
                 style="gql.secondary",
             )
+
+
+def _render_ai_summary(console: Console, result: AIInterpretationResult) -> None:
+    from gqlsleuth.presentation.assessment import DEFAULT_MAX_AI_INSIGHTS
+
+    if result.status is not AIAnalysisStatus.SUCCESS or result.interpretation is None:
+        console.print(
+            Text(
+                f"AI assistance {result.status.value}: "
+                f"{result.error_message or 'No validated interpretation.'} "
+                "Deterministic scan completed normally."
+            )
+        )
+        return
+    interpretation = result.interpretation
+    _section(console, "AI-Assisted Interpretation")
+    console.print(
+        "Model-generated interpretation - manual validation required.", style="gql.secondary"
+    )
+    _section(console, "Security Summary")
+    console.print(Text(interpretation.security_summary.text))
+    insights = interpretation.cross_capability_insights
+    if insights:
+        _section(console, "Key Cross-Capability Insights")
+        for insight in insights[:DEFAULT_MAX_AI_INSIGHTS]:
+            console.print(Text(", ".join(insight.security_facts) + ": " + insight.text))
+    hidden = (
+        max(0, len(insights) - DEFAULT_MAX_AI_INSIGHTS)
+        + len(interpretation.security_fact_reviews)
+        + len(interpretation.control_observations)
+        + len(interpretation.operation_review)
+        + len(interpretation.limitations)
+    )
+    if hidden:
+        console.print(
+            f"{hidden} additional AI entries available with --verbose or a report.",
+            style="gql.secondary",
+        )
 
 
 def render_reports(console: Console, paths: tuple[Path, ...]) -> None:

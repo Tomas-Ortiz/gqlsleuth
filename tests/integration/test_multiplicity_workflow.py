@@ -137,7 +137,7 @@ def test_cli_explicit_selection_and_baseline_requests(probe_cli, input, count):
     assert len(requests) == count == len(results[0].evidence)
     assert baselines[0] == baselines[1]
     assert active.output.count("selected active Query-Shape checks?") <= 1
-    assert active.output.index("Query-Shape Validation") < active.output.index(
+    assert active.output.index("Active Query-Shape candidates") < active.output.index(
         "Active Mutation candidates"
     )
     if count:

@@ -23,7 +23,7 @@ from gqlsleuth.presentation.console import CONSOLE_THEME
 from gqlsleuth.presentation.mutation_authorization import render_mutation_authorization
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.models import ReportFormat
-from gqlsleuth.reporting.presentation import human_sections
+from gqlsleuth.reporting.presentation import human_sections, technical_sections
 from gqlsleuth.reporting.renderers import render_report
 
 TARGET = "https://example.com/graphql"
@@ -248,7 +248,9 @@ def test_reports_exact_preview_ai_exclusion_and_privacy(phase_ten_scan, monkeypa
     assert sections[-1].title == "Safety Notice"
     assert sum(item.title == "Safety Notice" for item in sections) == 1
     human_section = next(
-        item for item in sections if item.title == "Mutation Authorization Validation"
+        item
+        for item in technical_sections(report)
+        if item.title == "Mutation Authorization Validation"
     )
     assert dict(human_section.entries[0].code_blocks)["graphql"] == preview.probe.query
     assert json.loads(dict(human_section.entries[0].code_blocks)["json"]) == preview.probe.variables

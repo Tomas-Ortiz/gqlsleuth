@@ -54,7 +54,7 @@ def render_sequential_discovery(
                 if execution and execution.outcome
                 else "NOT_ATTEMPTED",
             )
-            if verbose:
+            if preview or verbose:
                 _document(console, probe.query)
                 console.print(Text("Variables: " + json.dumps(probe.variables, sort_keys=True)))
                 if execution:

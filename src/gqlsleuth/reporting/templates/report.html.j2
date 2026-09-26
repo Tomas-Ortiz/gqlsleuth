@@ -28,10 +28,15 @@
 </head>
 <body>
 <main>
-  <h1>GQLSleuth Security Analysis Report</h1>
-{% for section in sections %}
+  <h1>GQLSleuth Assessment</h1>
+{% macro render_section(section, level=2) %}
+{% if section.collapsed %}
+<details class="technical">
+<summary>{{ section.title }}</summary>
+{% else %}
   <section>
-    <h2>{{ section.title }}</h2>
+    <h{{ level }}>{{ section.title }}</h{{ level }}>
+{% endif %}
 {% for paragraph in section.paragraphs %}
     <p>{{ paragraph | brief }}</p>
 {% endfor %}
@@ -51,7 +56,7 @@
 {% endif %}
 {% for entry in section.entries %}
     <article>
-      <h3>{{ entry.title | brief }}</h3>
+      <h{{ level + 1 }}>{{ entry.title | brief }}</h{{ level + 1 }}>
       <dl>
 {% for label, value in entry.details %}
         <dt>{{ label }}</dt><dd>{{ value | brief }}</dd>
@@ -104,10 +109,16 @@
 {% endif %}
     </article>
 {% endfor %}
-{% if not section.paragraphs and not section.rows and not section.entries and not section.table_rows %}
+{% if not section.paragraphs and not section.rows and not section.entries and not section.table_rows and not section.children %}
     <p>None recorded.</p>
 {% endif %}
-  </section>
+{% for child in section.children %}
+{{ render_section(child, [level + 1, 5] | min) }}
+{% endfor %}
+{% if section.collapsed %}</details>{% else %}</section>{% endif %}
+{% endmacro %}
+{% for section in sections %}
+{{ render_section(section) }}
 {% endfor %}
 </main>
 </body>

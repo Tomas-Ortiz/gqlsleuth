@@ -160,7 +160,7 @@ def test_independent_cli_selection_and_unchanged_safe_sequence(depth_cli, input,
     assert len(depth_cli[0]) == count == len(depth_cli[1][0].evidence)
     assert depth_cli[2][0] == depth_cli[2][1]
     assert (
-        active.output.index("Query-Shape Validation")
+        active.output.index("Active Query-Shape candidates")
         < active.output.index("Active Query-Depth candidates")
         < active.output.index("Active Mutation candidates")
     )

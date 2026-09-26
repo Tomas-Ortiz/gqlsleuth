@@ -1,7 +1,7 @@
-# GQLSleuth Security Analysis Report
+# GQLSleuth Assessment
 
-{% for section in sections %}
-## {{ section.title }}
+{% macro render_section(section, level=2) %}
+{{ "#" * level }} {{ section.title }}
 
 {% for paragraph in section.paragraphs %}
 {{ paragraph | markdown_text }}
@@ -24,7 +24,7 @@
 
 {% endif %}
 {% for entry in section.entries %}
-### {{ entry.title | markdown_text }}
+{{ "#" * (level + 1) }} {{ entry.title | markdown_text }}
 
 {% for label, value in entry.details %}
 - **{{ label | markdown_text }}:** {{ value | markdown_text }}
@@ -39,7 +39,7 @@
 
 {% endfor %}
 {% if entry.request_blocks %}
-#### Request
+{{ "#" * (level + 2) }} Request
 
 {% for language, text in entry.request_blocks %}
 {% if language == 'json' %}
@@ -51,7 +51,7 @@ Variables:
 {% endfor %}
 {% endif %}
 {% if entry.response %}
-#### Response
+{{ "#" * (level + 2) }} Response
 
 {% for label, value in entry.response.details %}
 - **{{ label }}:** {{ value | markdown_text }}
@@ -72,8 +72,14 @@ No HTTP response was received; no server response body is available.
 {% endif %}
 {% endif %}
 {% endfor %}
-{% if not section.paragraphs and not section.rows and not section.entries and not section.table_rows %}
+{% if not section.paragraphs and not section.rows and not section.entries and not section.table_rows and not section.children %}
 None recorded.
 
 {% endif %}
+{% for child in section.children %}
+{{ render_section(child, [level + 1, 4] | min) }}
+{% endfor %}
+{% endmacro %}
+{% for section in sections %}
+{{ render_section(section) }}
 {% endfor %}

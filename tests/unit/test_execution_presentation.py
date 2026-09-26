@@ -38,7 +38,7 @@ from gqlsleuth.presentation.priorities import PRIORITY_STYLES, priority_label, s
 from gqlsleuth.presentation.responses import MAX_HUMAN_RESPONSE_BODY_BYTES, present_response_body
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.models import ReportFormat
-from gqlsleuth.reporting.presentation import human_sections
+from gqlsleuth.reporting.presentation import human_sections, technical_sections
 from gqlsleuth.reporting.renderers import render_report
 
 STAMP = datetime(2026, 9, 11, tzinfo=UTC)
@@ -271,7 +271,7 @@ def test_reports_show_attempted_query_and_mutation_responses_safely(execution_vi
     assert "truncated" in output and "UNSHOWN_TAIL" not in output
     assert "Duration" in output
     assert "No HTTP response was received" in output
-    sections = {section.title: section for section in human_sections(context)}
+    sections = {section.title: section for section in technical_sections(context)}
     queries = {entry.title: entry for entry in sections["Safe Query Execution"].entries}
     assert queries["readAndBurn"].response is None
     assert queries["readAndBurn"].request_blocks == ()
@@ -318,7 +318,7 @@ def test_unexecuted_batch_has_no_response_and_decline_is_concise(execution_views
     output = capture(render_active_execution, active)
     assert "0 executed." in output and "Response" not in output
     assert ("Batch confirmation declined" in output) is selected
-    for section in human_sections(build_report(active)):
+    for section in technical_sections(build_report(active)):
         if section.title == "Active Mutation Analysis":
             assert all(entry.response is None for entry in section.entries)
 
@@ -357,7 +357,7 @@ def test_ai_tables_preserve_stored_prose_and_validated_facts(execution_views, ai
     prose = interpretation.operation_review[0].explanation
     report = build_report(active, generated_at=STAMP, ai_interpretation=result)
     before = tuple(render_report(report, format) for format in ReportFormat)
-    output = capture(render_ai, result, width=width)
+    output = capture(render_ai, result, width=width, verbose=True)
     assert max(map(len, output.splitlines())) <= width
     assert "AI-Assisted Interpretation" in output
     assert "Model-generated interpretation" in output
@@ -383,7 +383,7 @@ def test_ai_tables_preserve_stored_prose_and_validated_facts(execution_views, ai
                     segments.extend(console.render(value))
 
         console.print = collect
-        render_ai(console, result)
+        render_ai(console, result, verbose=True)
         references = [segment for segment in segments if "endpoint_1" in segment.text]
         assert len(references) == 1
         assert all(segment.style.color.name == "cyan" for segment in references)
@@ -425,7 +425,7 @@ def test_rendered_titles_and_tables_use_structural_styles(execution_views, ai_vi
     for title in ("Active Mutation candidates:", "Selected Mutations:"):
         render_mutations(console, tuple(enumerate(active.preview.candidates, 1)), title=title)
     render_active_execution(console, active)
-    render_ai(console, ai_view)
+    render_ai(console, ai_view, verbose=True)
     assert titles == [
         "Security Review",
         "Generated Queries",
@@ -458,7 +458,7 @@ def test_structural_console_spacing(execution_views, ai_view, width):
     assert len(compact.splitlines()) < 65
     assert "QUERY_BODY" not in compact
 
-    output = capture(render_ai, ai_view, width=width)
+    output = capture(render_ai, ai_view, width=width, verbose=True)
     for title in (
         "Execution Summary",
         "Operation Review",

@@ -40,9 +40,11 @@ class ReportSection:
     entries: tuple[ReportEntry, ...] = ()
     table_headers: tuple[str, ...] = ()
     table_rows: tuple[tuple[str, ...], ...] = ()
+    children: tuple["ReportSection", ...] = ()
+    collapsed: bool = False
 
 
-def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
+def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
     """Present recorded facts; response parsing is display-only, never classification."""
     sections = [
         ReportSection(
@@ -594,3 +596,10 @@ def _human_label(value: str) -> str:
 
 def _unique_text(values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(value for value in values if value))
+
+
+def human_sections(report: ReportContext) -> tuple[ReportSection, ...]:
+    """Shared assessment-first Markdown/HTML presentation."""
+    from gqlsleuth.reporting.assessment import assessment_sections
+
+    return assessment_sections(report)

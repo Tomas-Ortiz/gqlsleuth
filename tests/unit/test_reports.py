@@ -26,7 +26,7 @@ from gqlsleuth.infrastructure.http import HttpClient
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.models import ReportFormat
 from gqlsleuth.reporting.output import write_reports
-from gqlsleuth.reporting.presentation import human_sections
+from gqlsleuth.reporting.presentation import technical_sections
 from gqlsleuth.reporting.renderers import render_report
 from gqlsleuth.rules.loader import load_bundled_rules
 
@@ -260,7 +260,7 @@ def test_active_human_reports_show_executed_mutation_documents(report_results, f
 
 def test_human_sections_do_not_repeat_rule_or_mutation_reasons(report_results):
     active = build_report(report_results[1])
-    sections = {section.title: section for section in human_sections(active)}
+    sections = {section.title: section for section in technical_sections(active)}
     review_entry = sections["Security Review Candidates"].entries[0]
     review_candidate = active.review_candidates[0]
     assert len(review_entry.paragraphs) == len(review_candidate.matched_rules)

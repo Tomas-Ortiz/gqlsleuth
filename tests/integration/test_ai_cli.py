@@ -128,7 +128,10 @@ def test_one_ai_inference_follows_completed_safe_and_active_behavior(
     events.clear()
     result = invoke(mode, ai=True, input=selection, verbose=verbose)
     assert result.exit_code == baseline.exit_code == 0
-    assert result.stdout.split("AI assistance: interpreting")[0] == baseline.stdout
+    displayed = result.stdout.replace(
+        "AI assistance: interpreting the completed scan with local qwen3:8b...\n", ""
+    )
+    assert displayed.split("\nAI-Assisted Interpretation")[0] == baseline.stdout
     assert events == (["safe", "active_complete", "ai"] if mode == "active" else ["safe", "ai"])
     assert len(ai_requests) == 1
     assert len(target_requests) == mutation_count * 2
@@ -170,5 +173,5 @@ def test_optional_ai_reports_preserve_deterministic_data_even_on_failure(ai_cli,
             assert "AI-Assisted Interpretation" in text
     if fail:
         assert "AI assistance unavailable" in result.stdout
-        assert "Deterministic scan completed normally" in result.stdout
+        assert "Deterministic scan completed normally" in " ".join(result.stdout.split())
         assert "Traceback" not in result.output

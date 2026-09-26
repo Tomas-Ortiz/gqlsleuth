@@ -26,7 +26,7 @@ from gqlsleuth.presentation.abuse_controls import render_abuse_controls
 from gqlsleuth.presentation.console import CONSOLE_THEME
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.models import ReportFormat
-from gqlsleuth.reporting.presentation import human_sections
+from gqlsleuth.reporting.presentation import human_sections, technical_sections
 from gqlsleuth.reporting.renderers import render_report
 
 SECRET = "PHASE27_AUTH_CANARY"
@@ -395,7 +395,7 @@ def test_reporting_console_ai_and_evidence_are_additive_and_local(active, wire, 
     sections = human_sections(report)
     assert sections[-1].title == "Safety Notice"
     assert [s.title for s in sections].count("Safety Notice") == 1
-    assert "Rate Limiting / Abuse-Control Findings" in [s.title for s in sections]
+    assert "Rate Limiting / Abuse-Control Findings" in [s.title for s in technical_sections(report)]
     texts = [repr(result), serialize_context(build_ai_context(combined)), caplog.text]
     for width in (48, 100):
         for verbose in (False, True):
