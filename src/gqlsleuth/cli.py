@@ -188,9 +188,8 @@ def scan(
             help=(
                 "Scan mode: safe | active. Default: safe. "
                 "ACTIVE acknowledges active capabilities for an authorized "
-                "target; Query-Shape checks, Query-Depth checks and Mutations "
-                "require separate explicit "
-                "selection and one final batch confirmation."
+                "target; each active capability needs its own selection/case and "
+                "default-NO confirmation. It does not run all checks."
             ),
             case_sensitive=False,
             show_default=False,
@@ -213,7 +212,8 @@ def scan(
             "--output",
             "-o",
             help=(
-                "Report output directory. Default: ./gqlsleuth-reports when reports are requested."
+                "Report output directory; requires --format. "
+                "Default: ./gqlsleuth-reports when reports are requested."
             ),
         ),
     ] = None,
@@ -297,7 +297,7 @@ def scan(
         typer.Option(
             "--nested-auth-review",
             rich_help_panel="Authorization Differential Review",
-            help="Opt-in SAFE nested-path review across named contexts. Default: disabled.",
+            help="SAFE nested-path review; requires 2–3 --auth-context labels. Default: disabled.",
             show_default=False,
         ),
     ] = False,
@@ -306,7 +306,7 @@ def scan(
         typer.Option(
             "--object-auth-review",
             rich_help_panel="Authorization Differential Review",
-            help="SAFE validation of exact operator-supplied objects. Default: disabled.",
+            help="SAFE exact-object validation; requires --object-auth-case. Default: disabled.",
             show_default=False,
         ),
     ] = False,
@@ -324,7 +324,10 @@ def scan(
         typer.Option(
             "--auth-policy-review",
             rich_help_panel="Authorization Differential Review",
-            help="Local DENY policy validation; requires --object-auth-review. Default: disabled.",
+            help=(
+                "Local DENY validation; requires --object-auth-review and --expect-deny. "
+                "Default: disabled."
+            ),
             show_default=False,
         ),
     ] = False,
@@ -346,8 +349,8 @@ def scan(
             "--sensitive-input-review",
             rich_help_panel="Sensitive Input Validation",
             help=(
-                "Assert DENY for one explicit field/value. ACTIVE and independent "
-                "confirmation required. Default: disabled."
+                "ACTIVE field/value DENY test; requires --sensitive-input-case and separate "
+                "confirmation. Default: disabled."
             ),
             show_default=False,
         ),
@@ -371,7 +374,8 @@ def scan(
             metavar="ARGUMENT=ID",
             rich_help_panel="Sensitive Input Validation",
             help=(
-                "Exact target ID, required when the Mutation exposes one direct ID argument. "
+                "For --sensitive-input-review: required when the Mutation has one "
+                "direct ID argument. "
                 "Default: none."
             ),
         ),
@@ -382,8 +386,8 @@ def scan(
             "--mutation-auth-review",
             rich_help_panel="Mutation Authorization Validation",
             help=(
-                "Assert DENY for one exact Mutation/object in the current HTTP context. "
-                "ACTIVE and independent confirmation required. Default: disabled."
+                "ACTIVE Mutation/object DENY test; requires --mutation-auth-case and separate "
+                "confirmation. Default: disabled."
             ),
             show_default=False,
         ),
@@ -427,7 +431,10 @@ def scan(
             "--subscription-variables",
             rich_help_panel="Subscriptions & GraphQL over WebSocket",
             show_default=False,
-            help="One JSON object replacing generated variables only; maximum 4096 bytes.",
+            help=(
+                "Override generated variables; one JSON object, max 4096 bytes. "
+                "Requires --subscription-review."
+            ),
         ),
     ] = None,
     subscription_init_payload: Annotated[
@@ -436,7 +443,10 @@ def scan(
             "--subscription-init-payload",
             rich_help_panel="Subscriptions & GraphQL over WebSocket",
             show_default=False,
-            help="One private connection_init JSON object, maximum 4096 bytes; never reported.",
+            help=(
+                "Private connection_init JSON, max 4096 bytes; never reported. "
+                "Requires --subscription-review."
+            ),
         ),
     ] = None,
     subscription_ws_url: Annotated[
@@ -445,7 +455,7 @@ def scan(
             "--subscription-ws-url",
             rich_help_panel="Subscriptions & GraphQL over WebSocket",
             show_default=False,
-            help="Explicit ws/wss path on the retained HTTP origin; no endpoint discovery.",
+            help=("Same-origin ws/wss URL; no discovery. Requires --subscription-review."),
         ),
     ] = None,
     federation_review: Annotated[
@@ -491,7 +501,8 @@ def scan(
             rich_help_panel="File Upload Security",
             show_default=False,
             help=(
-                "ACTIVE single-file baseline and selected DENY variants; separate confirmation. "
+                "ACTIVE file test; requires --upload-case, --upload-file and "
+                "separate confirmation. "
                 "Default: disabled."
             ),
         ),
@@ -521,8 +532,8 @@ def scan(
             rich_help_panel="File Upload Security",
             show_default=False,
             help=(
-                "Baseline MIME type/subtype; otherwise inferred from filename, "
-                "then application/octet-stream."
+                "Optional baseline MIME override for --file-upload-review; default inferred "
+                "from filename, then application/octet-stream."
             ),
         ),
     ] = None,
@@ -544,8 +555,8 @@ def scan(
             "--auth-security-review",
             rich_help_panel="Authentication & Token Security",
             help=(
-                "Inspect supplied Bearer token; ACTIVE, one successful Query and separate "
-                "confirmation required for up to three probes. Default: disabled."
+                "ACTIVE token review; requires -H Authorization: Bearer TOKEN, a successful "
+                "Query and separate confirmation. Max three probes. Default: disabled."
             ),
             show_default=False,
         ),
@@ -556,9 +567,9 @@ def scan(
             "--idor-review",
             rich_help_panel="IDOR / BOLA Detection",
             help=(
-                "ACTIVE bounded IDOR/BOLA testing with separate confirmation. Anonymous: seed "
-                "and neighbors expected DENY. Supplied context: seed ALLOW baseline, neighbors "
-                "DENY. These are operator policy assumptions. Default: disabled."
+                "ACTIVE IDOR/BOLA test; requires --idor-seed and separate confirmation. "
+                "Anonymous: all IDs expected DENY. Supplied context: seed ALLOW, neighbors DENY. "
+                "Operator policy assumptions. Default: disabled."
             ),
             show_default=False,
         ),
@@ -569,8 +580,8 @@ def scan(
             "--idor-discovery",
             rich_help_panel="Active Object Discovery",
             help=(
-                "Bounded adjacent numeric object discovery; ACTIVE and separate confirmation "
-                "required. Default: disabled."
+                "ACTIVE adjacent numeric discovery; requires --idor-seed and separate "
+                "confirmation. Default: disabled."
             ),
             show_default=False,
         ),

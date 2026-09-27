@@ -1248,13 +1248,13 @@ Configuration file
 Default values
 ```
 
-Configuration models should use Pydantic and `pydantic-settings` when multiple configuration
-sources are introduced.
+Current configuration models use Pydantic. `pydantic-settings` is a possible future choice only
+if multiple configuration sources are introduced; it is not a current runtime dependency.
 
 The initial Phase 1 implementation supports only the explicit `--mode` CLI option and the
 built-in safe default. Environment variables and configuration files are deferred until
 configuration needs grow; no configuration file is discovered or loaded in Phase 1.
-Through Phase 15, configuration still uses CLI plus built-in defaults only. Target headers,
+The current implementation uses CLI plus built-in defaults only. Target headers,
 timeout, TLS policy, and proxy are mapped once into immutable HTTP settings; no environment,
 `.env`, global/project configuration file, or multi-source precedence is implemented.
 

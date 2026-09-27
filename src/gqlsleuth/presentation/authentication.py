@@ -70,7 +70,7 @@ def render_authentication(
         console.print(
             Text(f"Selected Query: {selected.operation} — {selected.endpoint}", style="cyan")
         )
-        console.print("Existing baseline: SUCCESS (retained Phase 9 evidence; no replay).")
+        console.print("Existing baseline: SUCCESS (retained safe Query evidence; no replay).")
         if preview or verbose:
             _document(console, selected.query)
             console.print(Text("Variables: " + json.dumps(selected.variables, sort_keys=True)))

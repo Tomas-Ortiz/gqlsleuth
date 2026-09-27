@@ -112,7 +112,7 @@ Current core choices include:
 - Typer for the CLI.
 - Rich for terminal presentation.
 - Pydantic for typed models.
-- `pydantic-settings` for configuration.
+- Pydantic models for current CLI configuration; `pydantic-settings` is only a future possibility.
 - HTTPX for HTTP functionality.
 - `graphql-core` for GraphQL schema handling.
 - pytest for testing.
@@ -254,7 +254,7 @@ Prefer descriptive module names such as:
 
 ```text
 url_normalization.py
-header_redaction.py
+probe_evidence.py
 endpoint_candidates.py
 schema_models.py
 ```
@@ -416,7 +416,9 @@ Configuration file
 Default values
 ```
 
-Use Pydantic and `pydantic-settings` when configuration functionality is implemented.
+Current configuration uses Pydantic, CLI arguments and built-in defaults. Multi-source
+configuration and a possible `pydantic-settings` dependency are deferred; do not add an unused
+dependency to match a future design.
 
 Configuration must:
 
@@ -552,18 +554,21 @@ Never commit:
 - Real scan evidence containing sensitive data.
 - Secrets in test fixtures.
 
-Sensitive headers must be redacted.
+Do not introduce a generic redaction subsystem or silently sanitize canonical Evidence.
+Outgoing credentials and target configuration (including Authorization, Cookie, API-key and
+proxy values) must remain outside result/report/AI models wherever the existing design excludes
+them. Preserve those explicit boundaries and test them with fake secret canaries.
 
-At minimum, redact:
+Canonical evidence can retain exact GraphQL variables and application response headers/bodies;
+reports are potentially sensitive assessment artifacts. Never attach real evidence or credentials
+to public issues. Some existing probes withhold an entire response/frame when it echoes known
+private request material, recording that limitation. Use whole-material withholding only where
+the capability already requires it; do not rewrite unrelated or earlier evidence.
 
-```text
-Authorization
-Cookie
-Proxy-Authorization
-X-API-Key
-```
-
-Redaction utilities should be centralized and tested.
+AI input must be constructed from its strict allowlist, never by serializing and then sanitizing
+the scan graph. Exclude credentials, tokens, URLs, variables, object IDs, raw responses, Evidence,
+upload material, SDL and WebSocket frames. Privacy changes require explicit scope and regression
+tests; do not weaken canonical evidence or expand AI context as a documentation cleanup.
 
 Use clearly fake values in examples:
 
@@ -590,7 +595,7 @@ The planned local AI integration must not:
 - Invent evidence.
 - Replace schema parsing.
 - Make final security decisions without supporting evidence.
-- Receive unredacted secrets.
+- Receive credentials or other data excluded by the AI allowlist.
 - Be required for core functionality.
 
 AI-generated content must be clearly labeled.
@@ -629,7 +634,7 @@ Important areas to test include:
 - URL normalization.
 - Configuration validation.
 - Configuration precedence.
-- Header redaction.
+- Credential isolation and capability-specific whole-response withholding.
 - Endpoint candidate generation.
 - GraphQL detection signals.
 - Introspection result handling.
@@ -670,8 +675,8 @@ Run a narrower test command during development when useful, but run the complete
 Examples:
 
 ```bash
-uv run pytest tests/unit/test_header_redaction.py
-uv run pytest -k "redaction"
+uv run pytest tests/unit/test_target_http.py
+uv run pytest -k "privacy"
 ```
 
 Do not claim that checks passed unless they were actually executed successfully.
@@ -798,7 +803,7 @@ Suggested commit style:
 
 ```text
 feat: add initial Typer CLI
-fix: redact authorization headers
+fix: preserve request credential isolation
 test: add URL normalization cases
 docs: update project roadmap
 refactor: centralize configuration loading

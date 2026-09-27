@@ -1,5 +1,6 @@
 """Root help layout stays separate from generated scan help and command behavior."""
 
+import re
 from io import StringIO
 
 import pytest
@@ -241,3 +242,54 @@ def test_default_descriptions_belong_to_the_right_options_without_changing_value
     parameter = next(item for item in scan.params if item.name == name)
     assert parameter.default == default
     assert description in parameter.help
+
+
+def test_dependent_help_names_companion_options():
+    scan = get_command(cli.app).commands["scan"]
+    parameters = {item.name: item for item in scan.params}
+    requirements = {
+        "output": ("--format",),
+        "nested_auth_review": ("--auth-context",),
+        "object_auth_review": ("--object-auth-case",),
+        "auth_policy_review": ("--object-auth-review", "--expect-deny"),
+        "sensitive_input_review": ("--sensitive-input-case",),
+        "sensitive_input_target": ("--sensitive-input-review",),
+        "mutation_auth_review": ("--mutation-auth-case",),
+        "idor_review": ("--idor-seed",),
+        "idor_discovery": ("--idor-seed",),
+        "file_upload_review": ("--upload-case", "--upload-file"),
+        "upload_content_type": ("--file-upload-review",),
+        "subscription_variables": ("--subscription-review",),
+        "subscription_init_payload": ("--subscription-review",),
+        "subscription_ws_url": ("--subscription-review",),
+        "federation_entity_case": ("--federation-review",),
+        "auth_security_review": ("Authorization: Bearer TOKEN", "successful Query"),
+    }
+    for name, companions in requirements.items():
+        assert all(option in parameters[name].help for option in companions), name
+
+
+@pytest.mark.parametrize("width", [60, 80])
+def test_scan_help_remains_renderable_at_narrow_widths(monkeypatch, width):
+    from typer import rich_utils
+
+    original = rich_utils._get_rich_console
+
+    def narrow_console(*args, **kwargs):
+        console = original(*args, **kwargs)
+        console.width = width
+        return console
+
+    monkeypatch.setattr(rich_utils, "_get_rich_console", narrow_console)
+    result = CliRunner().invoke(cli.app, ["scan", "--help"])
+    assert result.exit_code == 0
+    assert max(map(len, result.stdout.splitlines())) <= width
+    assert "Usage:" in result.stdout and "Target HTTP" in result.stdout
+    assert "--idor-review" in result.stdout and "--upload-file" in result.stdout
+
+
+def test_user_help_has_no_internal_stage_numbers():
+    for args in (["--help"], ["scan", "--help"]):
+        result = CliRunner().invoke(cli.app, args)
+        assert result.exit_code == 0
+        assert not re.search(r"\bPhase\s+\d+", result.stdout)
