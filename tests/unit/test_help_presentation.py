@@ -159,18 +159,23 @@ def test_root_help_preserves_command_registry_and_uses_command_descriptions():
 
 
 @pytest.mark.parametrize("width", [45, 60])
-def test_complete_root_help_on_narrow_terminal(monkeypatch, width):
+@pytest.mark.parametrize("force_terminal", [False, True], ids=["captured", "github-actions"])
+def test_complete_root_help_on_narrow_terminal(monkeypatch, width, force_terminal):
     from typer import rich_utils
 
+    monkeypatch.setenv("TERM", "dumb")
+    monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", force_terminal)
     original_console = rich_utils._get_rich_console
 
     def narrow_console(*args, **kwargs):
         console = original_console(*args, **kwargs)
         console.width = width
+        # Rich's forced dumb-terminal fallback ignores width unless height is explicit too.
+        console.height = 25
         return console
 
     monkeypatch.setattr(rich_utils, "_get_rich_console", narrow_console)
-    monkeypatch.setattr(cli, "console", Console(width=width, theme=CONSOLE_THEME))
+    monkeypatch.setattr(cli, "console", Console(width=width, height=25, theme=CONSOLE_THEME))
     result = CliRunner().invoke(cli.app, ["--help"])
     assert result.exit_code == 0
     assert max(map(len, result.stdout.splitlines())) <= width
@@ -270,14 +275,19 @@ def test_dependent_help_names_companion_options():
 
 
 @pytest.mark.parametrize("width", [60, 80])
-def test_scan_help_remains_renderable_at_narrow_widths(monkeypatch, width):
+@pytest.mark.parametrize("force_terminal", [False, True], ids=["captured", "github-actions"])
+def test_scan_help_remains_renderable_at_narrow_widths(monkeypatch, width, force_terminal):
     from typer import rich_utils
 
+    monkeypatch.setenv("TERM", "dumb")
+    monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", force_terminal)
     original = rich_utils._get_rich_console
 
     def narrow_console(*args, **kwargs):
         console = original(*args, **kwargs)
         console.width = width
+        # Match a complete viewport even when Typer forces terminal output in CI.
+        console.height = 25
         return console
 
     monkeypatch.setattr(rich_utils, "_get_rich_console", narrow_console)
