@@ -1,7 +1,8 @@
 # Release procedure
 
-This is a manual maintainer checklist, not publishing automation. Preparing a release candidate
-does not publish it. PyPI project-name availability and publication rights must be checked
+This checklist governs release preparation and the separately gated PyPI publishing workflow.
+Preparing a release candidate does not publish it. PyPI project-name availability and publication
+rights must be checked
 separately when publication is planned; do not assume `pip install gqlsleuth` is available.
 
 ## Version authority
@@ -65,7 +66,44 @@ artifact regression builds/inspects locally without performing fresh dependency 
 Temporary gate artifacts are removed on exit; the separately built `dist/` files remain available
 for inspection. The source archive includes this checklist, the changelog and release scripts.
 
-## Future publication checklist — manual, separately authorized
+## Trusted Publishing setup
+
+`.github/workflows/release.yml` runs only when a GitHub Release is **published**. Ordinary pushes,
+pull requests and tag pushes alone do not publish packages. Publishing the GitHub Release is an
+explicit publication action; do it only after approval and passing Ubuntu/Windows CI on the exact
+release commit. The release tag must be `v` followed by `[project].version` (initially `v1.0.0`).
+
+Create the GitHub environment **`pypi`** and configure its approval/protection rules before use.
+Configure the PyPI Trusted Publisher with these exact values:
+
+| Setting | Value |
+| --- | --- |
+| PyPI project | `gqlsleuth` |
+| GitHub owner | `Tomas-Ortiz` |
+| Repository | `gqlsleuth` |
+| Workflow filename | `release.yml` |
+| Environment | `pypi` |
+
+The environment name must match on GitHub and PyPI. For the first publication, if the project
+does not exist, use a [pending trusted publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
+This does not reserve the package name or guarantee publication rights. No long-lived PyPI token,
+username or password is required; [Trusted Publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/)
+uses GitHub's OIDC identity. Configuring these services remains a maintainer action.
+
+The Ubuntu build job checks out the release event's commit, checks tag/project identity and runs
+the existing artifact gate with Python 3.13 and uv. It stages that gate's exact wheel and sdist
+only after metadata/resource checks, sdist rebuilding, clean dependency-resolving installations
+and guarded offline SAFE/report smokes pass. These files are transferred through a named Actions
+artifact. The separate `publish` job downloads them without rebuilding or checking out code and
+uses the SHA-pinned official PyPA action. Only that job has `id-token: write`; no job has repository
+write permission. There is no GitHub Release asset upload.
+
+The release commit/tag must include this workflow. A local unpushed tag created before the
+workflow commit must be reviewed and recreated by the maintainer at the intended final commit
+before pushing; this document does not move tags or authorize publication. Re-run all four CI
+jobs on that exact commit before publishing its GitHub Release.
+
+## Publication checklist — manual, separately authorized
 
 1. Confirm a clean working tree, intended source revision and passing source/artifact CI jobs on
    both operating systems. Review unresolved release-readiness items.
@@ -80,8 +118,9 @@ for inspection. The source archive includes this checklist, the changelog and re
    artifacts from an earlier version or source revision.
 7. After explicit release approval, commit the reviewed release changes and create the matching
    version tag. This checklist does not authorize those actions by itself.
-8. Publish only the reviewed artifacts using the approved manual process. Publishing credentials,
-   trusted publishing and write-enabled CI are deliberately not configured here.
+8. After configuring Trusted Publishing above and explicit publication approval, publish the
+   GitHub Release for the reviewed tag. The workflow validates fresh artifacts from that commit
+   and publishes those exact files to PyPI after the `pypi` environment's protection rules pass.
 9. After publication, resolve/install the public version into a fresh environment and repeat the
    offline CLI/resource/report smoke. Verify the published version and hashes, then update user
    installation documentation to describe commands that actually work.

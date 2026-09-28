@@ -1,0 +1,73 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Build, validate and stage release distributions
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import runpy
+          import shutil
+          import tempfile
+          import tomllib
+          from pathlib import Path
+
+          checkout = Path.cwd()
+          project = tomllib.loads((checkout / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+          if project["name"] != "gqlsleuth" or os.environ["RELEASE_TAG"] != f"v{project['version']}":
+              raise SystemExit("Release tag must match the gqlsleuth project version.")
+          checker = runpy.run_path(str(checkout / "scripts/check_release_artifacts.py"))
+          with tempfile.TemporaryDirectory(prefix="gqlsleuth-publish-") as temporary:
+              work = Path(temporary)
+              checker["check_release"](checkout, work, offline=False)
+              # Transfer only the exact wheel/sdist that passed the full artifact gate.
+              destination = checkout / "dist"
+              destination.mkdir()
+              for pattern in ("*.whl", "*.tar.gz"):
+                  for artifact in (work / "dist").glob(pattern):
+                      shutil.copyfile(artifact, destination / artifact.name)
+          PY
+      - name: Upload validated distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download validated distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-distributions
+          path: dist/
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

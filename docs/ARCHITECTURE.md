@@ -1593,7 +1593,9 @@ The artifact gate builds fresh wheel/sdist files, checks their contents and meta
 rebuilds a wheel from the extracted sdist. Both wheels undergo normal dependency resolution
 in independent environments outside the checkout. Installed CLI, rules and all report formats
 are exercised through a mocked SAFE workflow with socket/DNS guards. Only dependency resolution
-needs package-index access; ordinary pytest remains offline. No publishing is configured.
+needs package-index access; ordinary pytest remains offline. A separate release-published
+workflow transfers validated distributions to an isolated PyPI Trusted Publishing job;
+only that job receives OIDC permission. The artifact gate itself never publishes.
 See [RELEASING.md](RELEASING.md) for the maintainer procedure.
 
 ## 30. Testing strategy
