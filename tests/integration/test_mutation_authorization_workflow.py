@@ -9,6 +9,7 @@ import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
+from fixtures.cli_output import plain_cli_output
 from fixtures.phase23_target import SDL, response_for
 from gqlsleuth import cli
 from gqlsleuth.ai.context import build_ai_context
@@ -273,5 +274,7 @@ def test_reports_exact_preview_ai_exclusion_and_privacy(phase_ten_scan, monkeypa
 def test_help_exposes_capability_names():
     result = CliRunner().invoke(cli.app, ["scan", "--help"], env={"COLUMNS": "160"})
     assert result.exit_code == 0
-    assert "--mutation-auth-review" in result.output and "--mutation-auth-case" in result.output
-    assert "Phase 23" not in result.output
+    assert "--mutation-auth-review" in plain_cli_output(
+        result.output
+    ) and "--mutation-auth-case" in plain_cli_output(result.output)
+    assert "Phase 23" not in plain_cli_output(result.output)

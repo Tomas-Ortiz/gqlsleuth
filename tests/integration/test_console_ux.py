@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 import gqlsleuth.application.reporting as reporting
 import gqlsleuth.cli as cli
+from fixtures.cli_output import plain_cli_output
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.infrastructure.http import HttpClient
 from gqlsleuth.presentation.console import CONSOLE_THEME, render_scan
@@ -24,7 +25,7 @@ from gqlsleuth.reporting.renderers import render_report
 def test_help_aliases_describe_main_workflow(command, flag):
     result = CliRunner().invoke(cli.app, [*command, flag])
     assert result.exit_code == 0
-    output = " ".join(result.stdout.split())
+    output = " ".join(plain_cli_output(result.stdout).split())
     for option in (
         "--mode",
         "--format",
@@ -123,11 +124,11 @@ def test_format_syntax_writes_once_in_first_occurrence_order(
 def test_invalid_format_fails_before_scanning(completed_cli, tmp_path, entry):
     result = invoke("-f", entry)
     assert result.exit_code == 2
-    output = " ".join(result.stderr.replace("│", " ").split())
+    output = " ".join(plain_cli_output(result.stderr).replace("│", " ").split())
     assert "choose json," in output
     assert "markdown, or html" in output
     assert ("pdf" if "pdf" in entry else "Empty report format") in output
-    assert "Traceback" not in result.output
+    assert "Traceback" not in plain_cli_output(result.output)
     assert completed_cli[1] == []
     assert list(tmp_path.iterdir()) == []
 

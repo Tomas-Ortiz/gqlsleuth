@@ -8,6 +8,7 @@ import pytest
 from graphql import OperationDefinitionNode, parse
 from typer.testing import CliRunner
 
+from fixtures.cli_output import plain_cli_output
 from fixtures.phase27_target import response_for
 from gqlsleuth import cli
 from gqlsleuth.infrastructure.http import HttpClient
@@ -165,5 +166,7 @@ def test_phase27_does_not_add_ai_calls(controlled, monkeypatch):
 
 def test_help_exposes_only_fixed_budget_flag():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
-    assert result.exit_code == 0 and "--rate-limit-review" in result.output
-    assert "--repeat-count" not in result.output and "--rate-limit-count" not in result.output
+    assert result.exit_code == 0 and "--rate-limit-review" in plain_cli_output(result.output)
+    assert "--repeat-count" not in plain_cli_output(
+        result.output
+    ) and "--rate-limit-count" not in plain_cli_output(result.output)

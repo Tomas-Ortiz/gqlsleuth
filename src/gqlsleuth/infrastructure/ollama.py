@@ -1,6 +1,5 @@
 """One non-streaming inference against local Ollama, independent of target HTTP/evidence."""
 
-import json
 import math
 
 import httpx
@@ -15,6 +14,7 @@ from gqlsleuth.ai.models import (
     AIServiceError,
 )
 from gqlsleuth.ai.prompt import build_system_prompt, execution_summary, validate_interpretation
+from gqlsleuth.graphql.response_json import decode_response_json, response_json_object
 
 OLLAMA_ENDPOINT = "http://127.0.0.1:11434"
 AI_TIMEOUT_SECONDS = 180.0
@@ -84,7 +84,7 @@ class OllamaClient:
                     body.extend(chunk)
                 if response.status_code != 200:
                     _raise_http_error(response.status_code, body)
-                envelope = json.loads(body)
+                envelope = decode_response_json(body)
             if not isinstance(envelope, dict) or envelope.get("done") is not True:
                 raise ValueError("Incomplete Ollama response.")
             if envelope.get("model") != DEFAULT_AI_MODEL or envelope.get("error"):
@@ -121,10 +121,9 @@ class OllamaClient:
 
 def _raise_http_error(status: int, body: bytearray) -> None:
     if status == 404:
-        try:
-            envelope = json.loads(body)
-        except ValueError:
-            envelope = None
+        # A malformed diagnostic body must not override the HTTP failure. Only a
+        # recognizable model-not-found object receives the special classification.
+        envelope = response_json_object(bytes(body))
         message = envelope.get("error", "") if isinstance(envelope, dict) else ""
         if (
             isinstance(message, str)

@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 import gqlsleuth.cli as cli
 from fixtures.ai_response import security_answer_fields
+from fixtures.cli_output import plain_cli_output
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import AIContext
 from gqlsleuth.ai.prompt import execution_summary
@@ -225,9 +226,13 @@ def test_target_help_is_explicit_and_remains_separate_from_ollama():
         result = CliRunner().invoke(cli.app, [*command, "--help"])
         assert result.exit_code == 0
         for option in ("--header", "-H", "--timeout", "--proxy", "--verify-tls", "--no-verify-tls"):
-            assert option in result.output
-        assert "Ollama" in result.output
+            assert option in plain_cli_output(result.output)
+        assert "Ollama" in plain_cli_output(result.output)
         if command:
-            assert "insecure" in result.output and "Never sent to" in result.output
+            assert "insecure" in plain_cli_output(
+                result.output
+            ) and "Never sent to" in plain_cli_output(result.output)
         else:
-            assert "Target HTTP options do not affect local Ollama." not in result.output
+            assert "Target HTTP options do not affect local Ollama." not in plain_cli_output(
+                result.output
+            )

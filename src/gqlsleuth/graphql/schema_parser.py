@@ -1,6 +1,5 @@
 """Build and map GraphQL introspection data into GQLSleuth schema models."""
 
-import json
 from collections.abc import Mapping
 from typing import cast
 
@@ -44,6 +43,7 @@ from gqlsleuth.domain.schema import (
     SchemaTypeKind,
     TypeReference,
 )
+from gqlsleuth.graphql.response_json import JsonNestingError, decode_response_json
 
 BUILTIN_SCALAR_NAMES = frozenset({"Boolean", "Float", "ID", "Int", "String"})
 
@@ -77,8 +77,8 @@ def load_introspection_schema(body: bytes) -> GraphQLSchema:
 
 def _introspection_data(body: bytes) -> dict[str, object]:
     try:
-        document: object = json.loads(body)
-    except RecursionError:
+        document = decode_response_json(body)
+    except JsonNestingError:
         raise SchemaParsingError(
             "Full introspection response exceeds supported JSON nesting."
         ) from None

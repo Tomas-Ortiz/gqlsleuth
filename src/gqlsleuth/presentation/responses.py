@@ -4,6 +4,7 @@ import codecs
 import json
 from dataclasses import dataclass
 
+from gqlsleuth.graphql.response_json import JsonNestingError, decode_response_json
 from gqlsleuth.infrastructure.http import HttpResponse
 
 MAX_HUMAN_RESPONSE_BODY_BYTES = 64 * 1024
@@ -77,11 +78,11 @@ def present_response_body(body: bytes) -> HumanResponseBody:
     language = "text"
     if not truncated and text:
         try:
-            parsed = json.loads(text)
+            parsed = decode_response_json(text)
             formatted = json.dumps(
                 parsed, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False
             )
-        except RecursionError:
+        except (JsonNestingError, RecursionError):
             return HumanResponseBody(
                 "",
                 "text",

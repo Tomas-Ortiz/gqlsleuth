@@ -10,6 +10,7 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 import gqlsleuth.cli as cli
+from fixtures.cli_output import plain_cli_output
 from gqlsleuth.presentation.console import CONSOLE_THEME, render_root_help
 
 COMMANDS = (
@@ -18,6 +19,8 @@ COMMANDS = (
     "gqlsleuth scan https://example.com --ai",
     "gqlsleuth scan https://example.com -f html -o ./reports",
 )
+
+
 OPTIONS = (
     "--mode",
     "-f, --format",
@@ -127,8 +130,10 @@ def test_help_headings_are_neutral_and_references_cyan(monkeypatch):
 def test_custom_guidance_is_root_only():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
     assert result.exit_code == 0
-    assert "Quick Start" not in result.stdout and "Common options" not in result.stdout
-    assert "Target HTTP" in result.stdout
+    assert "Quick Start" not in plain_cli_output(
+        result.stdout
+    ) and "Common options" not in plain_cli_output(result.stdout)
+    assert "Target HTTP" in plain_cli_output(result.stdout)
     for option in (
         "--mode",
         "--ai",
@@ -141,7 +146,7 @@ def test_custom_guidance_is_root_only():
         "--verify-tls",
         "--no-verify-tls",
     ):
-        assert option in result.stdout
+        assert option in plain_cli_output(result.stdout)
 
 
 def test_root_help_preserves_command_registry_and_uses_command_descriptions():
@@ -187,7 +192,7 @@ def test_complete_root_help_on_narrow_terminal(monkeypatch, width, force_termina
 def test_scan_help_documents_defaults_without_duplicate_metadata():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
     assert result.exit_code == 0
-    output = " ".join(result.stdout.replace("│", " ").replace("|", " ").split())
+    output = " ".join(plain_cli_output(result.stdout).replace("│", " ").replace("|", " ").split())
     assert output.lower().count("default:") == 25
     assert "--federation-review" in output
     assert "--federation-sdl-expect-deny" in output
@@ -303,3 +308,31 @@ def test_user_help_has_no_internal_stage_numbers():
         result = CliRunner().invoke(cli.app, args)
         assert result.exit_code == 0
         assert not re.search(r"\bPhase\s+\d+", result.stdout)
+
+
+def test_semantic_cli_output_preserves_words_across_ansi_transitions():
+    styled = "\x1b[36m--\x1b[1;36mmode\x1b[0m\n  safe | active"
+    assert plain_cli_output(styled) == "--mode\n  safe | active"
+    assert plain_cli_output(styled, normalize_whitespace=True) == "--mode safe | active"
+
+
+def test_forced_ansi_help_remains_semantically_discoverable(monkeypatch):
+    from typer import rich_utils
+
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", True)
+    result = CliRunner().invoke(cli.app, ["scan", "--help"])
+    assert result.exit_code == 0 and "\x1b[" in result.output
+    output = plain_cli_output(result.output)
+    for option in (
+        "--mode",
+        "--header",
+        "--auth-context",
+        "--rate-limit-review",
+        "--auth-security-review",
+        "--file-upload-review",
+        "--mutation-auth-review",
+        "--federation-review",
+    ):
+        assert option in output

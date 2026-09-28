@@ -4,6 +4,7 @@ import pytest
 from typer.testing import CliRunner
 
 import gqlsleuth.cli as cli
+from fixtures.cli_output import plain_cli_output
 from gqlsleuth.application.scan_configuration import map_auth_context_inputs
 from gqlsleuth.domain.exceptions import HttpConfigurationError
 from gqlsleuth.domain.models import ScanMode
@@ -101,7 +102,7 @@ def test_invalid_cli_exits_before_scanning_or_ai(monkeypatch, options):
 def test_scan_help_exposes_context_syntax():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
     assert result.exit_code == 0
-    assert "--auth-context" in result.output
-    output = " ".join(result.output.replace("│", " ").replace("|", " ").split())
+    assert "--auth-context" in plain_cli_output(result.output)
+    output = " ".join(plain_cli_output(result.output).replace("│", " ").replace("|", " ").split())
     assert "SAFE" in output and "privilege order" in output
     assert "--nested-auth-review" in output

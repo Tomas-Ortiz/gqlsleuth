@@ -4,6 +4,7 @@ import pytest
 from typer.testing import CliRunner
 
 import gqlsleuth.cli as cli_module
+from fixtures.cli_output import plain_cli_output
 from gqlsleuth import __version__
 from gqlsleuth.application.endpoint_discovery import (
     EndpointDiscoveryResult,
@@ -301,10 +302,10 @@ def test_scan_help_exposes_current_scan_options() -> None:
     result = runner.invoke(app, ["scan", "--help"])
 
     assert result.exit_code == 0
-    assert "--mode" in result.stdout
-    assert "safe" in result.stdout
-    assert "active" in result.stdout
-    assert "--config" not in result.stdout
+    assert "--mode" in plain_cli_output(result.stdout)
+    assert "safe" in plain_cli_output(result.stdout)
+    assert "active" in plain_cli_output(result.stdout)
+    assert "--config" not in plain_cli_output(result.stdout)
 
 
 def test_scan_accepts_explicit_safe_mode() -> None:

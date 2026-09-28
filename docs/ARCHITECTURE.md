@@ -1404,13 +1404,19 @@ The tool must fail gracefully. Expected error categories include:
 Errors should be represented using project-specific exception classes.
 
 GraphQL detection, introspection and execution share a small response-object JSON decoder that
-treats decoding, Unicode and recursion failures as uninterpretable JSON. Callers retain their
+treats decoding, Unicode and recursion failures as uninterpretable JSON. After decoding, an
+iterative walk rejects more than 128 nested object/array containers (root included). This fixed
+bound is comfortably above generated response and introspection structures, independent of
+interpreter stack limits; braces/brackets inside strings do not count. Callers retain their
 existing confidence/status precedence (including HTTP error statuses); no network failure or
 Finding is inferred from invalid JSON. Schema decoding/reconstruction normalizes excessive
 nesting into `SchemaParsingError`, preserving prior results. Response-size limits and raw
 response/evidence retention remain unchanged. Human response formatting shows a concise notice
-when nesting cannot be handled. WebSocket and Ollama retain their existing guarded JSON paths,
-without retries, extra connections or inference calls. This adds no generic redaction.
+when nesting cannot be handled. Schema decoding, human formatting and Ollama envelopes reuse
+this bound. Non-success Ollama HTTP responses remain HTTP errors unless a recognizable
+model-not-found object establishes the existing special status; an unusable 404 body does not
+override HTTP-error precedence. WebSocket retains its existing guarded JSON path. There are no
+retries, extra connections or inference calls. This adds no generic redaction.
 
 Transport diagnostics present actionable URL/network/proxy/TLS guidance from normalized error
 codes, without rendering supplied credentials or raw exception text. Detailed output retains

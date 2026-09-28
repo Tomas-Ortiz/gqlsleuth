@@ -6,6 +6,7 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
+from fixtures.cli_output import plain_cli_output
 from fixtures.phase26_target import fake_token, response_for
 from gqlsleuth import cli
 from gqlsleuth.infrastructure.http import HttpClient
@@ -137,5 +138,7 @@ def test_disabled_and_noninteractive_request_sequences_identical(controlled, mon
 
 def test_help_discovers_flag_without_new_token_options():
     result = CliRunner().invoke(cli.app, ["scan", "--help"])
-    assert result.exit_code == 0 and "--auth-security-review" in result.output
-    assert "--token " not in result.output and "--jwt " not in result.output
+    assert result.exit_code == 0 and "--auth-security-review" in plain_cli_output(result.output)
+    assert "--token " not in plain_cli_output(result.output) and "--jwt " not in plain_cli_output(
+        result.output
+    )

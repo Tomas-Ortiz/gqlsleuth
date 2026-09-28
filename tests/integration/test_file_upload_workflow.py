@@ -6,6 +6,7 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
+from fixtures.cli_output import plain_cli_output
 from fixtures.phase28_target import PNG, multipart_parts, response_for
 from gqlsleuth import cli
 from gqlsleuth.infrastructure.http import HttpClient
@@ -213,4 +214,4 @@ def test_help_lists_upload_options():
         "--upload-file",
         "--upload-content-type",
     ):
-        assert option in result.output
+        assert option in plain_cli_output(result.output)
