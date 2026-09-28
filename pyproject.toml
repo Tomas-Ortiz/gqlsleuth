@@ -1,6 +1,6 @@
 [project]
 name = "gqlsleuth"
-version = "0.1.0"
+version = "1.0.0"
 description = "A CLI for authorized GraphQL security discovery and analysis"
 readme = "README.md"
 requires-python = ">=3.13"

@@ -1580,7 +1580,8 @@ Dependencies should be added only when required by the implementation phase.
 reports and the HTTP user agent derive the installed version through `importlib.metadata`.
 Source-only imports without metadata report `0+unknown`; development environments should use
 `uv sync --locked`. A version edit requires regenerating lock/install metadata, not a second
-version literal in Python. The current package remains a Beta development version.
+version literal in Python. The initial release candidate retains the Beta classifier pending
+public-release experience.
 
 The existing uv build backend packages Python sources, YAML rules and Jinja2 templates. The
 sdist also includes the changelog, release checklist and artifact-validation scripts. CI has

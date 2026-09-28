@@ -7,7 +7,7 @@ Queries and review evidence-backed results.
 **SAFE is the default.** ACTIVE capabilities require explicit entry, scoped inputs/selection
 and separate confirmation. Optional local AI explains retained facts; it does not control testing.
 
-Current development version: **0.1.0 (Beta)**. This is not a published v1.0 release.
+Current release candidate: **1.0.0 (Beta)**. This candidate has not been published.
 
 > Use only against systems you are explicitly authorized to assess. Even read-only requests
 > reach the target application. ACTIVE Mutations may change state; assess their impact before
@@ -33,7 +33,7 @@ Start with [Installation](#installation), [Quick Start](#quick-start), or the
 Python **>=3.13** is required; the current validation matrix uses Python 3.13.
 Public PyPI installation is **not currently documented as available**. Obtain a wheel from a
 trusted maintainer build, or build it from the source checkout below with `uv build`.
-The current artifact is `dist/gqlsleuth-0.1.0-py3-none-any.whl`.
+The current artifact is `dist/gqlsleuth-1.0.0-py3-none-any.whl`.
 
 Create an environment in the directory where you want to work:
 
@@ -56,13 +56,13 @@ source .venv/bin/activate
 Install the local artifact, replacing this relative path with your wheel's location:
 
 ```bash
-python -m pip install ./dist/gqlsleuth-0.1.0-py3-none-any.whl
+python -m pip install ./dist/gqlsleuth-1.0.0-py3-none-any.whl
 gqlsleuth --help
 gqlsleuth version
 ```
 
 If PowerShell activation is restricted, invoke the environment's Python/launcher directly,
-for example `.\.venv\Scripts\python.exe -m pip install .\dist\gqlsleuth-0.1.0-py3-none-any.whl`.
+for example `.\.venv\Scripts\python.exe -m pip install .\dist\gqlsleuth-1.0.0-py3-none-any.whl`.
 Do not change system execution policy just for this installation.
 
 Installed users run **`gqlsleuth` directly**. `python -m gqlsleuth` is also supported.
@@ -628,9 +628,9 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, offline testing a
 [AGENTS.md](AGENTS.md) provides repository working rules; [ARCHITECTURE.md](docs/ARCHITECTURE.md)
 contains implementation detail and the internal roadmap.
 
-[CHANGELOG.md](CHANGELOG.md) records user-visible unreleased changes.
+[CHANGELOG.md](CHANGELOG.md) records user-visible changes and the prepared release entry.
 [RELEASING.md](docs/RELEASING.md) documents version authority, artifact verification and the future
-manual publication procedure. No v1.0 release or public package-name availability is implied.
+manual publication procedure. Preparing this candidate does not publish it or reserve a package name.
 Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## License

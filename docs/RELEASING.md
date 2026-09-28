@@ -1,7 +1,7 @@
 # Release procedure
 
-This is a manual maintainer checklist, not publishing automation. No v1.0 release is declared
-by adding this document. PyPI project-name availability and publication rights must be checked
+This is a manual maintainer checklist, not publishing automation. Preparing a release candidate
+does not publish it. PyPI project-name availability and publication rights must be checked
 separately when publication is planned; do not assume `pip install gqlsleuth` is available.
 
 ## Version authority

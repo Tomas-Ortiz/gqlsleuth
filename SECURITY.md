@@ -7,10 +7,10 @@ disclosure program, not this repository. Test only systems you are explicitly au
 
 ## Supported versions
 
-The current development version is 0.1.0; no v1.0 release is declared. Maintainers review security
-reports against the current development tree. After publication, the latest released version
-will be the supported version; older versions receive best-effort review without a backport
-guarantee. No response-time or long-term-support guarantee is currently offered.
+The 1.0.0 release candidate is eligible for security review. Once published, the latest 1.x
+release will be supported; earlier versions, including pre-1.0 development snapshots, receive
+best-effort review without a backport guarantee. This policy does not imply that older versions
+were publicly released. No response-time or long-term-support guarantee is currently offered.
 
 ## Private reporting
 
