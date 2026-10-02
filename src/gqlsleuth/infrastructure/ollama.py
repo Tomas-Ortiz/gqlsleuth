@@ -89,15 +89,22 @@ class OllamaClient:
                 raise ValueError("Missing or incomplete final answer.")
             # Ignore thinking and all other model metadata. Never retain the raw envelope.
             return validate_interpretation(content, context)
+        except (httpx.ConnectError, httpx.ConnectTimeout) as error:
+            raise AIServiceError(
+                AIAnalysisStatus.UNAVAILABLE,
+                "connection_failed",
+                "Could not connect to local Ollama.",
+            ) from error
         except httpx.TimeoutException as error:
             raise AIServiceError(
                 AIAnalysisStatus.UNAVAILABLE, "timeout", "Local Ollama inference timed out."
             ) from error
         except httpx.RequestError as error:
+            # Read/write/protocol failures do not imply the initial connection failed.
             raise AIServiceError(
                 AIAnalysisStatus.UNAVAILABLE,
-                "connection_failed",
-                "Could not connect to local Ollama.",
+                "transport_failed",
+                "Local Ollama request failed or the service became unavailable during inference.",
             ) from error
         except AIValidationError as error:
             raise AIServiceError(

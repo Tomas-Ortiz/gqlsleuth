@@ -1226,9 +1226,13 @@ it does not enable AI or change target HTTP/discovery timeouts. The non-streamin
 includes inference. The ten-minute default gives CPU-only prompt processing and up to 2,048 output
 tokens more headroom than the former three-minute ceiling; slower hardware can choose a longer
 explicit wait. This is not a hardware performance guarantee or total scan deadline. Model-not-
-found, connection and timeout failures, HTTP errors, malformed envelopes, incomplete generation,
+found, initial connection failures, inference timeouts, other request transport failures,
+HTTP errors, malformed envelopes, incomplete generation,
 and invalid final answers become controlled AI-only statuses. They cannot fail the completed
 deterministic scan or prevent report generation. No new Python dependencies are required.
+Connection establishment failures (including connection timeouts) use `connection_failed`;
+interrupted reads/writes and other request failures use `transport_failed`, without inferring
+an OS or resource-exhaustion cause. Inference timeouts retain the separate `timeout` code.
 Internal validation errors identify JSON parsing, typed schema, reference or execution-fact
 validation using static stage/codes. Result error codes distinguish these failures without
 retaining model content or Pydantic input dumps; default console wording remains unchanged.

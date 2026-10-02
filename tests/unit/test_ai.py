@@ -487,7 +487,12 @@ def test_operation_review_replaces_obsolete_fields_and_retains_bounds(completed,
     "failure, expected, code",
     [
         ("connection", AIAnalysisStatus.UNAVAILABLE, "connection_failed"),
+        ("connect_timeout", AIAnalysisStatus.UNAVAILABLE, "connection_failed"),
         ("timeout", AIAnalysisStatus.UNAVAILABLE, "timeout"),
+        ("read", AIAnalysisStatus.UNAVAILABLE, "transport_failed"),
+        ("write", AIAnalysisStatus.UNAVAILABLE, "transport_failed"),
+        ("protocol", AIAnalysisStatus.UNAVAILABLE, "transport_failed"),
+        ("request", AIAnalysisStatus.UNAVAILABLE, "transport_failed"),
         ("missing_model", AIAnalysisStatus.UNAVAILABLE, "model_not_found"),
         ("http", AIAnalysisStatus.HTTP_ERROR, "http_error"),
         ("redirect", AIAnalysisStatus.HTTP_ERROR, "http_error"),
@@ -507,10 +512,17 @@ def test_adapter_failures_are_nonfatal_without_retry_or_raw_error_leaks(
 
     def handler(request):
         calls.append(request)
-        if failure == "connection":
-            raise httpx.ConnectError("SECRET error dump", request=request)
-        if failure == "timeout":
-            raise httpx.ReadTimeout("SECRET error dump", request=request)
+        transport_errors = {
+            "connection": httpx.ConnectError,
+            "connect_timeout": httpx.ConnectTimeout,
+            "timeout": httpx.ReadTimeout,
+            "read": httpx.ReadError,
+            "write": httpx.WriteError,
+            "protocol": httpx.RemoteProtocolError,
+            "request": httpx.RequestError,
+        }
+        if failure in transport_errors:
+            raise transport_errors[failure]("SECRET error dump", request=request)
         if failure == "missing_model":
             return httpx.Response(404, json={"error": 'model "qwen3:8b" not found SECRET'})
         if failure == "http":
@@ -538,9 +550,61 @@ def test_adapter_failures_are_nonfatal_without_retry_or_raw_error_leaks(
     )
     assert result.status is expected
     assert result.error_code == code
+    http_status = {"http": 500, "redirect": 307, "nested_404": 404}.get(failure)
+    messages = {
+        "connection_failed": "Could not connect to local Ollama.",
+        "timeout": "Local Ollama inference timed out.",
+        "transport_failed": (
+            "Local Ollama request failed or the service became unavailable during inference."
+        ),
+        "model_not_found": "qwen3:8b is not available locally.",
+        "http_error": f"Local Ollama returned HTTP {http_status}.",
+        "invalid_response": "Local Ollama returned an invalid structured interpretation.",
+        "invalid_json": "Local Ollama returned an invalid structured interpretation.",
+    }
+    assert result.error_message == messages[code]
     assert len(calls) == 1
     assert result.interpretation is None
     assert "SECRET" not in str(result)
+    assert completed == before
+
+
+@pytest.mark.parametrize("error_type", [httpx.ReadError, httpx.RemoteProtocolError])
+def test_connection_lost_while_reading_response_is_a_nonfatal_transport_failure(
+    completed, error_type
+):
+    before = deepcopy(completed)
+    calls = []
+
+    class InterruptedResponse(httpx.SyncByteStream):
+        closed = False
+
+        def __iter__(self):
+            yield b'{"message":{"content":"PRIVATE_PARTIAL_REPLY'
+            raise error_type("PRIVATE_TRANSPORT_DETAIL")
+
+        def close(self):
+            self.closed = True
+
+    stream = InterruptedResponse()
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, stream=stream)
+
+    result = interpret_completed_scan(
+        completed, client=OllamaClient(transport=httpx.MockTransport(handler))
+    )
+    assert result.status is AIAnalysisStatus.UNAVAILABLE
+    assert result.error_code == "transport_failed"
+    assert result.error_message == (
+        "Local Ollama request failed or the service became unavailable during inference."
+    )
+    assert result.interpretation is None
+    assert "PRIVATE" not in str(result)
+    assert "OOM" not in str(result)
+    assert len(calls) == 1
+    assert stream.closed
     assert completed == before
 
 

@@ -6,6 +6,8 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Fixed
 
+- Local Ollama failures now distinguish initial connection failures from interrupted requests,
+  without guessing why the service became unavailable or failing the deterministic scan.
 - Local AI inference now defaults to a ten-minute wait and supports finite positive
   `--ai-timeout SECONDS` overrides for slower CPU-only systems, independently of target timeouts.
 - Local qwen3 structured output now constrains references to supplied operation/fact values,

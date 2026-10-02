@@ -27,7 +27,7 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
     target_requests = []
     ai_requests = []
     results = []
-    behavior = {"fail": False}
+    behavior = {"fail": None}
 
     def scan(target, *, mode=ScanMode.SAFE, http_settings=None):
         events.append("safe")
@@ -48,6 +48,8 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
 
     def ollama_handler(request):
         ai_requests.append(json.loads(request.content))
+        if behavior["fail"] == "transport":
+            raise httpx.RemoteProtocolError("Private error detail", request=request)
         if behavior["fail"]:
             raise httpx.ConnectError("Private error detail", request=request)
         context = AIContext.model_validate_json(ai_requests[-1]["messages"][1]["content"])
@@ -149,7 +151,7 @@ def test_one_ai_inference_follows_completed_safe_and_active_behavior(
     assert "HIDDEN_REASONING_CANARY" not in result.stdout
 
 
-@pytest.mark.parametrize("fail", [False, True])
+@pytest.mark.parametrize("fail", [None, "connection", "transport"])
 def test_optional_ai_reports_preserve_deterministic_data_even_on_failure(ai_cli, tmp_path, fail):
     ai_cli[-1]["fail"] = fail
     result = invoke("active", ai=True, reports=True)
@@ -175,3 +177,7 @@ def test_optional_ai_reports_preserve_deterministic_data_even_on_failure(ai_cli,
         assert "AI assistance unavailable" in result.stdout
         assert "Deterministic scan completed normally" in " ".join(result.stdout.split())
         assert "Traceback" not in result.output
+        if fail == "transport":
+            assert report["ai_interpretation"]["error_code"] == "transport_failed"
+            assert "service became unavailable during inference" in " ".join(result.stdout.split())
+            assert "Could not connect" not in result.stdout
