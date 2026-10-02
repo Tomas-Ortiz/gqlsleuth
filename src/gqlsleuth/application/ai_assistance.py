@@ -6,6 +6,7 @@ from time import perf_counter
 from gqlsleuth.ai.context import build_ai_context
 from gqlsleuth.ai.models import (
     DEFAULT_AI_MODEL,
+    DEFAULT_AI_TIMEOUT_SECONDS,
     AIAnalysisStatus,
     AIContextMetadata,
     AIInterpretationResult,
@@ -20,6 +21,7 @@ def interpret_completed_scan(
     result: SafeExecutionScanResult | ActiveExecutionScanResult,
     *,
     client: OllamaClient | None = None,
+    timeout_seconds: float = DEFAULT_AI_TIMEOUT_SECONDS,
 ) -> AIInterpretationResult:
     """Never call scanner stages or alter results; expected AI failures are non-fatal."""
     started = perf_counter()
@@ -44,7 +46,9 @@ def interpret_completed_scan(
             error_message="Could not build a safe bounded AI context.",
         )
     try:
-        interpretation = (client or OllamaClient()).interpret(context)
+        interpretation = (client or OllamaClient(timeout_seconds=timeout_seconds)).interpret(
+            context
+        )
     except AIServiceError as error:
         return AIInterpretationResult(
             error.status,

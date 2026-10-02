@@ -1,5 +1,6 @@
 """CLI options, workflow orchestration, and explicit ACTIVE user interaction."""
 
+import math
 import re
 import sys
 from copy import copy
@@ -15,7 +16,7 @@ from typer._click import Context, HelpFormatter
 from typer.core import TyperGroup
 
 from gqlsleuth import __version__
-from gqlsleuth.ai.models import AIInterpretationResult
+from gqlsleuth.ai.models import DEFAULT_AI_TIMEOUT_SECONDS, AIInterpretationResult
 from gqlsleuth.application.abuse_controls import AbuseControlSession, prepare_abuse_controls
 from gqlsleuth.application.active_execution import (
     ActiveExecutionScanResult,
@@ -173,6 +174,12 @@ def _parse_formats(values: list[str] | None) -> tuple[ReportFormat, ...]:
     return tuple(formats)
 
 
+def _validate_ai_timeout(value: float | None) -> float | None:
+    if value is not None and (not math.isfinite(value) or value <= 0):
+        raise typer.BadParameter("AI timeout must be a finite positive number of seconds.")
+    return value
+
+
 @app.command()
 def scan(
     target: Annotated[
@@ -224,6 +231,19 @@ def scan(
             help=("Optional local Ollama/qwen3:8b interpretation. Default: disabled."),
         ),
     ] = False,
+    ai_timeout: Annotated[
+        float | None,
+        typer.Option(
+            "--ai-timeout",
+            metavar="SECONDS",
+            callback=_validate_ai_timeout,
+            show_default=False,
+            help=(
+                "Finite positive local AI inference timeout; used only with --ai. "
+                f"Default: {DEFAULT_AI_TIMEOUT_SECONDS:g}s. Does not affect target requests."
+            ),
+        ),
+    ] = None,
     verbose: Annotated[
         bool,
         typer.Option(
@@ -917,7 +937,11 @@ def scan(
     ai_result = None
     if ai:
         console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
-        ai_result = interpret_completed_scan(report_result)
+        ai_result = (
+            interpret_completed_scan(report_result)
+            if ai_timeout is None
+            else interpret_completed_scan(report_result, timeout_seconds=ai_timeout)
+        )
     render_completed_assessment(console, report_result, verbose=verbose, ai_result=ai_result)
     if ai_result is not None:
         render_ai(console, ai_result, verbose=verbose)

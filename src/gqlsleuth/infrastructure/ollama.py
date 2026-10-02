@@ -7,6 +7,7 @@ import httpx
 from gqlsleuth.ai.context import serialize_context
 from gqlsleuth.ai.models import (
     DEFAULT_AI_MODEL,
+    DEFAULT_AI_TIMEOUT_SECONDS,
     MAX_CONTEXT_BYTES,
     AIAnalysisStatus,
     AIContext,
@@ -18,7 +19,6 @@ from gqlsleuth.ai.prompt import build_response_schema, build_system_prompt, vali
 from gqlsleuth.graphql.response_json import decode_response_json, response_json_object
 
 OLLAMA_ENDPOINT = "http://127.0.0.1:11434"
-AI_TIMEOUT_SECONDS = 180.0
 MAX_AI_RESPONSE_BYTES = 131_072
 
 
@@ -29,10 +29,10 @@ class OllamaClient:
         self,
         *,
         transport: httpx.BaseTransport | None = None,
-        timeout_seconds: float = AI_TIMEOUT_SECONDS,
+        timeout_seconds: float = DEFAULT_AI_TIMEOUT_SECONDS,
     ) -> None:
-        if not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= AI_TIMEOUT_SECONDS:
-            raise ValueError("AI timeout must be finite, positive, and at most 180 seconds.")
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("AI timeout must be finite and positive.")
         self._transport = transport
         self._timeout = timeout_seconds
 

@@ -325,6 +325,17 @@ If the service is already running, no interactive `ollama run` chat session is n
 Otherwise start your normal Ollama service (for a manual installation, `ollama serve`).
 GQLSleuth does not start/install Ollama or download models.
 
+Local inference waits up to **600 seconds by default**. CPU-only machines may need longer:
+
+```bash
+gqlsleuth scan https://authorized.example/graphql --ai --ai-timeout 1200
+```
+
+`--ai-timeout` accepts finite positive seconds and is used only with `--ai`; it does not enable
+AI itself. It changes only local Ollama read/write/pool waits; the connection timeout remains
+5 seconds. It is a network wait timeout, not a total scan deadline. Target `--timeout` and
+discovery/introspection/Query/Mutation requests are unaffected. AI timeouts remain non-fatal.
+
 At most **one inference** interprets the completed single-context scan. It can discuss retained
 Findings, policy outcomes, controls, unresolved checks, structural candidates and operations.
 Deterministic execution facts remain authoritative. AI adds no target requests, Findings,

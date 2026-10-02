@@ -12,7 +12,7 @@ import gqlsleuth.cli as cli
 from fixtures.ai_response import security_answer_fields
 from fixtures.cli_output import plain_cli_output
 from gqlsleuth.ai.context import build_ai_context, serialize_context
-from gqlsleuth.ai.models import AIContext
+from gqlsleuth.ai.models import DEFAULT_AI_TIMEOUT_SECONDS, AIContext
 from gqlsleuth.ai.prompt import execution_summary
 from gqlsleuth.application.graphql_detection import MINIMAL_TYPENAME_QUERY
 from gqlsleuth.graphql.introspection import FULL_INTROSPECTION_QUERY, MINIMAL_INTROSPECTION_QUERY
@@ -80,9 +80,9 @@ def configured_cli(monkeypatch, tmp_path):
     def transport_factory(**settings):
         return httpx.MockTransport(lambda request: handler(request, settings))
 
-    def interpret(result):
+    def interpret(result, **options):
         completed_results.append(result)
-        return original_interpret(result)
+        return original_interpret(result, **options)
 
     monkeypatch.setattr("httpx._client.HTTPTransport", transport_factory)
     monkeypatch.setattr(cli, "interpret_completed_scan", interpret)
@@ -155,9 +155,9 @@ def test_headers_all_stages_reports_secrets_and_ollama_isolation(
     assert ai_transport["trust_env"] is False
     assert ai_request.extensions["timeout"] == {
         "connect": 5,
-        "read": 180,
-        "write": 180,
-        "pool": 180,
+        "read": DEFAULT_AI_TIMEOUT_SECONDS,
+        "write": DEFAULT_AI_TIMEOUT_SECONDS,
+        "pool": DEFAULT_AI_TIMEOUT_SECONDS,
     }
     assert all(
         canary not in str(ai_request.headers.multi_items()) + ai_request.content.decode()
@@ -236,3 +236,81 @@ def test_target_help_is_explicit_and_remains_separate_from_ollama():
             assert "Target HTTP options do not affect local Ollama." not in plain_cli_output(
                 result.output
             )
+
+
+@pytest.mark.parametrize("ai_timeout", [None, 1200, 0.25])
+@pytest.mark.parametrize("target_timeout", [None, 7.5])
+@pytest.mark.parametrize("mode", ["safe", "active"])
+def test_ai_timeout_propagates_only_to_ollama(configured_cli, ai_timeout, target_timeout, mode):
+    options = ["--ai", "--mode", mode]
+    if ai_timeout is not None:
+        options.extend(["--ai-timeout", str(ai_timeout)])
+    if target_timeout is not None:
+        options.extend(["--timeout", str(target_timeout)])
+    result = invoke(*options, input="1\ny\n" if mode == "active" else "\n")
+    assert result.exit_code == 0, result.exception
+    targets, ai_requests, _ = configured_cli
+    assert targets and len(ai_requests) == 1
+    for request, _ in targets:
+        expected = (
+            target_timeout if target_timeout is not None else 8 if request.method == "GET" else 10
+        )
+        assert set(request.extensions["timeout"].values()) == {expected}
+    if mode == "active":
+        assert any(b"mutation" in req.content for req, _ in targets)
+    expected_ai = DEFAULT_AI_TIMEOUT_SECONDS if ai_timeout is None else ai_timeout
+    assert ai_requests[0][0].extensions["timeout"] == {
+        "connect": 5,
+        "read": expected_ai,
+        "write": expected_ai,
+        "pool": expected_ai,
+    }
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "-inf", "1e999", "abc"])
+def test_invalid_ai_timeout_fails_before_any_scan(configured_cli, value):
+    result = invoke("--ai", f"--ai-timeout={value}")
+    assert result.exit_code == 2
+    assert "--ai-timeout" in plain_cli_output(result.output)
+    assert "Traceback" not in result.output
+    assert configured_cli == ([], [], [])
+
+
+def test_ai_timeout_option_does_not_enable_ai(configured_cli):
+    result = invoke("--ai-timeout", "1200")
+    assert result.exit_code == 0
+    assert configured_cli[0] and configured_cli[1] == configured_cli[2] == []
+
+
+def test_custom_ai_timeout_failure_keeps_scan_and_reports(configured_cli, monkeypatch, tmp_path):
+    original = httpx.MockTransport.handle_request
+    calls = []
+
+    def respond(transport, request):
+        if request.url.host == "127.0.0.1":
+            calls.append(request)
+            assert request.extensions["timeout"]["read"] == 1200
+            raise httpx.ReadTimeout("PRIVATE_TIMEOUT_DETAIL", request=request)
+        return original(transport, request)
+
+    monkeypatch.setattr(httpx.MockTransport, "handle_request", respond)
+    result = invoke("--ai", "--ai-timeout", "1200", "-f", "json,markdown,html")
+    assert result.exit_code == 0, result.exception
+    assert len(calls) == 1 and configured_cli[0]
+    assert "Local Ollama inference timed out." in result.output
+    assert "Deterministic scan completed normally" in " ".join(result.output.split())
+    assert "PRIVATE_TIMEOUT_DETAIL" not in result.output
+    paths = list((tmp_path / "gqlsleuth-reports").iterdir())
+    assert len(paths) == 3
+    report = json.loads(next(p for p in paths if p.suffix == ".json").read_text())
+    assert report["queries"] and report["evidence"]
+    assert report["ai_interpretation"]["status"] == "unavailable"
+    assert report["ai_interpretation"]["error_code"] == "timeout"
+
+
+def test_ai_timeout_help_documents_default_and_isolation():
+    result = CliRunner().invoke(cli.app, ["scan", "--help"])
+    assert result.exit_code == 0
+    output = plain_cli_output(result.output)
+    assert "--ai-timeout" in output and f"{DEFAULT_AI_TIMEOUT_SECONDS:g}s" in output
+    assert "Does not affect target" in " ".join(output.replace("│", " ").split())

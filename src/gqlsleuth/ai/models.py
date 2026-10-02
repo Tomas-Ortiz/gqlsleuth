@@ -29,6 +29,7 @@ from gqlsleuth.domain.subscriptions import SubscriptionOutcome, SubscriptionProt
 MAX_AI_OPERATIONS = 12
 MAX_CONTEXT_BYTES = 12_000
 DEFAULT_AI_MODEL = "qwen3:8b"
+DEFAULT_AI_TIMEOUT_SECONDS = 600.0
 AI_NOTICE = "Model-generated interpretation — not evidence or vulnerability confirmation."
 
 

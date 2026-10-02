@@ -1219,8 +1219,13 @@ Thinking/reasoning and other raw envelope metadata are ignored, never logged, di
 persisted. Malformed final content is rejected rather than extracting reasoning or partial JSON.
 
 The dedicated HTTPX adapter is independent from target `HttpClient`. It uses a fixed loopback
-destination, no redirects or environment proxies, one request, no retries, a finite 180-second
-inference timeout with a five-second connection timeout, and a 128 KiB response limit. Model-not-
+destination, no redirects or environment proxies, one request, no retries, a default 600-second
+inference wait with a five-second connection timeout, and a 128 KiB response limit. `--ai-timeout`
+accepts finite positive seconds and is passed only to the Ollama adapter's read/write/pool waits;
+it does not enable AI or change target HTTP/discovery timeouts. The non-streaming response wait
+includes inference. The ten-minute default gives CPU-only prompt processing and up to 2,048 output
+tokens more headroom than the former three-minute ceiling; slower hardware can choose a longer
+explicit wait. This is not a hardware performance guarantee or total scan deadline. Model-not-
 found, connection and timeout failures, HTTP errors, malformed envelopes, incomplete generation,
 and invalid final answers become controlled AI-only statuses. They cannot fail the completed
 deterministic scan or prevent report generation. No new Python dependencies are required.

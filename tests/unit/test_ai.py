@@ -544,7 +544,7 @@ def test_adapter_failures_are_nonfatal_without_retry_or_raw_error_leaks(
     assert completed == before
 
 
-@pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan"), 181])
+@pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("-inf"), float("nan")])
 def test_inference_timeout_must_remain_finite_and_bounded(seconds):
     with pytest.raises(ValueError):
         OllamaClient(timeout_seconds=seconds)
