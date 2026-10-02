@@ -15,12 +15,14 @@ from graphql.language.ast import (
     FieldNode,
     NameNode,
     OperationDefinitionNode,
+    SelectionNode,
     SelectionSetNode,
 )
 
 from gqlsleuth.domain.exceptions import SafeExecutionValidationError
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.domain.schema import ParsedSchema, SchemaField, TypeReferenceKind
+from gqlsleuth.graphql.ast_nodes import replace_ast_node
 from gqlsleuth.graphql.query_generation import generate_collection_bound
 from gqlsleuth.graphql.safe_execution import side_effect_tokens, validate_safe_artifact
 from gqlsleuth.rules.schema_graph import COMPOSITE_KINDS, TypeEdge
@@ -120,6 +122,7 @@ def extend_selection_path(
         else {}
     )
     bounded_parent = bool(root_bound and root_values.get(root_bound[0].name) == root_bound[1])
+    parents: list[tuple[FieldNode, tuple[SelectionNode, ...], int]] = []
     for edge in path:
         # Labels come from the existing TypeEdge schema witness, never response text.
         prefix = edge.source + "."
@@ -172,7 +175,7 @@ def extend_selection_path(
                     "New list-valued recursive edge has no safely reusable quantity bound."
                 )
             existing = FieldNode(name=NameNode(value=name), arguments=arguments, directives=())
-            current.selection_set = SelectionSetNode(selections=(*selections, existing))
+            selections = (*selections, existing)
             bounded_parent = bound is not None
         else:
             bound = generate_collection_bound(schema, field)
@@ -183,9 +186,27 @@ def extend_selection_path(
                 else {}
             )
             bounded_parent = bool(bound and values.get(bound[0].name) == bound[1])
+        parents.append((current, selections, selections.index(existing)))
         current = existing
     if terminal_typename and current.selection_set is None:
-        current.selection_set = SelectionSetNode(
-            selections=(FieldNode(name=NameNode(value="__typename"), arguments=(), directives=()),)
+        current = replace_ast_node(
+            current,
+            selection_set=SelectionSetNode(
+                selections=(
+                    FieldNode(name=NameNode(value="__typename"), arguments=(), directives=()),
+                )
+            ),
         )
-    return document
+    # Rebuild the changed branch from leaf to root, preserving siblings and their order.
+    for parent, selections, index in reversed(parents):
+        children = (*selections[:index], current, *selections[index + 1 :])
+        selection_set = (
+            replace_ast_node(parent.selection_set, selections=children)
+            if parent.selection_set
+            else SelectionSetNode(selections=children)
+        )
+        current = replace_ast_node(parent, selection_set=selection_set)
+    operation = replace_ast_node(
+        operation, selection_set=replace_ast_node(operation.selection_set, selections=(current,))
+    )
+    return replace_ast_node(document, definitions=(operation,))

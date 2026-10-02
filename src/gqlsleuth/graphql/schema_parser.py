@@ -11,7 +11,6 @@ from graphql import (
     GraphQLField,
     GraphQLInputField,
     GraphQLInputObjectType,
-    GraphQLInputType,
     GraphQLInterfaceType,
     GraphQLList,
     GraphQLNamedType,
@@ -202,7 +201,7 @@ def _map_arguments(arguments: Mapping[str, GraphQLArgument]) -> tuple[SchemaArgu
             name=name,
             type=_map_type_reference(argument.type),
             description=argument.description,
-            default_value=_format_default(argument.default_value, argument.type),
+            default_value=_format_default(argument),
         )
         for name, argument in sorted(arguments.items())
     )
@@ -214,7 +213,7 @@ def _map_input_fields(fields: Mapping[str, GraphQLInputField]) -> tuple[SchemaIn
             name=name,
             type=_map_type_reference(field.type),
             description=field.description,
-            default_value=_format_default(field.default_value, field.type),
+            default_value=_format_default(field),
         )
         for name, field in sorted(fields.items())
     )
@@ -239,10 +238,16 @@ def _map_type_reference(type_: GraphQLType) -> TypeReference:
     raise SchemaParsingError("Unsupported GraphQL type reference.")
 
 
-def _format_default(value: object, type_: GraphQLInputType) -> str | None:
+def _format_default(field: GraphQLArgument | GraphQLInputField) -> str | None:
+    # 3.3 preserves introspected defaults as literals; 3.2 stores coerced values.
+    default = getattr(field, "default", None)
+    literal = getattr(default, "literal", None)
+    if literal is not None:
+        return print_ast(literal)
+    value = getattr(default, "value", field.default_value)
     if value is Undefined:
         return None
-    value_node = ast_from_value(value, type_)
+    value_node = ast_from_value(value, field.type)
     return print_ast(value_node) if value_node is not None else None
 
 

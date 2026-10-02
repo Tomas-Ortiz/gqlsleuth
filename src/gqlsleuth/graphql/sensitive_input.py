@@ -16,6 +16,7 @@ from gqlsleuth.domain.exceptions import SafeExecutionValidationError
 from gqlsleuth.domain.schema import ParsedSchema, SchemaField, SchemaInputField, SchemaTypeKind
 from gqlsleuth.domain.sensitive_input import SensitiveInputCase, SensitiveInputOutcome
 from gqlsleuth.graphql.active_execution import assess_mutation, destructive_tokens
+from gqlsleuth.graphql.ast_nodes import replace_ast_node
 from gqlsleuth.graphql.authorization_response import explicit_authorization_error
 from gqlsleuth.graphql.object_authorization import (
     ensure_direct_selection,
@@ -135,7 +136,7 @@ def build_sensitive_probe(
     validate_object_document(
         native, base.query_text or "", base.variables, kind=OperationKind.MUTATION
     )
-    document = deepcopy(parse(base.query_text or ""))
+    document = parse(base.query_text or "")
     operation = document.definitions[0]
     assert isinstance(operation, OperationDefinitionNode)
     root = operation.selection_set.selections[0]
@@ -144,12 +145,12 @@ def build_sensitive_probe(
         raise SafeExecutionValidationError("Conditional operations are unsupported.")
     # Effective values preserve inline arguments and schema defaults as well as variable names.
     coerced = get_variable_values(native, operation.variable_definitions or (), base.variables)
-    assert isinstance(coerced, dict) and native.mutation_type is not None
+    assert not isinstance(coerced, list) and native.mutation_type is not None
     inputs = get_argument_values(native.mutation_type.fields[case.operation], root, coerced)
     current = inputs.get(case.argument, {})
     if not isinstance(current, dict):
         raise SafeExecutionValidationError("Input object must be present or safely constructible.")
-    selected = next((arg for arg in root.arguments if arg.name.value == case.argument), None)
+    selected = next((arg for arg in root.arguments or () if arg.name.value == case.argument), None)
     # Keep exact generated variable values; do not materialize omitted optional/default siblings.
     if selected and isinstance(selected.value, VariableNode):
         current = base.variables.get(selected.value.name.value, current)
@@ -157,15 +158,18 @@ def build_sensitive_probe(
             raise SafeExecutionValidationError("Input variable must contain an object.")
     updated = deepcopy(current)
     updated[case.field] = value
-    variables = substitute_root_argument(
+    operation, root, variables = substitute_root_argument(
         operation, root, shape.root, base.variables, case.argument, updated
     )
     if case.target:
-        variables = substitute_object_identifier(
+        operation, root, variables = substitute_object_identifier(
             operation, root, shape.root, variables, case.target.argument, case.target.identifier
         )
-    ensure_direct_selection(root, case.field)
-    query = print_ast(document)
+    root = ensure_direct_selection(root, case.field)
+    operation = replace_ast_node(
+        operation, selection_set=replace_ast_node(operation.selection_set, selections=(root,))
+    )
+    query = print_ast(replace_ast_node(document, definitions=(operation,)))
     validate_object_document(native, query, variables, kind=OperationKind.MUTATION)
     if not assess_mutation(schema, replace(base, query_text=query, variables=variables)).selectable:
         raise SafeExecutionValidationError("Prepared Mutation is invalid or blocked.")

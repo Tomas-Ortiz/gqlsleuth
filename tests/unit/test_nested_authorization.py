@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import replace
 
 import pytest
-from graphql import build_schema, parse, validate
+from graphql import build_schema, parse, parse_value, print_ast, validate
 
 from fixtures.phase19_target import SDL
 from gqlsleuth.application.differential_review import ContextScanResult, compare_context_scans
@@ -150,7 +150,10 @@ def test_nested_bounds_optional_siblings_and_global_cap(scan_contexts):
         + "input Options { page: Page sort: String } input Page { limit: Int offset: Int }"
     )
     preview = prepare_nested_authorization(scan_contexts(sdl, sdl))
-    assert "members(options: {page: {limit: 1}})" in preview.candidates[1].query
+    assert (
+        f"members(options: {print_ast(parse_value('{page: {limit: 1}}'))})"
+        in preview.candidates[1].query
+    )
     assert "sort:" not in preview.candidates[1].query
     many = SDL.replace("email: String", "email: String phone: String debug: String secret: String")
     preview = prepare_nested_authorization(scan_contexts(many, many, many))

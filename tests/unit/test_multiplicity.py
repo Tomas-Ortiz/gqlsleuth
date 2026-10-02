@@ -16,6 +16,7 @@ from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.domain.multiplicity import MultiplicityDecision as Decision
 from gqlsleuth.domain.multiplicity import MultiplicityObservation as Observation
 from gqlsleuth.domain.multiplicity import MultiplicityProbeType as Kind
+from gqlsleuth.graphql.ast_nodes import replace_ast_node
 from gqlsleuth.graphql.multiplicity import ALIAS_NAMES, classify_probe_response, prepare_probe
 from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings
 
@@ -33,8 +34,9 @@ def test_ast_only_changes_top_level_aliases_and_preserves_bounds(preview):
     assert len(transformed.selection_set.selections) == 3
     for name, field in zip(ALIAS_NAMES, transformed.selection_set.selections, strict=True):
         assert field.alias.value == name
-        field.alias = None
-        assert print_ast(field) == print_ast(base.selection_set.selections[0])
+        assert print_ast(replace_ast_node(field, alias=None)) == print_ast(
+            base.selection_set.selections[0]
+        )
     assert alias.base.variables == {"email": "test@example.com", "limit": 1}
     assert alias.request_json == {"query": alias.query, "variables": alias.base.variables}
     assert (

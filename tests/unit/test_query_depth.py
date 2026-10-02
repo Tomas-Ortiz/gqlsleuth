@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import httpx
 import pytest
-from graphql import build_schema, parse, validate
+from graphql import build_schema, parse, parse_value, print_ast, validate
 
 from fixtures.phase18_target import SDL, response_for
 from gqlsleuth.application.query_depth import execute_query_depth, prepare_query_depth
@@ -50,7 +50,7 @@ def test_nested_optional_bound_reuses_generation(phase_ten_scan):
     )
     candidate = prepare_query_depth(phase_ten_scan(sdl)[0]).candidates[0]
     assert candidate.probe_depth == 5
-    assert "albums(options: {paginate: {limit: 1}})" in candidate.query
+    assert f"albums(options: {print_ast(parse_value('{paginate: {limit: 1}}'))})" in candidate.query
     assert "search:" not in candidate.query and "page:" not in candidate.query
     assert not validate(build_schema(sdl), parse(candidate.query))
 

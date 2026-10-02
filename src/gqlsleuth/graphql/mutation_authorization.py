@@ -1,6 +1,5 @@
 """Local structural and AST checks for one exact Mutation/object request."""
 
-from copy import deepcopy
 from dataclasses import replace
 
 from graphql import GraphQLSchema, parse, print_ast
@@ -13,6 +12,7 @@ from gqlsleuth.domain.exceptions import SafeExecutionValidationError
 from gqlsleuth.domain.mutation_authorization import MutationAuthorizationCase
 from gqlsleuth.domain.schema import ParsedSchema, SchemaTypeKind
 from gqlsleuth.graphql.active_execution import assess_mutation
+from gqlsleuth.graphql.ast_nodes import replace_ast_node
 from gqlsleuth.graphql.object_authorization import (
     substitute_object_identifier,
     validate_object_document,
@@ -50,17 +50,17 @@ def build_mutation_probe(
     validate_object_document(
         native, base.query_text or "", base.variables, kind=OperationKind.MUTATION
     )
-    document = deepcopy(parse(base.query_text or ""))
+    document = parse(base.query_text or "")
     operation = document.definitions[0]
     assert isinstance(operation, OperationDefinitionNode)
     if operation.directives:
         raise SafeExecutionValidationError("Conditional Mutation operations are unsupported.")
     root = operation.selection_set.selections[0]
     assert isinstance(root, FieldNode)
-    variables = substitute_object_identifier(
+    operation, root, variables = substitute_object_identifier(
         operation, root, root_schema, base.variables, case.argument, case.identifier
     )
-    query = print_ast(document)
+    query = print_ast(replace_ast_node(document, definitions=(operation,)))
     if not assess_mutation(schema, replace(base, query_text=query, variables=variables)).selectable:
         raise SafeExecutionValidationError("Prepared Mutation is not eligible.")
     validate_object_document(native, query, variables, kind=OperationKind.MUTATION)

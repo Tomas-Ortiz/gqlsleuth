@@ -30,13 +30,13 @@ def generate(sdl, name="inspect", kind=OperationKind.QUERY):
     generator = generate_query if kind is OperationKind.QUERY else generate_mutation
     artifact = generator(schema, operation)
     assert not validate(native, parse(artifact.query_text))
-    assert isinstance(
+    assert not isinstance(
         get_variable_values(
             native,
-            parse(artifact.query_text).definitions[0].variable_definitions,
+            parse(artifact.query_text).definitions[0].variable_definitions or (),
             artifact.variables,
         ),
-        dict,
+        list,
     )
     assert artifact == generator(schema, operation)
     assert artifact == generator(replace(schema, types=tuple(reversed(schema.types))), operation)

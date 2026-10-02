@@ -1,14 +1,41 @@
 """Focused tests for deterministic GraphQL introspection schema parsing."""
 
+import json
 from pathlib import Path
 
 import pytest
+from graphql import build_schema, introspection_from_schema, parse_value, print_ast
 
 from gqlsleuth.domain.exceptions import SchemaParsingError
 from gqlsleuth.domain.schema import ParsedSchema, SchemaTypeKind, TypeReferenceKind
 from gqlsleuth.graphql.schema_parser import parse_introspection_response
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
+
+
+@pytest.mark.parametrize(
+    ("type_name", "literal"),
+    [
+        ("Int!", "2"),
+        ("Boolean", "false"),
+        ("String", '""'),
+        ("Int", "null"),
+        ("[Int!]", "[1, 2]"),
+        ("Options", "{limit: 1}"),
+    ],
+)
+def test_argument_and_input_defaults_survive_upstream_representations(type_name, literal):
+    native = build_schema(
+        f"type Query {{ inspect(value: {type_name} = {literal}, input: Input): Int }} "
+        f"input Input {{ value: {type_name} = {literal} }} input Options {{ limit: Int }}"
+    )
+    schema = parse_introspection_response(
+        json.dumps({"data": introspection_from_schema(native)}).encode()
+    )
+    argument = next(a for a in schema.type_named("Query").fields[0].arguments if a.name == "value")
+    field = schema.type_named("Input").input_fields[0]
+    expected = print_ast(parse_value(literal))
+    assert argument.default_value == field.default_value == expected
 
 
 def test_query_only_schema_parses_with_optional_roots_absent() -> None:

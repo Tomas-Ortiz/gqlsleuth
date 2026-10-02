@@ -125,7 +125,9 @@ def validate_subscription(
             )
         variables.update(deepcopy(overrides))
     # Coercion validates, but exact operator JSON types/values remain the transmitted evidence.
-    if isinstance(get_variable_values(native, operation.variable_definitions, variables), list):
+    if isinstance(
+        get_variable_values(native, operation.variable_definitions or (), variables), list
+    ):
         raise SafeExecutionValidationError(
             "Subscription variables are incompatible with the retained schema."
         )

@@ -24,6 +24,7 @@ from gqlsleuth.domain.exceptions import SafeExecutionValidationError
 from gqlsleuth.domain.object_authorization import ObjectAuthorizationCase, ObjectOutcome
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.domain.schema import ParsedSchema, SchemaField, SchemaTypeKind
+from gqlsleuth.graphql.ast_nodes import replace_ast_node
 from gqlsleuth.graphql.authorization_response import explicit_authorization_error
 from gqlsleuth.graphql.safe_execution import side_effect_tokens, validate_safe_artifact
 from gqlsleuth.graphql.selection_paths import schema_field
@@ -153,13 +154,13 @@ def build_object_query(
     validate_safe_artifact(schema, base)
     if base.operation_name != case.operation:
         raise SafeExecutionValidationError("Baseline operation does not match the supplied case.")
-    document = deepcopy(parse(base.query_text or ""))
+    document = parse(base.query_text or "")
     operation, root = _plain_operation(document)
     validate_object_document(native, base.query_text or "", base.variables)
-    variables = substitute_object_identifier(
+    operation, root, variables = substitute_object_identifier(
         operation, root, root_schema, base.variables, case.argument, case.identifier
     )
-    query = print_ast(document)
+    query = print_ast(replace_ast_node(document, definitions=(operation,)))
     validate_safe_artifact(schema, replace(base, query_text=query, variables=variables))
     validate_object_document(native, query, variables)
     return query, variables
@@ -172,13 +173,16 @@ def substitute_object_identifier(
     original_variables: dict[str, JsonValue],
     argument: str,
     identifier: str,
-) -> dict[str, JsonValue]:
+) -> tuple[OperationDefinitionNode, FieldNode, dict[str, JsonValue]]:
     """Rewrite one direct ID through its actual AST mapping; preserve all other inputs."""
-    variables = substitute_root_argument(
+    operation, root, variables = substitute_root_argument(
         operation, root, root_schema, original_variables, argument, identifier
     )
-    ensure_direct_selection(root, "id")
-    return variables
+    root = ensure_direct_selection(root, "id")
+    operation = replace_ast_node(
+        operation, selection_set=replace_ast_node(operation.selection_set, selections=(root,))
+    )
+    return operation, root, variables
 
 
 def substitute_root_argument(
@@ -188,15 +192,15 @@ def substitute_root_argument(
     original_variables: dict[str, JsonValue],
     argument: str,
     value: JsonValue,
-) -> dict[str, JsonValue]:
+) -> tuple[OperationDefinitionNode, FieldNode, dict[str, JsonValue]]:
     """Replace one unshared root argument through its AST mapping; copy all other variables."""
     variables = deepcopy(original_variables)
-    selected = next((arg for arg in root.arguments if arg.name.value == argument), None)
+    selected = next((arg for arg in root.arguments or () if arg.name.value == argument), None)
     if selected is not None and isinstance(selected.value, VariableNode):
         name = selected.value.name.value
         uses = _VariableUses()
         visit(operation.selection_set, uses)
-        for directive in operation.directives:
+        for directive in operation.directives or ():
             visit(directive, uses)
         if uses.names.count(name) != 1:
             raise SafeExecutionValidationError(
@@ -217,18 +221,24 @@ def substitute_root_argument(
         )
         variable = VariableNode(name=NameNode(value=name))
         definition = VariableDefinitionNode(variable=variable, type=parse_type(argument_type))
-        operation.variable_definitions = (*operation.variable_definitions, definition)
-        new_argument = ArgumentNode(name=NameNode(value=argument), value=variable)
-        root.arguments = (
-            tuple(new_argument if arg is selected else arg for arg in root.arguments)
-            if selected
-            else (*root.arguments, new_argument)
+        operation = replace_ast_node(
+            operation, variable_definitions=(*(operation.variable_definitions or ()), definition)
         )
+        new_argument = ArgumentNode(name=NameNode(value=argument), value=variable)
+        arguments = (
+            tuple(new_argument if arg is selected else arg for arg in root.arguments or ())
+            if selected
+            else (*(root.arguments or ()), new_argument)
+        )
+        root = replace_ast_node(root, arguments=arguments)
         variables[name] = value
-    return variables
+    operation = replace_ast_node(
+        operation, selection_set=replace_ast_node(operation.selection_set, selections=(root,))
+    )
+    return operation, root, variables
 
 
-def ensure_direct_selection(root: FieldNode, name: str) -> None:
+def ensure_direct_selection(root: FieldNode, name: str) -> FieldNode:
     """Preserve selections and require an unconditional direct confirmation field."""
     fields = root.selection_set.selections if root.selection_set else ()
     identity = next(
@@ -237,9 +247,13 @@ def ensure_direct_selection(root: FieldNode, name: str) -> None:
     if identity and identity.directives:
         raise SafeExecutionValidationError("Conditional identity selection is unsupported.")
     if identity is None:
-        root.selection_set = SelectionSetNode(
-            selections=(*fields, FieldNode(name=NameNode(value=name)))
+        return replace_ast_node(
+            root,
+            selection_set=SelectionSetNode(
+                selections=(*fields, FieldNode(name=NameNode(value=name)))
+            ),
         )
+    return root
 
 
 def exact_id_matches(value: object, identifier: str) -> bool | None:

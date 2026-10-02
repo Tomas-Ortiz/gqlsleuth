@@ -1565,7 +1565,7 @@ This structure is a target architecture. Directories and modules should only be 
 - **Data validation and configuration:** Pydantic
 - **HTTP:** HTTPX
 - **WebSocket:** websockets
-- **GraphQL:** graphql-core
+- **GraphQL:** graphql-core >=3.2.12,<3.4 (3.2 and 3.3 compatibility)
 - **Reporting:** Jinja2
 - **JWT inspection:** bounded standard-library decoding; no PyJWT dependency
 - **Rules and configuration files:** PyYAML
@@ -2134,8 +2134,10 @@ is introduced. Missing eligible Queries produce structured limitations.
 
 `graphql/multiplicity.py` reuses Phase 9 structural/name-only safety validation and graphql-core
 ASTs. It rejects ambiguous existing aliases, named operations and extra definitions. Alias
-generation deep-copies the exact top-level field three times as `gqlsleuthAlias1` through
+generation constructs three copies of the exact top-level field as `gqlsleuthAlias1` through
 `gqlsleuthAlias3`, preserving arguments, directives, nested selections and variable definitions.
+AST changes use constructor-based replacement and rebuild changed ancestors, supporting both
+mutable 3.2 nodes and frozen 3.3 nodes without post-construction assignments.
 Batching sends two exact existing Query/variables objects in one JSON array. Neither operation
 regenerates inputs, removes bounds, changes business values, or increases nested selection depth.
 The central HTTP model already supports top-level JSON arrays; transport settings and redirect

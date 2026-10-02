@@ -14,6 +14,7 @@ from gqlsleuth.domain.exceptions import SafeExecutionValidationError
 from gqlsleuth.domain.file_upload import FileUploadCase, UploadOutcome
 from gqlsleuth.domain.schema import ParsedSchema, SchemaTypeKind, TypeReference
 from gqlsleuth.graphql.active_execution import assess_mutation
+from gqlsleuth.graphql.ast_nodes import replace_ast_node
 from gqlsleuth.graphql.object_authorization import (
     substitute_root_argument,
     validate_object_document,
@@ -64,7 +65,7 @@ def build_upload_document(
     assert isinstance(root, FieldNode)
     if operation.directives:
         raise SafeExecutionValidationError("Conditional upload operations are unsupported.")
-    selected = next((a for a in root.arguments if a.name.value == argument.name), None)
+    selected = next((a for a in root.arguments or () if a.name.value == argument.name), None)
     if selected and not isinstance(selected.value, VariableNode):
         raise SafeExecutionValidationError("Upload requires an unambiguous generated variable.")
     if selected:
@@ -92,10 +93,10 @@ def build_upload_document(
         value = merge_path(value, generated, case.path[1:])
     else:
         value = generated
-    variables = substitute_root_argument(
+    operation, root, variables = substitute_root_argument(
         operation, root, root_schema, base.variables, argument.name, value
     )
-    query = print_ast(document)
+    query = print_ast(replace_ast_node(document, definitions=(operation,)))
     validate_object_document(native, query, variables, kind=OperationKind.MUTATION)
     if not assess_mutation(schema, replace(base, query_text=query, variables=variables)).selectable:
         raise SafeExecutionValidationError("Prepared upload Mutation is not eligible.")
@@ -116,7 +117,7 @@ def build_upload_document(
                     populated_uploads(child.type, value[child.name], (*path, child.name))
 
     selected_variable = None
-    for arg in root.arguments:
+    for arg in root.arguments or ():
         if not isinstance(arg.value, VariableNode):
             raise SafeExecutionValidationError("Generated upload arguments must use variables.")
         definition = next(a for a in root_schema.arguments if a.name == arg.name.value)

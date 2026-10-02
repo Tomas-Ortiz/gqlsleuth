@@ -4,6 +4,11 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ## [Unreleased]
 
+### Fixed
+
+- ACTIVE preparation supports graphql-core 3.3's immutable AST nodes while retaining 3.2
+  compatibility, including alias multiplicity and shared authorization/depth transformations.
+
 ## [1.0.0] - 2026-09-28
 
 ### Added

@@ -19,6 +19,7 @@ from gqlsleuth.domain.multiplicity import (
 )
 from gqlsleuth.domain.query_generation import QueryGenerationResult
 from gqlsleuth.domain.schema import ParsedSchema
+from gqlsleuth.graphql.ast_nodes import replace_ast_node
 from gqlsleuth.graphql.safe_execution import (
     classify_execution_response,
     side_effect_tokens,
@@ -57,12 +58,12 @@ def prepare_probe(
     query = base.query_text or ""
     request: JsonValue
     if probe_type is MultiplicityProbeType.ALIAS_MULTIPLICITY:
-        copies = []
-        for name in ALIAS_NAMES:
-            cloned = deepcopy(field)
-            cloned.alias = NameNode(value=name)
-            copies.append(cloned)
-        operation.selection_set.selections = tuple(copies)
+        copies = tuple(replace_ast_node(field, alias=NameNode(value=name)) for name in ALIAS_NAMES)
+        operation = replace_ast_node(
+            operation,
+            selection_set=replace_ast_node(operation.selection_set, selections=copies),
+        )
+        document = replace_ast_node(document, definitions=(operation,))
         query = print_ast(document)
         parse(query)
         request = {"query": query, "variables": deepcopy(base.variables)}
