@@ -340,6 +340,11 @@ The completed deterministic assessment and requested reports remain available. D
 shows concise AI highlights; verbose output and human reports show the complete retained
 interpretation. AI is optional and disabled without `--ai`.
 
+Developers can check the real local model without scanning a target:
+`uv run python scripts/check_ollama.py`. This optional acceptance script uses a mocked SAFE scan
+and one real local inference, validates structured output and supplied references, and never
+downloads a model. It is not part of normal pytest/CI.
+
 ## Capability reference
 
 Examples use fake values and assume the named operation exists in the target's retained schema.

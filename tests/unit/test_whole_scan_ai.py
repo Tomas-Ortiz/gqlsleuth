@@ -13,7 +13,7 @@ from fixtures.ai_response import security_answer_fields
 from fixtures.whole_scan_ai import CANARIES, RAW, SDL, assemble
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import MAX_AI_OPERATIONS, MAX_CONTEXT_BYTES, AIAnalysisStatus, AIContext
-from gqlsleuth.ai.prompt import execution_summary, validate_interpretation
+from gqlsleuth.ai.prompt import build_response_schema, execution_summary, validate_interpretation
 from gqlsleuth.ai.security_context import ordered_security_context
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.infrastructure.http import HttpClient
@@ -244,6 +244,37 @@ def test_valid_correlation_and_scoped_control_are_only_interpretation(whole):
     output = validate_interpretation(json.dumps(payload), context)
     assert len(output.cross_capability_insights) == 1
     assert not hasattr(output, "findings") and not hasattr(output, "evidence")
+
+
+def test_generation_controls_are_restricted_to_supplied_control_facts(whole):
+    context = build_ai_context(whole)
+    schema = build_response_schema(context)
+    definitions = schema["$defs"]
+    facts = [f.security_fact_ref for f in context.security_facts]
+    for name in ("AISecuritySummary", "AILimitation"):
+        assert definitions[name]["properties"]["security_facts"]["items"]["enum"] == facts
+    assert definitions["AISecurityFactReview"]["properties"]["security_fact_ref"]["enum"] == facts
+    assert definitions["AISecuritySummary"]["properties"]["security_facts"]["minItems"] == 1
+    expected = [
+        f.security_fact_ref
+        for f in context.security_facts
+        if f.control_observed or f.evaluation == "satisfied"
+    ]
+    assert expected
+    assert (
+        schema["$defs"]["AIControlObservation"]["properties"]["security_fact_ref"]["enum"]
+        == expected
+    )
+    assert schema["properties"]["cross_capability_insights"]["maxItems"] == 4
+    by_ref = {f.security_fact_ref: f.capability for f in context.security_facts}
+    alternatives = definitions["AICrossCapabilityInsight"]["properties"]["security_facts"]["oneOf"]
+    for alternative in alternatives:
+        assert alternative["minItems"] == alternative["maxItems"] == 2
+        # Ollama supports tuple-form items; prefixItems is not enforced by its converter.
+        assert "prefixItems" not in alternative
+        first, second = alternative["items"]
+        assert all(by_ref[a] != by_ref[b] for a in first["enum"] for b in second["enum"])
+    assert {r for option in alternatives for r in option["items"][0]["enum"]} == set(by_ref)
 
 
 def test_human_ai_sections_escape_prose_and_preserve_deterministic_reports(whole):

@@ -313,3 +313,12 @@ class AIServiceError(Exception):
         super().__init__(message)
         self.status = status
         self.code = code
+
+
+class AIValidationError(ValueError):
+    """Safe validation diagnostics: static stage/code only, never model text or input."""
+
+    def __init__(self, stage: Literal["json", "schema", "reference", "facts"], code: str) -> None:
+        super().__init__(f"AI interpretation failed {stage} validation ({code}).")
+        self.stage = stage
+        self.code = code

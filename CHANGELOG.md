@@ -6,6 +6,9 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Fixed
 
+- Local qwen3 structured output now constrains references to supplied operation/fact values,
+  preventing bare operation names from failing strict reference validation. Internal diagnostics
+  distinguish parsing, schema, reference and execution-fact failures without exposing model text.
 - ACTIVE preparation supports graphql-core 3.3's immutable AST nodes while retaining 3.2
   compatibility, including alias multiplicity and shared authorization/depth transformations.
 

@@ -1186,6 +1186,12 @@ and scoring. Operation references must be placed in dedicated fields rather than
 The adapter uses Ollama's JSON-schema `format`, `stream: false`, and `think: false`, with temperature
 zero, an 8192-token model context, and a 2048-token output cap. This follows the local
 [Ollama structured-output API](https://docs.ollama.com/capabilities/structured-outputs).
+The per-request schema constrains operation and security-fact reference fields to exact
+allowlisted values using enums; bare operation names are not accepted as substitutes for full
+endpoint/kind/name references. Control references are further restricted to supplied controls,
+and cross-capability generation uses pairs from different supplied capabilities. Sections without
+eligible references are constrained to empty arrays. This narrows generation
+without adding context or replacing independent post-response validation.
 Pydantic strictly validates final `message.content` into `AIInterpretation`: the canonical
 ordinary execution summary plus Security Summary, Security Fact Reviews, Security Controls
 Observed, Cross-Capability Analysis, Operation Review and Limitations. The Phase 31 roadmap entry
@@ -1218,6 +1224,15 @@ inference timeout with a five-second connection timeout, and a 128 KiB response 
 found, connection and timeout failures, HTTP errors, malformed envelopes, incomplete generation,
 and invalid final answers become controlled AI-only statuses. They cannot fail the completed
 deterministic scan or prevent report generation. No new Python dependencies are required.
+Internal validation errors identify JSON parsing, typed schema, reference or execution-fact
+validation using static stage/codes. Result error codes distinguish these failures without
+retaining model content or Pydantic input dumps; default console wording remains unchanged.
+
+For optional real-model acceptance, run `uv run python scripts/check_ollama.py` with an already
+running local Ollama and installed `qwen3:8b`. The script uses a synthetic fully mocked SAFE scan,
+makes exactly one real local inference and validates the ordinary typed/reference contract.
+A socket/DNS guard permits only `127.0.0.1:11434`; there are no public target requests, model
+downloads or retained raw replies. This manual check is separate from deterministic pytest/CI.
 
 Reports receive the already-produced result and perform no inference themselves. Optional JSON
 `ai_interpretation` is an additive field under report schema version 1, absent without `--ai`.

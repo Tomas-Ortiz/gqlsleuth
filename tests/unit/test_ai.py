@@ -10,8 +10,14 @@ import pytest
 
 from fixtures.ai_response import security_answer_fields
 from gqlsleuth.ai.context import build_ai_context, serialize_context
-from gqlsleuth.ai.models import MAX_AI_OPERATIONS, MAX_CONTEXT_BYTES, AIAnalysisStatus
-from gqlsleuth.ai.prompt import execution_summary, validate_interpretation
+from gqlsleuth.ai.models import (
+    MAX_AI_OPERATIONS,
+    MAX_CONTEXT_BYTES,
+    AIAnalysisStatus,
+    AIServiceError,
+    AIValidationError,
+)
+from gqlsleuth.ai.prompt import build_response_schema, execution_summary, validate_interpretation
 from gqlsleuth.application.active_execution import (
     execute_selected_mutations,
     prepare_active_mutations,
@@ -56,6 +62,104 @@ def envelope(content):
             "thinking": "THINKING_CANARY_DO_NOT_KEEP",
         },
     }
+
+
+def test_generation_schema_uses_exact_supplied_refs_and_does_not_mutate_context(completed):
+    context = build_ai_context(completed)
+    before = serialize_context(context)
+    schema = build_response_schema(context)
+    definitions = schema["$defs"]
+    refs = [o.operation for o in context.operations]
+    assert definitions["AIOperationExplanation"]["properties"]["operation"]["enum"] == refs
+    assert definitions["AILimitation"]["properties"]["operations"]["items"]["enum"] == refs
+    assert serialize_context(context) == before
+    assert build_response_schema(context) == schema
+
+
+def test_empty_reference_sets_produce_empty_sections_without_invented_refs(completed):
+    context = build_ai_context(completed).model_copy(
+        update={"operations": (), "security_facts": ()}
+    )
+    schema = build_response_schema(context)
+    for section in (
+        "operation_review",
+        "security_fact_reviews",
+        "control_observations",
+        "cross_capability_insights",
+    ):
+        assert schema["properties"][section]["maxItems"] == 0
+    for name in ("AISecuritySummary", "AILimitation"):
+        assert schema["$defs"][name]["properties"]["security_facts"]["maxItems"] == 0
+    # Building an empty schema must not modify the next populated request.
+    assert (
+        build_response_schema(build_ai_context(completed))["properties"]["operation_review"][
+            "maxItems"
+        ]
+        == 8
+    )
+
+
+@pytest.mark.parametrize(
+    "change,stage,code",
+    [
+        ("malformed", "json", "invalid_json"),
+        ("schema", "schema", "invalid_schema"),
+        ("bare_name", "reference", "unknown_operation_reference"),
+        ("unknown_fact", "reference", "invalid_security_references"),
+        ("summary", "facts", "execution_summary_mismatch"),
+    ],
+)
+def test_validation_diagnostics_are_safe_and_never_retry(completed, change, stage, code):
+    context = build_ai_context(completed)
+    payload = answer(context)
+    if change == "schema":
+        payload["MODEL_OUTPUT_CANARY"] = "PRIVATE_CANARY"
+    elif change == "bare_name":
+        # Reproduced with real qwen3: valid typed JSON, but bare names instead of refs.
+        payload["operation_review"][0]["operation"] = context.operations[0].name
+    elif change == "unknown_fact":
+        payload["security_summary"]["security_facts"] = ["SF99999"]
+    elif change == "summary":
+        payload["scan_summary"]["text"] = "All requests succeeded PRIVATE_CANARY"
+    content = "{PRIVATE_CANARY" if change == "malformed" else json.dumps(payload)
+    with pytest.raises(AIValidationError) as caught:
+        validate_interpretation(content, context)
+    assert (caught.value.stage, caught.value.code) == (stage, code)
+    assert "CANARY" not in str(caught.value)
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json=envelope(content))
+
+    client = OllamaClient(transport=httpx.MockTransport(handler))
+    with pytest.raises(AIServiceError) as service_error:
+        client.interpret(context)
+    assert service_error.value.code == code
+    assert service_error.value.__cause__.stage == stage
+    assert len(calls) == 1
+    assert "CANARY" not in str(service_error.value)
+
+
+@pytest.mark.parametrize("thinking", [None, "", "<think>PRIVATE_REASONING_CANARY</think>"])
+def test_final_content_is_validated_independently_of_thinking_metadata(completed, thinking):
+    context = build_ai_context(completed)
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        outgoing = json.loads(request.content)
+        assert outgoing["format"] == build_response_schema(context)
+        assert outgoing["think"] is False and outgoing["stream"] is False
+        result = envelope(json.dumps(answer(context)))
+        result["message"]["thinking"] = thinking
+        return httpx.Response(200, json=result)
+
+    result = interpret_completed_scan(
+        completed, client=OllamaClient(transport=httpx.MockTransport(handler))
+    )
+    assert result.status is AIAnalysisStatus.SUCCESS and len(calls) == 1
+    assert "PRIVATE_REASONING_CANARY" not in str(result)
 
 
 @pytest.fixture
@@ -391,7 +495,7 @@ def test_operation_review_replaces_obsolete_fields_and_retains_bounds(completed,
         ("oversized", AIAnalysisStatus.INVALID_RESPONSE, "invalid_response"),
         ("nested_envelope", AIAnalysisStatus.INVALID_RESPONSE, "invalid_response"),
         ("nested_valid_envelope", AIAnalysisStatus.INVALID_RESPONSE, "invalid_response"),
-        ("nested_content", AIAnalysisStatus.INVALID_RESPONSE, "invalid_response"),
+        ("nested_content", AIAnalysisStatus.INVALID_RESPONSE, "invalid_json"),
         ("nested_404", AIAnalysisStatus.HTTP_ERROR, "http_error"),
     ],
 )

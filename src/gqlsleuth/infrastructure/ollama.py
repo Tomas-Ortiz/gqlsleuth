@@ -12,8 +12,9 @@ from gqlsleuth.ai.models import (
     AIContext,
     AIInterpretation,
     AIServiceError,
+    AIValidationError,
 )
-from gqlsleuth.ai.prompt import build_system_prompt, execution_summary, validate_interpretation
+from gqlsleuth.ai.prompt import build_response_schema, build_system_prompt, validate_interpretation
 from gqlsleuth.graphql.response_json import decode_response_json, response_json_object
 
 OLLAMA_ENDPOINT = "http://127.0.0.1:11434"
@@ -43,19 +44,6 @@ class OllamaClient:
                 "context_too_large",
                 "AI context exceeds its size limit.",
             )
-        response_schema = AIInterpretation.model_json_schema()
-        # Constrain the summary at generation time as well as validating it afterward.
-        # Other AIStatement fields retain their ordinary bounded interpretation text.
-        response_schema["properties"]["scan_summary"] = {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["text", "operations", "security_facts"],
-            "properties": {
-                "text": {"type": "string", "enum": [execution_summary(context)]},
-                "operations": {"type": "array", "items": {"type": "string"}, "maxItems": 0},
-                "security_facts": {"type": "array", "items": {"type": "string"}, "maxItems": 0},
-            },
-        }
         payload = {
             "model": DEFAULT_AI_MODEL,
             "stream": False,
@@ -64,7 +52,7 @@ class OllamaClient:
                 {"role": "system", "content": build_system_prompt(context)},
                 {"role": "user", "content": serialized},
             ],
-            "format": response_schema,
+            "format": build_response_schema(context),
             "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 2048},
         }
         try:
@@ -110,6 +98,12 @@ class OllamaClient:
                 AIAnalysisStatus.UNAVAILABLE,
                 "connection_failed",
                 "Could not connect to local Ollama.",
+            ) from error
+        except AIValidationError as error:
+            raise AIServiceError(
+                AIAnalysisStatus.INVALID_RESPONSE,
+                error.code,
+                "Local Ollama returned an invalid structured interpretation.",
             ) from error
         except (ValueError, RecursionError) as error:
             raise AIServiceError(
