@@ -110,6 +110,11 @@ def test_cli_consent_reports_isolated_named_path(
     input_text = consent + "\n" if named else "\n" + consent + "\n\n"
     result = CliRunner().invoke(cli.app, options, input=input_text)
     assert result.exit_code == 0, (result.exception, result.output)
+    assert result.output.count("Pre-ACTIVE Context") == 1
+    if interactive:
+        assert result.output.index("Pre-ACTIVE Context") < result.output.index(
+            "Execute IDOR / BOLA detection?"
+        )
     probes = [
         req
         for req in controlled

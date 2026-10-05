@@ -13,6 +13,8 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Fixed
 
+- ACTIVE scans show compact endpoint/schema context before candidate selection, while keeping
+  final Findings and control conclusions in the completed assessment.
 - Introspection presentation distinguishes an enabled minimal probe from blocked or failed full
   schema retrieval, retaining the server reason and existing evidence without extra requests.
 - Local Ollama failures now distinguish initial connection failures from interrupted requests,

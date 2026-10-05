@@ -96,6 +96,7 @@ from gqlsleuth.presentation.console import (
     render_differential,
     render_error,
     render_mutations,
+    render_pre_active_context,
     render_reports,
     render_root_help,
     render_scan_header,
@@ -845,6 +846,27 @@ def scan(
     schema_scan = result.query_generation.operation_analysis.schema_scan
     mode = schema_scan.introspection.detection.discovery.mode
     report_result: SafeExecutionScanResult | ActiveExecutionScanResult = result
+    if mode is ScanMode.ACTIVE:
+        render_pre_active_context(
+            console,
+            result,
+            include_standard_stages=idor_context_label is None,
+            requested_groups=tuple(
+                label
+                for label, enabled in (
+                    ("Authentication & Tokens", auth_security_review),
+                    ("Sequential Object Discovery", idor_discovery),
+                    ("IDOR / BOLA", idor_review),
+                    ("Mutation Authorization", mutation_auth_review),
+                    ("Sensitive Inputs", sensitive_case is not None),
+                    ("File Upload", selected_upload_case is not None),
+                    ("Rate Limiting & Abuse Controls", rate_limit_review),
+                    ("Federation", federation_review),
+                    ("Subscriptions & WebSocket", subscription_review),
+                )
+                if enabled
+            ),
+        )
     if idor_context_label is not None:
         # This exception enters only the IDOR capability, never other named-context ACTIVE stages.
         detection = _run_idor_stage(

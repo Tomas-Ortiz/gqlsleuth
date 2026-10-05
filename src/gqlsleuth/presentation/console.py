@@ -24,8 +24,13 @@ from gqlsleuth.application.schema_parsing import EndpointSchemaResult
 from gqlsleuth.domain.active import MutationDecision, MutationPreview
 from gqlsleuth.domain.differential import DIFFERENTIAL_NOTICE
 from gqlsleuth.domain.execution import QueryExecutionStatus
+from gqlsleuth.domain.models import ConfidenceLevel, ScanMode
 from gqlsleuth.domain.query_generation import QueryGenerationResult
-from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
+from gqlsleuth.domain.security_review import (
+    SECURITY_REVIEW_NOTICE,
+    GraphQLSecurityReviewResult,
+    SecurityCandidateType,
+)
 from gqlsleuth.infrastructure.http import HttpResponse
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.differential import present_differential
@@ -190,6 +195,86 @@ def render_active_gate(console: Console) -> None:
     console.print(
         "ACTIVE mode: use only against systems you are authorized to test.", style="gql.warning"
     )
+
+
+def render_pre_active_context(
+    console: Console,
+    result: SafeExecutionScanResult,
+    *,
+    requested_groups: tuple[str, ...] = (),
+    include_standard_stages: bool = True,
+) -> None:
+    """Show retained SAFE facts before ACTIVE interaction, without preparing probes."""
+    generation = result.query_generation
+    schema_scan = generation.operation_analysis.schema_scan
+    introspection = schema_scan.introspection
+    discovery = introspection.detection.discovery
+    if discovery.mode is not ScanMode.ACTIVE:
+        return
+    _section(console, "Pre-ACTIVE Context")
+    console.print("SAFE workflow complete; ACTIVE validation has not run.", style="gql.secondary")
+    console.print(Text("Target: " + discovery.target.original_url, style="gql.metadata"))
+    console.print("Mode: ACTIVE")
+    endpoints = tuple(
+        dict.fromkeys(
+            item.candidate_url
+            for item in introspection.detection.detections
+            if item.confidence in {ConfidenceLevel.CONFIRMED, ConfidenceLevel.PROBABLE}
+        )
+    )
+    summaries = []
+    for endpoint in endpoints:
+        console.print(Text("Endpoint: " + endpoint, style="gql.metadata"))
+        probe = next(
+            (item for item in introspection.introspections if item.endpoint == endpoint), None
+        )
+        schema = next(
+            (item for item in schema_scan.schemas if item.endpoint == endpoint and item.success),
+            None,
+        )
+        summary = schema.summary if schema else None
+        if summary is not None:
+            summaries.append(summary)
+        rows = Table.grid(padding=(0, 2))
+        rows.add_row(
+            "Introspection",
+            _status(probe.minimal_result.status.value) if probe else Text("Not attempted"),
+        )
+        rows.add_row(
+            "Schema retrieval",
+            _status(probe.schema_retrieval_status.value) if probe else Text("Not attempted"),
+        )
+        for label, count in (
+            ("Queries", summary.query_field_count if summary else None),
+            ("Mutations", summary.mutation_field_count if summary else None),
+            ("Subscriptions", summary.subscription_field_count if summary else None),
+        ):
+            rows.add_row(label, str(count) if count is not None else "Not available")
+        console.print(rows)
+    if not endpoints:
+        console.print("No confirmed or probable GraphQL endpoints.", style="gql.secondary")
+    if len(summaries) < len(endpoints):
+        console.print("Operation counts require a parsed schema.", style="gql.secondary")
+    groups = []
+    if include_standard_stages:
+        if any(item.attempted for item in result.executions):
+            groups.append("Query-Shape")
+        if generation.security_review and any(
+            item.candidate_type is SecurityCandidateType.RECURSIVE_GRAPH_REVIEW
+            for item in generation.security_review.candidates
+        ):
+            groups.append("Query-Depth")
+        if any(summary.mutation_field_count for summary in summaries):
+            groups.append("Mutations")
+    if groups:
+        console.print("Surface-supported ACTIVE groups: " + ", ".join(groups), markup=False)
+    if requested_groups:
+        console.print("Requested ACTIVE groups: " + ", ".join(requested_groups), markup=False)
+    if groups or requested_groups:
+        console.print(
+            "Eligibility and exact requests follow in previews; confirmation is still required.",
+            style="gql.secondary",
+        )
 
 
 def render_state_warning(console: Console) -> None:

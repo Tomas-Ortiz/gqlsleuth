@@ -3501,6 +3501,14 @@ is final exactly once. Named-context differential presentation remains pairwise.
 Canonical JSON/model/evidence relationships and Phase 31 AIContext, prompts, validation, serialized
 Ollama request and inference count are unchanged. No new networking or dependencies. Exact selected
 ACTIVE requests remain visible before each separate default-NO consent, even without verbose.
+After the SAFE workflow and before any ACTIVE preview or prompt, a compact **Pre-ACTIVE Context**
+shows the target, ACTIVE mode, confirmed/probable endpoints, separate introspection/retrieval
+states, and per-endpoint schema operation counts. Missing schema counts remain unavailable.
+Surface-supported groups use retained Query attempts, recursive-graph candidates and Mutation
+counts; explicitly requested optional groups are labeled separately. These are context, not
+eligibility guarantees or Findings/control conclusions: existing previews still validate requests
+and require the same selections/confirmations. No probe is prepared by this view, and the final
+assessment remains after ACTIVE execution. SAFE mode receives no additional summary.
 Offline tests preserve request traces, privacy canaries, source data, report JSON and AI payloads;
 `uv run python tests/fixtures/phase32_smoke.py` creates eight representative presentation artifacts
 under ignored `reports/phase32`, using only mocked transports and fake data. No Phase 33 scope.

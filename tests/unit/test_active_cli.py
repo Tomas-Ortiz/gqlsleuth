@@ -1,16 +1,20 @@
 """Offline terminal selection, one-confirmation, and non-interactive Active Mode tests."""
 
 import json
+from io import StringIO
 
 import httpx
 import pytest
+from rich.console import Console
 from typer.testing import CliRunner
 
 import gqlsleuth.cli as cli
+from fixtures.cli_output import plain_cli_output
 from gqlsleuth.application.active_execution import execute_selected_mutations
 from gqlsleuth.domain.active import MutationDecision
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.infrastructure.http import HttpClient
+from gqlsleuth.presentation.console import CONSOLE_THEME
 
 
 @pytest.fixture
@@ -55,7 +59,47 @@ def test_safe_never_enters_mutation_stage_or_prompts(active_cli, monkeypatch):
     result = _invoke(mode="safe")
     assert result.exit_code == 0
     assert "Active Mutation candidates" not in result.stdout
+    assert "Pre-ACTIVE Context" not in result.stdout
     assert active_cli == ([], [])
+
+
+@pytest.mark.parametrize("verbose", [False, True])
+def test_pre_active_context_precedes_previews_and_every_prompt(active_cli, monkeypatch, verbose):
+    stream = StringIO()
+    monkeypatch.setattr(cli, "console", Console(file=stream, width=100, theme=CONSOLE_THEME))
+    prompt_calls = []
+
+    def check_context(function):
+        def checked(*args, **kwargs):
+            text = plain_cli_output(stream.getvalue(), normalize_whitespace=True)
+            assert "Pre-ACTIVE Context" in text
+            assert "Target: https://example.com/graphql" in text
+            assert "Mode: ACTIVE" in text
+            assert "Endpoint: https://example.com/graphql" in text
+            assert "Introspection ENABLED" in text
+            assert "Queries 2" in text and "Mutations 6" in text and "Subscriptions 0" in text
+            assert "GQLSleuth Assessment" not in text
+            prompt_calls.append(args[0])
+            return function(*args, **kwargs)
+
+        return checked
+
+    monkeypatch.setattr(cli.typer, "prompt", check_context(cli.typer.prompt))
+    monkeypatch.setattr(cli.typer, "confirm", check_context(cli.typer.confirm))
+    options = ["scan", "https://example.com", "--mode", "active"]
+    if verbose:
+        options.append("--verbose")
+    result = CliRunner().invoke(cli.app, options, input="\n1\ny\n")
+    assert result.exit_code == 0, result.exception
+    assert prompt_calls and "Query-Shape" in prompt_calls[0]
+    assert len(active_cli[0]) == 1
+    text = plain_cli_output(stream.getvalue())
+    assert text.count("Pre-ACTIVE Context") == 1
+    assert text.index("Pre-ACTIVE Context") < text.index("Active Query-Shape candidates")
+    assert text.index("Active Mutation candidates") < text.index("GQLSleuth Assessment")
+    context = text.split("Pre-ACTIVE Context", 1)[1].split("Active Query-Shape candidates", 1)[0]
+    assert "Query-Shape, Mutations" in context
+    assert "Findings" not in context and "Security Validation" not in context
 
 
 def test_empty_selection_displays_previews_and_executes_none(active_cli):
