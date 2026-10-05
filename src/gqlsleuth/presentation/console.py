@@ -224,7 +224,7 @@ def render_pre_active_context(
     )
     summaries = []
     for endpoint in endpoints:
-        console.print(Text("Endpoint: " + endpoint, style="gql.metadata"))
+        console.print(Text("GraphQL endpoint: " + endpoint, style="gql.metadata"))
         probe = next(
             (item for item in introspection.introspections if item.endpoint == endpoint), None
         )

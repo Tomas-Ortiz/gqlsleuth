@@ -14,7 +14,7 @@ from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import AIAnalysisStatus, AIInterpretation, AIInterpretationResult
 from gqlsleuth.ai.prompt import build_system_prompt, execution_summary
 from gqlsleuth.domain.authorization_policy import PolicyStatus
-from gqlsleuth.domain.models import ScanMode
+from gqlsleuth.domain.models import ConfidenceLevel, ScanMode, Target
 from gqlsleuth.domain.subscriptions import SubscriptionOutcome
 from gqlsleuth.infrastructure.http import HttpClient
 from gqlsleuth.infrastructure.ollama import OllamaClient
@@ -122,6 +122,52 @@ def test_distinct_endpoint_overview_and_findings_remain_visible(whole):
     summary = build_assessment(report)
     assert dict(summary.overview)["GraphQL endpoints"] == "2 confirmed / probable"
     assert len(summary.findings) == 6
+
+
+@pytest.mark.parametrize("mode", [ScanMode.SAFE, ScanMode.ACTIVE])
+@pytest.mark.parametrize("width", [40, 100])
+@pytest.mark.parametrize("endpoint_count", [0, 1, 2])
+def test_compact_target_and_discovered_endpoints(
+    phase_ten_scan, monkeypatch, mode, width, endpoint_count
+):
+    import gqlsleuth.presentation.completed as completed
+
+    safe, _ = phase_ten_scan(mode=mode)
+    report = build_report(safe)
+    target = "https://Example.test:5013/"
+    urls = ("https://example.test:5013/graphql", "https://example.test:5013/api/graphql")
+    confidences = (ConfidenceLevel.CONFIRMED, ConfidenceLevel.PROBABLE)
+    report = replace(
+        report,
+        target=Target.parse(target),
+        endpoints=tuple(
+            replace(report.endpoints[0], endpoint=url, confidence=confidence)
+            for url, confidence in zip(urls[:endpoint_count], confidences, strict=False)
+        )
+        + tuple(
+            replace(
+                report.endpoints[0],
+                endpoint=f"https://example.test/{confidence.value}",
+                confidence=confidence,
+            )
+            for confidence in (ConfidenceLevel.POSSIBLE, ConfidenceLevel.NOT_DETECTED)
+        ),
+    )
+    monkeypatch.setattr(completed, "build_report", lambda *args, **kwargs: report)
+    text = capture(safe, width=width)
+    header = text.split("GraphQL Overview", 1)[0]
+    # Rich may fold long URLs on narrow terminals, but must preserve every character.
+    compact_header = "".join(header.split())
+    assert "Target:" + target in compact_header
+    assert "Mode:" + mode.value.upper() in compact_header
+    assert header.count("GraphQL endpoint:") == endpoint_count
+    for url in urls[:endpoint_count]:
+        assert "GraphQLendpoint:" + url in compact_header
+    assert "possible" not in header and "not_detected" not in header
+    if endpoint_count == 2:
+        assert compact_header.index(urls[0]) < compact_header.index(urls[1])
+    assert f"{endpoint_count} confirmed / probable" in " ".join(text.split())
+    assert max(map(len, text.splitlines())) <= width
 
 
 @pytest.mark.parametrize("width", [45, 80, 120])

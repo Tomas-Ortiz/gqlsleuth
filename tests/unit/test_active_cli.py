@@ -75,7 +75,7 @@ def test_pre_active_context_precedes_previews_and_every_prompt(active_cli, monke
             assert "Pre-ACTIVE Context" in text
             assert "Target: https://example.com/graphql" in text
             assert "Mode: ACTIVE" in text
-            assert "Endpoint: https://example.com/graphql" in text
+            assert "GraphQL endpoint: https://example.com/graphql" in text
             assert "Introspection ENABLED" in text
             assert "Queries 2" in text and "Mutations 6" in text and "Subscriptions 0" in text
             assert "GQLSleuth Assessment" not in text

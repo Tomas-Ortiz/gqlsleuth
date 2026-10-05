@@ -8,7 +8,7 @@ import pytest
 from rich.console import Console
 
 from fixtures.cli_output import plain_cli_output
-from gqlsleuth.domain.models import ConfidenceLevel, ScanMode
+from gqlsleuth.domain.models import ConfidenceLevel, ScanMode, Target
 from gqlsleuth.graphql.introspection import IntrospectionStatus
 from gqlsleuth.infrastructure.http import HttpClient
 from gqlsleuth.presentation.console import CONSOLE_THEME, render_pre_active_context
@@ -42,6 +42,7 @@ def test_pre_active_context_uses_existing_surface_facts_without_work(
     stream = StringIO()
     render_pre_active_context(Console(file=stream, width=width, theme=CONSOLE_THEME), safe)
     text = plain_cli_output(stream.getvalue(), normalize_whitespace=True)
+    assert "GraphQL endpoint:" in text
     assert "Queries 1" in text and "Mutations 1" in text and "Subscriptions 1" in text
     assert "Query-Shape, Query-Depth, Mutations" in text
     assert "ACTIVE validation has not run" in text
@@ -57,12 +58,16 @@ def test_context_lists_only_confirmed_probable_endpoints_in_order(phase_ten_scan
     first = introspection.detection.detections[0]
     second_url = "https://example.com/second"
     omitted_url = "https://example.com/possible"
+    not_detected_url = "https://example.com/not_detected"
+    target = "https://example.com/"
     detection = replace(
         introspection.detection,
+        discovery=replace(introspection.detection.discovery, target=Target.parse(target)),
         detections=(
             first,
             replace(first, candidate_url=second_url, confidence=ConfidenceLevel.PROBABLE),
             replace(first, candidate_url=omitted_url, confidence=ConfidenceLevel.POSSIBLE),
+            replace(first, candidate_url=not_detected_url, confidence=ConfidenceLevel.NOT_DETECTED),
         ),
     )
     safe = with_schema_scan(
@@ -71,10 +76,34 @@ def test_context_lists_only_confirmed_probable_endpoints_in_order(phase_ten_scan
     stream = StringIO()
     render_pre_active_context(Console(file=stream, theme=CONSOLE_THEME), safe)
     text = plain_cli_output(stream.getvalue(), normalize_whitespace=True)
+    assert "Target: " + target + " Mode: ACTIVE" in text
+    assert text.count("GraphQL endpoint:") == 2
+    assert "GraphQL endpoint: " + first.candidate_url in text
+    assert "GraphQL endpoint: " + second_url in text
     assert text.index(first.candidate_url) < text.index(second_url)
-    assert omitted_url not in text
+    assert omitted_url not in text and not_detected_url not in text
     assert "Queries Not available" in text
     assert "Operation counts require a parsed schema" in text
+
+
+def test_context_does_not_invent_an_endpoint(phase_ten_scan):
+    safe, _ = phase_ten_scan()
+    scan = safe.query_generation.operation_analysis.schema_scan
+    introspection = scan.introspection
+    detection = replace(
+        introspection.detection,
+        detections=tuple(
+            replace(item, confidence=ConfidenceLevel.NOT_DETECTED)
+            for item in introspection.detection.detections
+        ),
+    )
+    safe = with_schema_scan(
+        safe, replace(scan, introspection=replace(introspection, detection=detection))
+    )
+    stream = StringIO()
+    render_pre_active_context(Console(file=stream, theme=CONSOLE_THEME), safe)
+    assert "GraphQL endpoint:" not in stream.getvalue()
+    assert "No confirmed or probable GraphQL endpoints." in stream.getvalue()
 
 
 def test_blocked_schema_preserves_enabled_probe_and_unavailable_counts(phase_ten_scan):

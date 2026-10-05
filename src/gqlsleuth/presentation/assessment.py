@@ -51,6 +51,7 @@ class AssessmentItem:
 class AssessmentPresentationSummary:
     target: str
     mode: str
+    endpoints: tuple[str, ...]
     overview: tuple[tuple[str, str], ...]
     findings: tuple[AssessmentItem, ...]
     additional_policy_violations: int
@@ -234,6 +235,7 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
     return AssessmentPresentationSummary(
         report.target.original_url,
         report.mode.value.upper(),
+        tuple(e.endpoint for e in meaningful),
         overview,
         findings,
         sum(e.state == "VIOLATION" for e in events),

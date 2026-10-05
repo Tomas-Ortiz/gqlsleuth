@@ -70,6 +70,8 @@ def render_completed_assessment(
     view = build_assessment(report)
     _section(console, "GQLSleuth Assessment")
     console.print(Text("Target: " + view.target, style="gql.metadata"))
+    for endpoint in view.endpoints:
+        console.print(Text("GraphQL endpoint: " + endpoint, style="gql.metadata"))
     console.print("Mode: " + view.mode)
     _section(console, "GraphQL Overview")
     _rows(console, view.overview)
