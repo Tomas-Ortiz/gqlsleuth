@@ -4,6 +4,13 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ## [Unreleased]
 
+### Changed
+
+- All CLI commands and help paths start with the installed version and author header exactly once.
+  Scans show terminal activity indicators during deterministic scanning and optional local AI
+  interpretation. Interactive prompts remain
+  free of spinner rendering.
+
 ### Fixed
 
 - Introspection presentation distinguishes an enabled minimal probe from blocked or failed full

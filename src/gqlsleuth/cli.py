@@ -90,6 +90,7 @@ from gqlsleuth.presentation.authorization_policy import render_authorization_pol
 from gqlsleuth.presentation.completed import render_completed_assessment
 from gqlsleuth.presentation.console import (
     CONSOLE_THEME,
+    activity_status,
     render_active_gate,
     render_ai,
     render_differential,
@@ -97,6 +98,7 @@ from gqlsleuth.presentation.console import (
     render_mutations,
     render_reports,
     render_root_help,
+    render_scan_header,
     render_state_warning,
 )
 from gqlsleuth.presentation.federation import render_federation
@@ -112,7 +114,19 @@ from gqlsleuth.reporting.models import ReportFormat
 
 
 class RootHelpGroup(TyperGroup):
-    """Keep Typer's header/options and group scan guidance in root command help."""
+    """Share product identity across invocations and retain custom root help guidance."""
+
+    def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
+        # Eager --help and bare-command help exit before command callbacks run.
+        # Context metadata is per invocation; nested groups share the marker.
+        if (
+            ctx.parent is None
+            and not ctx.resilient_parsing
+            and not ctx.meta.get("gqlsleuth_header_rendered")
+        ):
+            render_scan_header(console, __version__)
+            ctx.meta["gqlsleuth_header_rendered"] = True
+        return super().parse_args(ctx, args)
 
     def format_help(self, ctx: Context, formatter: HelpFormatter) -> None:
         commands = []
@@ -766,43 +780,44 @@ def scan(
                 style="gql.warning",
             )
         result: DifferentialScanResult | SafeExecutionScanResult
-        if object_auth_review:
-            result = run_object_authorization_scan(
-                target,
-                cases=object_cases,
-                contexts=contexts or (),
-                mode=mode,
-                http_settings=http_settings,
-                nested_auth_review=nested_auth_review,
-            )
-        elif contexts is not None and not idor_review:
-            if nested_auth_review:
-                result = run_differential_scan(
+        with activity_status(console, "Scanning target, please wait..."):
+            if object_auth_review:
+                result = run_object_authorization_scan(
                     target,
-                    contexts=contexts,
-                    http_settings=http_settings,
-                    mode=mode,
-                    nested_auth_review=True,
-                )
-            else:
-                result = run_differential_scan(
-                    target, contexts=contexts, http_settings=http_settings, mode=mode
-                )
-        else:
-            result = run_safe_execution_scan(target, mode=mode, http_settings=http_settings)
-        if auth_policy_review:
-            result = replace(
-                result,
-                authorization_policy_validation=evaluate_authorization_policy(
-                    result.object_authorization_review,
-                    assertions=policy_assertions,
                     cases=object_cases,
-                    context_names=tuple(item.name for item in contexts or ()),
-                    enabled=True,
-                    object_review_enabled=object_auth_review,
+                    contexts=contexts or (),
                     mode=mode,
-                ),
-            )
+                    http_settings=http_settings,
+                    nested_auth_review=nested_auth_review,
+                )
+            elif contexts is not None and not idor_review:
+                if nested_auth_review:
+                    result = run_differential_scan(
+                        target,
+                        contexts=contexts,
+                        http_settings=http_settings,
+                        mode=mode,
+                        nested_auth_review=True,
+                    )
+                else:
+                    result = run_differential_scan(
+                        target, contexts=contexts, http_settings=http_settings, mode=mode
+                    )
+            else:
+                result = run_safe_execution_scan(target, mode=mode, http_settings=http_settings)
+            if auth_policy_review:
+                result = replace(
+                    result,
+                    authorization_policy_validation=evaluate_authorization_policy(
+                        result.object_authorization_review,
+                        assertions=policy_assertions,
+                        cases=object_cases,
+                        context_names=tuple(item.name for item in contexts or ()),
+                        enabled=True,
+                        object_review_enabled=object_auth_review,
+                        mode=mode,
+                    ),
+                )
     except GQLSleuthError as error:
         render_error(error_console, str(error))
         raise typer.Exit(code=2) from None
@@ -936,12 +951,12 @@ def scan(
             )
     ai_result = None
     if ai:
-        console.print("AI assistance: interpreting the completed scan with local qwen3:8b...")
-        ai_result = (
-            interpret_completed_scan(report_result)
-            if ai_timeout is None
-            else interpret_completed_scan(report_result, timeout_seconds=ai_timeout)
-        )
+        with activity_status(console, "Interpreting completed scan with local qwen3:8b..."):
+            ai_result = (
+                interpret_completed_scan(report_result)
+                if ai_timeout is None
+                else interpret_completed_scan(report_result, timeout_seconds=ai_timeout)
+            )
     render_completed_assessment(console, report_result, verbose=verbose, ai_result=ai_result)
     if ai_result is not None:
         render_ai(console, ai_result, verbose=verbose)

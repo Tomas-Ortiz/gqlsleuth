@@ -1,6 +1,8 @@
 """Compact and detailed Rich views of existing results; never initiate scanner work."""
 
 from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
 from json import dumps
 from pathlib import Path
 
@@ -152,6 +154,36 @@ def _render_table(console: Console, table: Table) -> None:
 
 def render_error(console: Console, message: str, *, label: str = "Error") -> None:
     console.print(Text.assemble((f"{label}: ", "gql.error"), capability_wording(message)))
+
+
+def render_scan_header(console: Console, version: str) -> None:
+    """Identify the installed tool before any scan warnings, work, or interaction."""
+    console.print(
+        Panel(
+            Text.assemble(
+                ("GQLSleuth", "gql.section"),
+                f" {version}\n",
+                ("Author: Tomás Ortiz", "gql.secondary"),
+            ),
+            border_style="gql.metadata",
+            expand=False,
+            padding=(0, 1),
+            safe_box=True,
+        )
+    )
+
+
+@contextmanager
+def activity_status(console: Console, message: str) -> Iterator[None]:
+    """Animate only on terminals, and always stop before subsequent output or prompts."""
+    if not console.is_terminal:
+        console.print(message, markup=False)
+        yield
+        return
+    # ASCII frames also work on legacy Windows terminals. Rich removes the transient
+    # status on exit, including when the workflow raises a controlled error.
+    with console.status(Text(message), spinner="line", spinner_style="gql.metadata"):
+        yield
 
 
 def render_active_gate(console: Console) -> None:

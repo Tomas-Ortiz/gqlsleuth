@@ -4,6 +4,7 @@ import re
 from io import StringIO
 
 import pytest
+import typer
 from rich.console import Console
 from rich.style import Style
 from typer.main import get_command
@@ -37,6 +38,43 @@ HELP_COMMANDS = (
     ("version", "Show the installed GQLSleuth version."),
     ("scan", "Discover and analyze GraphQL; safely execute validated Query operations."),
 )
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["future"],
+        ["future", "--help"],
+        ["tools", "future"],
+        ["tools", "--help"],
+        ["tools", "future", "--help"],
+    ],
+)
+def test_future_commands_and_nested_groups_inherit_header_once_per_invocation(arguments):
+    future_app = typer.Typer(cls=cli.RootHelpGroup)
+    nested = typer.Typer(cls=cli.RootHelpGroup)
+
+    @future_app.callback()
+    def root():
+        pass
+
+    @future_app.command()
+    @nested.command()
+    def future():
+        """A test-only command without any header call."""
+        typer.echo("Future command ran.")
+
+    future_app.add_typer(nested, name="tools")
+    # Reusing the app must not retain a process-global 'already rendered' flag.
+    for _ in range(2):
+        result = CliRunner().invoke(future_app, arguments)
+        assert result.exit_code == 0, result.exception
+        output = plain_cli_output(result.stdout)
+        assert output.count("Author: Tomás Ortiz") == 1
+        if "--help" in arguments:
+            assert output.index("Author:") < output.index("Usage:")
+        else:
+            assert output.index("Author:") < output.index("Future command ran.")
 
 
 @pytest.mark.parametrize("flag", ["--help", "-h"])

@@ -3463,6 +3463,17 @@ Evidence, transport objects or copied capability graphs. It does not inspect res
 evaluate policy, reinterpret schemas/JWTs/frames, or call AI. Existing report projections provide
 technical details; no second capability analysis is introduced.
 
+Every CLI invocation first renders a compact GQLSleuth header with the installed package version
+and author attribution. The root Typer group's argument-parsing hook covers eager help, bare
+commands, and future subcommands; a per-context marker prevents duplicate headers, including
+nested groups. Resilient parsing for completion remains quiet. The version command retains its
+ordinary version line below the common header. A transient Rich status runs during deterministic
+scanning, stops before
+ACTIVE previews/prompts, and resumes with a separate interpretation message during optional local
+AI inference. ASCII spinner frames support legacy terminals; redirected output receives one
+plain status line per stage. Status contexts close on failure and before final assessment/report
+output. These indicators neither initiate work nor change request ordering or inference counts.
+
 Findings count only retained Finding objects. Additional violations exclude policy events already
 represented by those Findings. Scoped controls come from existing satisfied policies, explicit
 denials or supported rejection/control outcomes. Unresolved includes enabled checks with existing

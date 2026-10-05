@@ -13,6 +13,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 import gqlsleuth
+from fixtures.cli_output import plain_cli_output
 from gqlsleuth.cli import app
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +24,9 @@ def test_version_surfaces_match_project_metadata():
     assert gqlsleuth.__version__ == importlib.metadata.version("gqlsleuth") == project["version"]
     result = CliRunner().invoke(app, ["version"])
     assert result.exit_code == 0
-    assert result.stdout.strip() == f"GQLSleuth {project['version']}"
+    output = plain_cli_output(result.stdout)
+    assert output.count("Author: Tomás Ortiz") == 1
+    assert output.strip().splitlines()[-1] == f"GQLSleuth {project['version']}"
 
 
 def test_source_only_version_is_explicitly_unknown(monkeypatch):

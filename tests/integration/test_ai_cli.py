@@ -1,14 +1,19 @@
 """Offline CLI sequencing and AI fallback without altering completed scan behavior."""
 
 import json
+from contextlib import contextmanager
 from copy import deepcopy
+from io import StringIO
 
 import httpx
 import pytest
+from rich.console import Console
 from typer.testing import CliRunner
 
 import gqlsleuth.cli as cli
 from fixtures.ai_response import security_answer_fields
+from fixtures.cli_output import plain_cli_output
+from gqlsleuth import __version__
 from gqlsleuth.ai.models import AIContext
 from gqlsleuth.ai.prompt import execution_summary
 from gqlsleuth.application.active_execution import execute_selected_mutations
@@ -16,6 +21,7 @@ from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.infrastructure.http import HttpClient
 from gqlsleuth.infrastructure.ollama import OllamaClient
+from gqlsleuth.presentation.console import CONSOLE_THEME
 
 
 @pytest.fixture
@@ -102,6 +108,73 @@ def invoke(mode, *, ai=False, reports=False, input="\n", verbose=False):
 
 
 @pytest.mark.parametrize("mode", ["safe", "active"])
+@pytest.mark.parametrize("ai", [False, True])
+@pytest.mark.parametrize("verbose", [False, True])
+def test_scan_header_and_terminal_status_lifetimes(ai_cli, monkeypatch, mode, ai, verbose):
+    stream = StringIO()
+    console = Console(file=stream, force_terminal=True, width=80, theme=CONSOLE_THEME)
+    monkeypatch.setattr(cli, "console", console)
+    original_status = console.status
+    running = []
+    activities = []
+
+    @contextmanager
+    def tracked_status(message, **kwargs):
+        assert not running
+        assert kwargs["spinner"] == "line"
+        with original_status(message, **kwargs) as status:
+            running.append(str(message))
+            activities.append(str(message))
+            try:
+                yield status
+            finally:
+                running.clear()
+
+    monkeypatch.setattr(console, "status", tracked_status)
+    original_scan = cli.run_safe_execution_scan
+    original_interpret = cli.interpret_completed_scan
+
+    def scan(*args, **kwargs):
+        assert running == ["Scanning target, please wait..."]
+        already_displayed = plain_cli_output(stream.getvalue())
+        assert f"GQLSleuth {__version__}" in already_displayed
+        assert "Author: Tomás Ortiz" in already_displayed
+        return original_scan(*args, **kwargs)
+
+    def interpret(*args, **kwargs):
+        assert running == ["Interpreting completed scan with local qwen3:8b..."]
+        return original_interpret(*args, **kwargs)
+
+    def require_idle(function):
+        def checked(*args, **kwargs):
+            assert not running, "Status must stop before presentation or interaction"
+            return function(*args, **kwargs)
+
+        return checked
+
+    monkeypatch.setattr(cli, "run_safe_execution_scan", scan)
+    monkeypatch.setattr(cli, "interpret_completed_scan", interpret)
+    for name in dir(cli):
+        if name.startswith("render_"):
+            monkeypatch.setattr(cli, name, require_idle(getattr(cli, name)))
+    monkeypatch.setattr(cli.typer, "prompt", require_idle(cli.typer.prompt))
+    monkeypatch.setattr(cli.typer, "confirm", require_idle(cli.typer.confirm))
+    monkeypatch.setattr(cli, "generate_reports", require_idle(cli.generate_reports))
+    result = invoke(mode, ai=ai, reports=True, input="1\ny\n", verbose=verbose)
+    assert result.exit_code == 0, result.exception
+    assert activities == ["Scanning target, please wait..."] + (
+        ["Interpreting completed scan with local qwen3:8b..."] if ai else []
+    )
+    assert not running
+    text = plain_cli_output(stream.getvalue())
+    assert text.count("Author: Tomás Ortiz") == 1
+    if mode == "active":
+        assert text.index("Author: Tomás Ortiz") < text.index("ACTIVE mode:")
+        assert len(ai_cli[1]) == 1
+    assert len(ai_cli[2]) == int(ai)
+
+
+@pytest.mark.parametrize("mode", ["safe", "active"])
 def test_disabled_ai_makes_no_inference_or_ai_report_section(ai_cli, tmp_path, mode, monkeypatch):
     monkeypatch.setattr(
         cli, "interpret_completed_scan", lambda *args: pytest.fail("AI was enabled without --ai")
@@ -130,9 +203,7 @@ def test_one_ai_inference_follows_completed_safe_and_active_behavior(
     events.clear()
     result = invoke(mode, ai=True, input=selection, verbose=verbose)
     assert result.exit_code == baseline.exit_code == 0
-    displayed = result.stdout.replace(
-        "AI assistance: interpreting the completed scan with local qwen3:8b...\n", ""
-    )
+    displayed = result.stdout.replace("Interpreting completed scan with local qwen3:8b...\n", "")
     assert displayed.split("\nAI-Assisted Interpretation")[0] == baseline.stdout
     assert events == (["safe", "active_complete", "ai"] if mode == "active" else ["safe", "ai"])
     assert len(ai_requests) == 1

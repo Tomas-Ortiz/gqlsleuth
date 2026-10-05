@@ -3,18 +3,25 @@
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
-from io import StringIO
+from io import BytesIO, StringIO, TextIOWrapper
 
 import pytest
 from rich.console import Console
+from rich.status import Status
 from typer.testing import CliRunner
 
 import gqlsleuth.application.reporting as reporting
 import gqlsleuth.cli as cli
 from fixtures.cli_output import plain_cli_output
+from gqlsleuth import __version__
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.infrastructure.http import HttpClient
-from gqlsleuth.presentation.console import CONSOLE_THEME, render_scan
+from gqlsleuth.presentation.console import (
+    CONSOLE_THEME,
+    activity_status,
+    render_scan,
+    render_scan_header,
+)
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.models import ReportFormat
 from gqlsleuth.reporting.renderers import render_report
@@ -85,6 +92,52 @@ def completed_cli(phase_ten_scan, monkeypatch, tmp_path):
 
 def invoke(*options):
     return CliRunner().invoke(cli.app, ["scan", "https://example.com", *options])
+
+
+@pytest.mark.parametrize("width,legacy_windows", [(32, False), (32, True), (80, False)])
+def test_compact_startup_header_wraps_on_modern_and_legacy_terminals(width, legacy_windows):
+    encoding = "cp1252" if legacy_windows else "utf-8"
+    buffer = BytesIO()
+    stream = TextIOWrapper(buffer, encoding=encoding, write_through=True)
+    console = Console(
+        file=stream,
+        force_terminal=True,
+        width=width,
+        legacy_windows=legacy_windows,
+        theme=CONSOLE_THEME,
+    )
+    render_scan_header(console, __version__)
+    text = plain_cli_output(buffer.getvalue().decode(encoding).replace("\r\n", "\n"))
+    assert f"GQLSleuth {__version__}" in text
+    assert "Author: Tomás Ortiz" in text
+    assert len(text.splitlines()) <= 5
+    assert all(len(line) <= width for line in text.splitlines())
+
+
+def test_redirected_scan_has_header_and_static_status_without_ansi(completed_cli):
+    result = invoke()
+    assert result.exit_code == 0
+    assert "\x1b[" not in result.stdout
+    assert "Author: Tomás Ortiz" in result.stdout
+    assert result.stdout.index("Author:") < result.stdout.index("Scanning target, please wait...")
+
+
+def test_terminal_status_stops_on_failure(monkeypatch):
+    console = Console(file=StringIO(), force_terminal=True, theme=CONSOLE_THEME)
+    stopped = []
+    original_stop = Status.stop
+
+    def stop(status):
+        original_stop(status)
+        stopped.append(status)
+
+    monkeypatch.setattr(Status, "stop", stop)
+    with (
+        pytest.raises(RuntimeError, match="test failure"),
+        activity_status(console, "Scanning target, please wait..."),
+    ):
+        raise RuntimeError("test failure")
+    assert len(stopped) == 1
 
 
 @pytest.mark.parametrize(

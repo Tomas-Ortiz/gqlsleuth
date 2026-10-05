@@ -63,7 +63,13 @@ def main() -> None:
     guard_dir = Path.cwd() / "guard"
     guard_dir.mkdir()
     (guard_dir / "sitecustomize.py").write_text(NETWORK_GUARD, encoding="utf-8")
-    env = {**os.environ, "PYTHONPATH": str(guard_dir), "PYTHONNOUSERSITE": "1"}
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(guard_dir),
+        "PYTHONNOUSERSITE": "1",
+        # Match the subprocess decoder, including accented attribution on Windows.
+        "PYTHONIOENCODING": "utf-8",
+    }
     env.pop("PYTHONHOME", None)
     subprocess.run(
         [sys.executable, "-c", "import sys; assert sys._gqlsleuth_smoke_guard"],
@@ -83,8 +89,9 @@ def main() -> None:
             errors="replace",
         )
         assert "GQLSleuth" in completed.stdout or "GraphQL" in completed.stdout
+        assert completed.stdout.count("Author: Tomás Ortiz") == 1
         if options == ("version",):
-            assert completed.stdout.strip() == f"GQLSleuth {args.version}"
+            assert completed.stdout.strip().splitlines()[-1] == f"GQLSleuth {args.version}"
         print("Installed CLI passed:", " ".join(options))
 
     schema = introspection_from_schema(build_schema("type Query { greeting: String }"))

@@ -1,5 +1,7 @@
 """Tests for stable CLI behavior and Phase 9 workflow delegation."""
 
+from importlib.metadata import version
+
 import pytest
 from typer.testing import CliRunner
 
@@ -259,7 +261,43 @@ def test_version_command_reports_package_version() -> None:
     result = runner.invoke(app, ["version"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == f"GQLSleuth {__version__}"
+    assert plain_cli_output(result.stdout).strip().splitlines()[-1] == f"GQLSleuth {__version__}"
+
+
+@pytest.mark.parametrize(
+    "arguments,exit_code",
+    [
+        ([], 2),
+        (["--help"], 0),
+        (["-h"], 0),
+        (["version"], 0),
+        (["version", "--help"], 0),
+        (["version", "-h"], 0),
+        (["scan"], 2),
+        (["scan", "--help"], 0),
+        (["scan", "-h"], 0),
+        (["scan", "https://example.com"], 0),
+        (["unknown-command"], 2),
+    ],
+)
+def test_all_cli_paths_begin_with_one_installed_product_header(monkeypatch, arguments, exit_code):
+    renders = []
+    original = cli_module.render_scan_header
+
+    def render(console, installed_version):
+        renders.append(installed_version)
+        original(console, installed_version)
+
+    monkeypatch.setattr(cli_module, "render_scan_header", render)
+    result = runner.invoke(app, arguments)
+    assert result.exit_code == exit_code
+    installed_version = version("gqlsleuth")
+    assert renders == [installed_version]
+    output = plain_cli_output(result.output)
+    assert output.count("Author: Tomás Ortiz") == 1
+    assert f"GQLSleuth {installed_version}" in output.split("Author:", 1)[0]
+    if "Usage:" in output:
+        assert output.index("Author:") < output.index("Usage:")
 
 
 def test_scan_command_runs_safe_execution_workflow() -> None:
