@@ -3501,6 +3501,10 @@ is final exactly once. Named-context differential presentation remains pairwise.
 Canonical JSON/model/evidence relationships and Phase 31 AIContext, prompts, validation, serialized
 Ollama request and inference count are unchanged. No new networking or dependencies. Exact selected
 ACTIVE requests remain visible before each separate default-NO consent, even without verbose.
+Ctrl+C at any ACTIVE prompt ends the entire scan interaction with `Scan cancelled by user.`
+and exit code 130, without later stages or target requests. Terminal input aborts (including EOF)
+also terminate the interaction. Enter retains each prompt's stated default/skip behavior, and
+declining confirmation still declines only that capability's batch.
 After the SAFE workflow and before any ACTIVE preview or prompt, a compact **Pre-ACTIVE Context**
 shows the target, ACTIVE mode, confirmed/probable endpoints, separate introspection/retrieval
 states, and per-endpoint schema operation counts. Missing schema counts remain unavailable.

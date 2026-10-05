@@ -288,6 +288,10 @@ their opt-in flags and exact cases. Each active capability has its **own default
 one confirmation never authorizes another capability. Non-interactive stdin executes no active
 probes or Mutations. There is no automatic-confirmation or execute-all switch.
 
+Press **Ctrl+C** at any ACTIVE selection or confirmation to cancel the entire scan interaction
+(exit code **130**); no later stages or requests run. Enter keeps the prompt's stated skip/default
+behavior, and answering No declines only that capability's batch.
+
 Generic Mutations require successful generation, defensive validation and safety classification,
 explicit selection of at most **five**, then **one final batch confirmation**. Destructive primary
 action tokens remain blocked with no override. Mutation success means execution, not a confirmed

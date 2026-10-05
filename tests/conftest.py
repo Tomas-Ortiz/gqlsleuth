@@ -2,11 +2,14 @@
 
 import json
 from collections.abc import Callable
+from importlib import import_module
 
 import httpx
 import pytest
 from graphql import build_schema, introspection_from_schema
+from typer.testing import CliRunner
 
+from gqlsleuth import cli
 from gqlsleuth.application.graphql_detection import discover_and_detect_graphql
 from gqlsleuth.application.introspection import introspect_detected_endpoints
 from gqlsleuth.application.operation_analysis import analyze_schema_results
@@ -29,6 +32,47 @@ type Mutation {
   burnHistory: String
 }
 """
+
+
+@pytest.fixture
+def run_interrupted_cli(monkeypatch):
+    """Interrupt actual Typer input and assert the scan stops at that prompt."""
+
+    def run(arguments, requests, prompt_hint, input_text="", *, raw_interrupt=False):
+        at_interrupt = []
+        monkeypatch.setattr(cli, "_interactive_stdin", lambda: True)
+
+        def wrap(original):
+            def interact(text, *args, **kwargs):
+                assert not at_interrupt, "Another prompt appeared after Ctrl+C"
+                if prompt_hint not in text:
+                    return original(text, *args, **kwargs)
+                at_interrupt.append(tuple(requests))
+
+                def ctrl_c(*args, **kwargs):
+                    raise KeyboardInterrupt
+
+                if raw_interrupt:
+                    ctrl_c()
+                # Exercise Typer's real KeyboardInterrupt -> Abort translation too.
+                with monkeypatch.context() as patch:
+                    patch.setattr(import_module(original.__module__), "visible_prompt_func", ctrl_c)
+                    return original(text, *args, **kwargs)
+
+            return interact
+
+        monkeypatch.setattr(cli.typer, "prompt", wrap(cli.typer.prompt))
+        monkeypatch.setattr(cli.typer, "confirm", wrap(cli.typer.confirm))
+        result = CliRunner().invoke(cli.app, arguments, input=input_text)
+        assert len(at_interrupt) == 1, (result.exception, result.output)
+        assert tuple(requests) == at_interrupt[0], "Target requests continued after Ctrl+C"
+        assert result.exit_code == 130, (result.exception, result.output)
+        assert result.output.count("Scan cancelled by user.") == 1
+        assert "Traceback" not in result.output
+        assert "GQLSleuth Assessment" not in result.output
+        return result
+
+    return run
 
 
 @pytest.fixture

@@ -6,7 +6,7 @@ import sys
 from copy import copy
 from dataclasses import replace
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 from pydantic import JsonValue
@@ -1009,6 +1009,12 @@ def _interactive_stdin() -> bool:
     return sys.stdin is not None and sys.stdin.isatty()
 
 
+def _cancel_scan() -> NoReturn:
+    """End the entire interaction, rather than treating a terminal abort as a skip."""
+    console.print("Scan cancelled by user.")
+    raise typer.Exit(code=130) from None
+
+
 def _run_multiplicity_stage(
     safe: SafeExecutionScanResult,
     *,
@@ -1062,8 +1068,7 @@ def _run_multiplicity_stage(
                 )
                 break
         except (typer.Abort, EOFError, KeyboardInterrupt):
-            selected, confirmed = (), False
-            console.print("Query-Shape selection/confirmation cancelled.")
+            _cancel_scan()
     result = execute_multiplicity(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
@@ -1126,8 +1131,7 @@ def _run_subscription_stage(
             "Execute subscription / WebSocket security validation?", default=False
         )
     except (typer.Abort, EOFError, KeyboardInterrupt):
-        console.print("Subscription confirmation cancelled; zero WebSocket connections.")
-        return preview
+        _cancel_scan()
     result = session.execute(preview=preview, confirmed=confirmed)
     return result
 
@@ -1195,8 +1199,7 @@ def _run_federation_stage(
         render_federation(console, preview, preview=True)
         confirmed = typer.confirm("Execute federation security validation?", default=False)
     except (typer.Abort, EOFError, KeyboardInterrupt):
-        console.print("Federation confirmation cancelled; zero federation requests.")
-        return preview
+        _cancel_scan()
     result = session.execute(preview=preview, confirmed=confirmed)
     return result
 
@@ -1261,8 +1264,7 @@ def _run_file_upload_stage(
         render_file_upload(console, preview, preview=True)
         confirmed = typer.confirm("Execute file upload security validation?", default=False)
     except (typer.Abort, EOFError, KeyboardInterrupt):
-        console.print("Upload confirmation cancelled; zero uploads sent.")
-        return preview
+        _cancel_scan()
     result = session.execute(preview=preview, confirmed=confirmed)
     return result
 
@@ -1305,8 +1307,7 @@ def _run_abuse_control_stage(
             "Execute rate limiting / abuse-control validation?", default=False
         )
     except (typer.Abort, EOFError, KeyboardInterrupt):
-        console.print("Abuse-control selection/confirmation cancelled; zero repeats execute.")
-        return preview
+        _cancel_scan()
     result = session.execute(preview=preview, confirmed=confirmed)
     return result
 
@@ -1381,10 +1382,7 @@ def _run_authentication_stage(
             "Execute authentication and token security probes?", default=False
         )
     except (typer.Abort, EOFError, KeyboardInterrupt):
-        console.print(
-            "Authentication security selection/confirmation cancelled; zero probes execute."
-        )
-        return preview
+        _cancel_scan()
     result = session.execute(preview=preview, confirmed=confirmed)
     return result
 
@@ -1415,7 +1413,7 @@ def _run_idor_stage(
         try:
             confirmed = typer.confirm("Execute IDOR / BOLA detection?", default=False)
         except (typer.Abort, EOFError, KeyboardInterrupt):
-            console.print("IDOR/BOLA confirmation cancelled.")
+            _cancel_scan()
     result = session.execute(preview=preview, confirmed=confirmed)
     return result
 
@@ -1442,7 +1440,7 @@ def _run_sequential_stage(
         try:
             confirmed = typer.confirm("Execute bounded sequential object discovery?", default=False)
         except (typer.Abort, EOFError, KeyboardInterrupt):
-            console.print("Sequential-discovery confirmation cancelled.")
+            _cancel_scan()
     result = execute_sequential_discovery(
         safe,
         seeds=seeds,
@@ -1474,7 +1472,7 @@ def _run_sensitive_stage(
         try:
             confirmed = typer.confirm("Execute sensitive input validation?", default=False)
         except (typer.Abort, EOFError, KeyboardInterrupt):
-            console.print("Sensitive input confirmation cancelled.")
+            _cancel_scan()
     result = session.execute(preview=preview, confirmed=confirmed)
     return result
 
@@ -1501,7 +1499,7 @@ def _run_mutation_authorization_stage(
         try:
             confirmed = typer.confirm("Execute mutation authorization validation?", default=False)
         except (typer.Abort, EOFError, KeyboardInterrupt):
-            console.print("Mutation authorization confirmation cancelled.")
+            _cancel_scan()
     result = session.execute(preview=preview, confirmed=confirmed)
     return result
 
@@ -1537,7 +1535,7 @@ def _run_active_stage(
                     f"Execute these {len(selected)} selected Mutations?", default=False
                 )
         except (typer.Abort, EOFError, KeyboardInterrupt):
-            console.print("Mutation selection/confirmation cancelled; zero Mutations will execute.")
+            _cancel_scan()
     result = execute_selected_mutations(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )
@@ -1594,8 +1592,7 @@ def _run_depth_stage(
                 )
                 break
         except (typer.Abort, EOFError, KeyboardInterrupt):
-            selected, confirmed = (), False
-            console.print("Query-Depth selection/confirmation cancelled.")
+            _cancel_scan()
     result = execute_query_depth(
         preview, selected_indices=selected, confirmed=confirmed, http_settings=http_settings
     )

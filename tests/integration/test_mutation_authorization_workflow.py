@@ -54,6 +54,15 @@ def controlled(monkeypatch):
     return requests
 
 
+def test_ctrl_c_stops_mutation_authorization_confirmation(controlled, run_interrupted_cli):
+    run_interrupted_cli(
+        ["scan", TARGET, *OPTIONS],
+        controlled,
+        "Execute mutation authorization",
+        "\n",
+    )
+
+
 @pytest.mark.parametrize(
     "options",
     [

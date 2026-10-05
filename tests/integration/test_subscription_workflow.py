@@ -32,6 +32,24 @@ def controlled(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "prompt_hint,input_text",
+    [
+        ("Select one Subscription", ""),
+        ("Execute subscription", "2\n"),
+    ],
+)
+def test_ctrl_c_stops_subscription_interaction(
+    controlled, run_interrupted_cli, prompt_hint, input_text
+):
+    run_interrupted_cli(
+        ["scan", "http://127.0.0.1/graphql", "--mode", "active", "--subscription-review"],
+        controlled,
+        prompt_hint,
+        input_text,
+    )
+
+
+@pytest.mark.parametrize(
     "options",
     [
         ["--subscription-review"],

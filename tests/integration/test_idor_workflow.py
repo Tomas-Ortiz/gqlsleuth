@@ -58,6 +58,14 @@ def controlled(monkeypatch):
     return requests
 
 
+@pytest.mark.parametrize("named", [False, True])
+def test_ctrl_c_stops_idor_confirmation(controlled, run_interrupted_cli, named):
+    options = ["scan", TARGET, *OPTIONS]
+    if named:
+        options += ["--auth-context", "tester=Authorization: Bearer " + SECRET]
+    run_interrupted_cli(options, controlled, "Execute IDOR / BOLA", "" if named else "\n")
+
+
 @pytest.mark.parametrize(
     "extra",
     [

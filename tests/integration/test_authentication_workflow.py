@@ -43,6 +43,20 @@ def controlled(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "prompt_hint,input_text",
+    [
+        ("Select one Query", ""),
+        ("Select JWT probes", "1\n"),
+        ("Execute authentication", "1\n\n"),
+    ],
+)
+def test_ctrl_c_stops_authentication_interaction(
+    controlled, run_interrupted_cli, prompt_hint, input_text
+):
+    run_interrupted_cli(["scan", TARGET, *OPTIONS], controlled, prompt_hint, input_text)
+
+
+@pytest.mark.parametrize(
     "options",
     [
         ["--auth-security-review"],

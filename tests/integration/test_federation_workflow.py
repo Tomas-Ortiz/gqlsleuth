@@ -35,6 +35,35 @@ def controlled(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "prompt_hint,input_text",
+    [
+        ("Select one federation endpoint", ""),
+        ("Select federation probes", "1\n"),
+        ("Execute federation", "1\n1\n"),
+    ],
+)
+def test_ctrl_c_stops_federation_interaction(
+    controlled, run_interrupted_cli, prompt_hint, input_text
+):
+    run_interrupted_cli(
+        [
+            "scan",
+            TARGET,
+            "--mode",
+            "active",
+            "--federation-review",
+            "--federation-sdl-expect-deny",
+            *CASE,
+            "-H",
+            "Authorization: Bearer PHASE29_CLI_CANARY",
+        ],
+        controlled,
+        prompt_hint,
+        input_text,
+    )
+
+
+@pytest.mark.parametrize(
     "options",
     [
         ["--federation-review"],

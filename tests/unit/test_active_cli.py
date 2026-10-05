@@ -250,11 +250,11 @@ def test_interrupted_selection_or_confirmation_fails_closed(active_cli, monkeypa
 
     monkeypatch.setattr(cli.typer, stage, interrupted)
     result = _invoke("1\n")
-    assert result.exit_code == 0
-    assert "cancelled" in result.stdout
-    assert active_cli[0] == []
-    assert not active_cli[1][0].confirmed
-    assert active_cli[1][0].execution_evidence == ()
+    assert result.exit_code == 130
+    assert result.stdout.count("Scan cancelled by user.") == 1
+    assert active_cli == ([], [])
+    assert "GQLSleuth Assessment" not in result.stdout
+    assert "Traceback" not in result.stdout
 
 
 @pytest.mark.parametrize("flag", ["--authorized", "--yes", "--force"])

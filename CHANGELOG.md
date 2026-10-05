@@ -13,6 +13,8 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Fixed
 
+- Ctrl+C at any ACTIVE selection or confirmation now stops the entire scan interaction with
+  exit code 130, instead of continuing into later capabilities.
 - ACTIVE scans show compact endpoint/schema context before candidate selection, while keeping
   final Findings and control conclusions in the completed assessment.
 - Introspection presentation distinguishes an enabled minimal probe from blocked or failed full

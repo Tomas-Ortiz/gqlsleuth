@@ -178,6 +178,32 @@ def test_cli_invalid_selection_can_be_cleared(depth_cli, invalid):
     assert not depth_cli[0]
 
 
+@pytest.mark.parametrize("raw_interrupt", [False, True])
+@pytest.mark.parametrize(
+    "prompt_hint,input_text,prior_requests",
+    [
+        ("Select active Query-Shape", "", 0),
+        ("selected active Query-Shape", "1\n", 0),
+        ("Select active Query-Depth", "\n", 0),
+        ("selected active Query-Depth", "\n1\n", 0),
+        ("Select Mutations", "\n\n", 0),
+        ("selected Mutations?", "\n\n1\n", 0),
+        ("Select active Query-Depth", "1\ny\n", 1),
+    ],
+)
+def test_ctrl_c_stops_active_pipeline(
+    depth_cli, run_interrupted_cli, prompt_hint, input_text, prior_requests, raw_interrupt
+):
+    run_interrupted_cli(
+        ["scan", "https://example.com", "--mode", "active"],
+        depth_cli[0],
+        prompt_hint,
+        input_text,
+        raw_interrupt=raw_interrupt,
+    )
+    assert len(depth_cli[0]) == prior_requests
+
+
 def test_cli_maximum_selection(depth_cli, phase_ten_scan, monkeypatch):
     safe = second_endpoint(phase_ten_scan(SDL)[0])
     monkeypatch.setattr(cli, "run_safe_execution_scan", lambda *args, **kwargs: safe)

@@ -45,6 +45,35 @@ def controlled(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "prompt_hint,input_text",
+    [
+        ("Select upload-validation", "\n"),
+        ("Execute file upload", "\n\n"),
+    ],
+)
+def test_ctrl_c_stops_upload_interaction(
+    controlled, local_file, run_interrupted_cli, prompt_hint, input_text
+):
+    run_interrupted_cli(
+        [
+            "scan",
+            TARGET,
+            "--mode",
+            "active",
+            "--file-upload-review",
+            *CASE,
+            "--upload-file",
+            str(local_file),
+            "-H",
+            "Authorization: Bearer PHASE28_CLI_CANARY",
+        ],
+        controlled,
+        prompt_hint,
+        input_text,
+    )
+
+
+@pytest.mark.parametrize(
     "options",
     [
         ["--file-upload-review"],
