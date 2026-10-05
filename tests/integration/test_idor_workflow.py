@@ -9,6 +9,7 @@ import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase22_target import SDL
 from fixtures.phase25_target import response_for
 from gqlsleuth import cli
@@ -64,6 +65,25 @@ def test_ctrl_c_stops_idor_confirmation(controlled, run_interrupted_cli, named):
     if named:
         options += ["--auth-context", "tester=Authorization: Bearer " + SECRET]
     run_interrupted_cli(options, controlled, "Execute IDOR / BOLA", "" if named else "\n")
+
+
+@pytest.mark.parametrize("named", [False, True])
+def test_default_idor_all_conditional_requests_before_consent(controlled, consent_trace, named):
+    options = ["scan", TARGET, *OPTIONS]
+    if named:
+        options += ["--auth-context", "tester=Authorization: Bearer " + SECRET]
+    result = CliRunner().invoke(cli.app, options, input="y\n" if named else "\ny\n\n")
+    assert result.exit_code == 0, result.exception
+    confirmation = consent_trace.confirmation("Execute IDOR / BOLA")
+    preview = confirmation.output.split("IDOR / BOLA Detection", 1)[1]
+    requests = consent_trace.sent_after(confirmation)
+    assert len(requests) == 3
+    for request in requests:
+        assert_request_preview(preview, request.json_body)
+    assert "Maximum planned requests: 3" in preview
+    assert "Neighbors run only after the exact" in " ".join(preview.split())
+    assert [r.json_body["variables"]["id"] for r in requests] == ["123", "122", "124"]
+    consent_trace.assert_private(SECRET)
 
 
 @pytest.mark.parametrize(

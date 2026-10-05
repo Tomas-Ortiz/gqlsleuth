@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from fixtures.cli_output import plain_cli_output
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase28_target import PNG, multipart_parts, response_for
 from gqlsleuth import cli
 from gqlsleuth.infrastructure.http import HttpClient
@@ -42,6 +43,41 @@ def controlled(monkeypatch):
     monkeypatch.setattr(cli, "_run_multiplicity_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(cli, "_run_depth_stage", lambda *args, **kwargs: None)
     return requests
+
+
+def test_default_upload_logical_request_before_consent(controlled, local_file, consent_trace):
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "scan",
+            TARGET,
+            "--mode",
+            "active",
+            "--file-upload-review",
+            *CASE,
+            "--upload-file",
+            str(local_file),
+            "-H",
+            "Authorization: Bearer PHASE28_CLI_CANARY",
+        ],
+        input="\n1,2,3\ny\n",
+    )
+    assert result.exit_code == 0, result.exception
+    confirmation = consent_trace.confirmation("Execute file upload")
+    selection = consent_trace.selection_before("Select upload-validation", confirmation)
+    selected = confirmation.output[len(selection.output) :]
+    requests = consent_trace.sent_after(confirmation)
+    assert len(requests) == 4
+    for request in requests:
+        assert_request_preview(selected, json.loads(request.multipart.fields["operations"]))
+        assert (
+            "Map: " + json.dumps(json.loads(request.multipart.fields["map"]), sort_keys=True)
+            in selected
+        )
+    assert "Planned requests: 4 maximum." in selected
+    assert "content mismatch, mime mismatch, extension mismatch" in selected
+    assert "These Mutation requests may create files" in selected
+    consent_trace.assert_private("PHASE28_CLI_CANARY", "PHASE28_PARENT_CANARY")
 
 
 @pytest.mark.parametrize(

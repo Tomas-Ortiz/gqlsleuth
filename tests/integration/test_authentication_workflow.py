@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from fixtures.cli_output import plain_cli_output
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase26_target import fake_token, response_for
 from gqlsleuth import cli
 from gqlsleuth.infrastructure.http import HttpClient
@@ -40,6 +41,30 @@ def controlled(monkeypatch):
     monkeypatch.setattr(cli, "_run_multiplicity_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(cli, "_run_depth_stage", lambda *args, **kwargs: None)
     return requests
+
+
+def test_default_authentication_request_preview_before_consent(controlled, consent_trace):
+    result = CliRunner().invoke(cli.app, ["scan", TARGET, *OPTIONS], input="1\n1,2\ny\n")
+    assert result.exit_code == 0, result.exception
+    confirmation = consent_trace.confirmation("Execute authentication")
+    consent_trace.selection_before("Select one Query", confirmation)
+    consent_trace.selection_before("Select JWT probes", confirmation)
+    selected = confirmation.output.split("Selected Query:", 1)[1]
+    requests = consent_trace.sent_after(confirmation)
+    assert len(requests) == 3
+    for request in requests:
+        assert_request_preview(selected, request.json_body)
+    assert "Planned control: remove Authorization" in selected
+    assert "Tampered signature, alg=none unsigned token" in selected
+    assert "Maximum additional requests: 3" in selected
+    consent_trace.assert_private(TOKEN)
+    consent_trace.assert_private(
+        *(
+            request.headers["authorization"]
+            for request in controlled
+            if "authorization" in request.headers
+        )
+    )
 
 
 @pytest.mark.parametrize(

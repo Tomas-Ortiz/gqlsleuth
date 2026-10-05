@@ -6,6 +6,7 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase29_target import response_for
 from gqlsleuth import cli
 from gqlsleuth.ai.context import build_ai_context
@@ -32,6 +33,35 @@ def controlled(monkeypatch):
     monkeypatch.setattr(cli, "_run_multiplicity_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(cli, "_run_depth_stage", lambda *args, **kwargs: None)
     return requests
+
+
+def test_default_federation_selected_requests_before_consent(controlled, consent_trace):
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "scan",
+            TARGET,
+            "--mode",
+            "active",
+            "--federation-review",
+            "--federation-sdl-expect-deny",
+            *CASE,
+            "-H",
+            "Authorization: Bearer PHASE29_CLI_CANARY",
+        ],
+        input="1\n2,1\ny\n",
+    )
+    assert result.exit_code == 0, result.exception
+    confirmation = consent_trace.confirmation("Execute federation")
+    consent_trace.selection_before("Select one federation endpoint", confirmation)
+    selection = consent_trace.selection_before("Select federation probes", confirmation)
+    selected = confirmation.output[len(selection.output) :]
+    requests = consent_trace.sent_after(confirmation)
+    assert len(requests) == 2
+    for request in requests:
+        assert_request_preview(selected, request.json_body)
+    assert "Maximum two sequential requests" in selected
+    consent_trace.assert_private("PHASE29_CLI_CANARY")
 
 
 @pytest.mark.parametrize(

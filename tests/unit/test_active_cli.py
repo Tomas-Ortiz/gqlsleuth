@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 import gqlsleuth.cli as cli
 from fixtures.cli_output import plain_cli_output
+from fixtures.consent_preview import assert_request_preview
 from gqlsleuth.application.active_execution import execute_selected_mutations
 from gqlsleuth.domain.active import MutationDecision
 from gqlsleuth.domain.models import ScanMode
@@ -156,6 +157,24 @@ def test_declined_or_default_confirmation_executes_zero(active_cli, answer):
     assert not active_cli[1][0].confirmed
     assert any(item.decision is MutationDecision.DECLINED for item in active_cli[1][0].executions)
     assert active_cli[1][0].execution_evidence == ()
+
+
+def test_default_exact_selected_mutation_batch_at_confirmation(active_cli, consent_trace):
+    result = _invoke("2,1\ny\n")
+    assert result.exit_code == 0, result.exception
+    confirmation = consent_trace.confirmation("selected Mutations?")
+    selection = consent_trace.selection_before("Select Mutations", confirmation)
+    selected = confirmation.output.split("Selected Mutations:", 1)[1]
+    assert confirmation.text == "Execute these 2 selected Mutations?"
+    requests = consent_trace.sent_after(confirmation)
+    assert len(requests) == len(active_cli[0]) == 2
+    positions = []
+    for request in requests:
+        assert_request_preview(selection.output, request.json_body)
+        assert_request_preview(selected, request.json_body)
+        positions.append(selected.index(request.json_body["query"]))
+    assert positions == sorted(positions)
+    assert "WARNING: These operations may modify application state." in selected
 
 
 def test_noninteractive_stdin_never_prompts_or_consumes_piped_confirmation(active_cli, monkeypatch):

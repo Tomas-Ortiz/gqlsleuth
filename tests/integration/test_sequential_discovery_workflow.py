@@ -10,6 +10,7 @@ import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase22_target import SDL, response_for
 from gqlsleuth import cli
 from gqlsleuth.ai.context import build_ai_context
@@ -65,6 +66,30 @@ def test_ctrl_c_stops_sequential_confirmation(controlled, run_interrupted_cli):
         "Execute bounded sequential",
         "\n",
     )
+
+
+def test_default_sequential_all_conditional_requests_before_consent(controlled, consent_trace):
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "scan",
+            TARGET,
+            *OPTIONS,
+            "-H",
+            "Cookie: session=" + SECRET,
+        ],
+        input="\ny\n\n",
+    )
+    assert result.exit_code == 0, result.exception
+    confirmation = consent_trace.confirmation("Execute bounded sequential")
+    preview = confirmation.output.split("Bounded Sequential Object Discovery", 1)[1]
+    requests = consent_trace.sent_after(confirmation)
+    assert len(requests) == 3
+    for request in requests:
+        assert_request_preview(preview, request.json_body)
+    assert "Maximum planned requests: 3" in preview
+    assert "only if baseline returns exact object" in preview
+    consent_trace.assert_private(SECRET)
 
 
 @pytest.mark.parametrize(

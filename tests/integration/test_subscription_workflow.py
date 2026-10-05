@@ -6,6 +6,7 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase30_target import LocalSubscriptionTarget, http_response
 from gqlsleuth import cli
 from gqlsleuth.ai.context import build_ai_context
@@ -13,6 +14,7 @@ from gqlsleuth.application.safe_execution import run_safe_execution_scan
 from gqlsleuth.application.subscriptions import SubscriptionSecuritySession
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings
+from gqlsleuth.infrastructure.websocket import WebSocketClient
 
 
 @pytest.fixture
@@ -29,6 +31,52 @@ def controlled(monkeypatch):
     monkeypatch.setattr(cli, "_run_multiplicity_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(cli, "_run_depth_stage", lambda *args, **kwargs: None)
     return requests
+
+
+def test_default_subscription_request_precedes_connection_and_frames(
+    controlled, monkeypatch, consent_trace
+):
+    original_enter = WebSocketClient.__enter__
+    original_send = WebSocketClient.send
+    subscriptions = []
+
+    def enter(client):
+        consent_trace.confirmation("Execute subscription")
+        return original_enter(client)
+
+    def send(client, text):
+        message = json.loads(text)
+        if message["type"] == "subscribe":
+            confirmation = consent_trace.confirmation("Execute subscription")
+            selection = consent_trace.selection_before("Select one Subscription", confirmation)
+            selected = confirmation.output[len(selection.output) :]
+            assert_request_preview(selected, message["payload"])
+            assert "one connection, one Subscription" in selected
+            subscriptions.append(message)
+        return original_send(client, text)
+
+    monkeypatch.setattr(WebSocketClient, "__enter__", enter)
+    monkeypatch.setattr(WebSocketClient, "send", send)
+    with LocalSubscriptionTarget("init-required") as target:
+        result = CliRunner().invoke(
+            cli.app,
+            [
+                "scan",
+                target.target,
+                "--mode",
+                "active",
+                "--subscription-review",
+                "--subscription-expect-deny",
+                "--subscription-init-payload",
+                '{"Authorization":"Bearer PHASE30_INIT_SECRET"}',
+                "-H",
+                "Authorization: Bearer PHASE30_HEADER_SECRET",
+            ],
+            input="2\ny\n",
+        )
+        assert result.exit_code == 0, (result.exception, result.output)
+        assert len(subscriptions) == target.connections == target.subscriptions == 1
+    consent_trace.assert_private("PHASE30_INIT_SECRET", "PHASE30_HEADER_SECRET")
 
 
 @pytest.mark.parametrize(

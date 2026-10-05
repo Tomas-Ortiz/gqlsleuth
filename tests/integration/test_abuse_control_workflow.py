@@ -9,6 +9,7 @@ from graphql import OperationDefinitionNode, parse
 from typer.testing import CliRunner
 
 from fixtures.cli_output import plain_cli_output
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase27_target import response_for
 from gqlsleuth import cli
 from gqlsleuth.infrastructure.http import HttpClient
@@ -41,6 +42,34 @@ def controlled(monkeypatch):
     monkeypatch.setattr(cli, "_run_multiplicity_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(cli, "_run_depth_stage", lambda *args, **kwargs: None)
     return requests, counts
+
+
+@pytest.mark.parametrize("mutation", [False, True])
+def test_default_replay_exact_request_before_consent(controlled, consent_trace, mutation):
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "scan",
+            TARGET,
+            *OPTIONS,
+            "-H",
+            "X-API-Key: " + SECRET,
+        ],
+        input="2\ny\n1\ny\n" if mutation else "\n1\ny\n",
+    )
+    assert result.exit_code == 0, result.exception
+    confirmation = consent_trace.confirmation("Execute rate limiting")
+    selection = consent_trace.selection_before("Select one operation", confirmation)
+    selected = confirmation.output[len(selection.output) :]
+    requests = consent_trace.sent_after(confirmation)
+    count = 3 if mutation else 5
+    assert len(requests) == count
+    assert f"Planned repeats: {count}." in selected
+    for request in requests:
+        assert_request_preview(selected, request.json_body)
+    if mutation:
+        assert "WARNING: This exact Mutation will be repeated up to 3 times" in selected
+    consent_trace.assert_private(SECRET)
 
 
 @pytest.mark.parametrize(

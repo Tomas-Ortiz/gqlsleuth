@@ -10,6 +10,7 @@ import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase18_target import SDL, is_depth_probe, response_for
 from gqlsleuth import cli
 from gqlsleuth.ai.context import build_ai_context
@@ -241,6 +242,60 @@ def test_all_three_confirmations_and_budgets_are_independent(depth_cli):
         "selected Mutations?",
     ):
         assert result.output.count(prompt) == 1
+
+
+def test_default_active_exact_previews_precede_selection_consent_and_requests(
+    depth_cli, consent_trace
+):
+    secret = "UX006_AUTH_HEADER_SECRET"
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "scan",
+            "https://example.com",
+            "--mode",
+            "active",
+            "-H",
+            "Authorization: " + secret,
+            "-H",
+            "Cookie: session=UX006_COOKIE_SECRET",
+            "-H",
+            "X-API-Key: UX006_API_KEY_SECRET",
+        ],
+        input="2,1\ny\n1\ny\n1\ny\n",
+    )
+    assert result.exit_code == 0, (result.exception, result.output)
+    assert len(depth_cli[0]) == 4
+    for hint, select_hint, heading, count in (
+        ("Query-Shape checks?", "Select active Query-Shape", "Selected Query-Shape checks", 2),
+        ("Query-Depth check?", "Select active Query-Depth", "Selected Query-Depth check", 1),
+        ("selected Mutations?", "Select Mutations", "Selected Mutations:", 1),
+    ):
+        confirmation = consent_trace.confirmation(hint)
+        selection = consent_trace.selection_before(select_hint, confirmation)
+        selected = confirmation.output.split(heading, 1)[1]
+        requests = consent_trace.sent_after(confirmation)
+        assert len(requests) == count
+        for request in requests:
+            payloads = (
+                request.json_body if isinstance(request.json_body, list) else [request.json_body]
+            )
+            for payload in payloads:
+                assert_request_preview(selection.output, payload)
+                assert_request_preview(selected, payload)
+        assert "Variables:" in selected
+    shape = consent_trace.confirmation("Query-Shape checks?").output.split(
+        "Selected Query-Shape checks", 1
+    )[1]
+    assert "Aliases requested: 3" in shape
+    assert "Batch entries: 2 identical Query/variables request objects." in shape
+    assert shape.index("Alias Multiplicity") < shape.index("HTTP Batching")
+    assert depth_cli[0][1][0] == depth_cli[0][1][1]
+    mutation = consent_trace.confirmation("selected Mutations?").output
+    assert "WARNING: These operations may modify application state." in mutation
+    consent_trace.assert_private(secret, "UX006_COOKIE_SECRET", "UX006_API_KEY_SECRET")
+    final = consent_trace.output.split("GQLSleuth Assessment", 1)[1]
+    assert "Variables:" not in final and "query (" not in final and "mutation (" not in final
 
 
 @pytest.mark.parametrize("selected,confirmed", [((), False), ((1,), False), ((1,), True)])

@@ -9,6 +9,7 @@ import pytest
 from graphql import build_schema, introspection_from_schema
 from typer.testing import CliRunner
 
+from fixtures.consent_preview import watch_consent
 from gqlsleuth import cli
 from gqlsleuth.application.graphql_detection import discover_and_detect_graphql
 from gqlsleuth.application.introspection import introspect_detected_endpoints
@@ -32,6 +33,11 @@ type Mutation {
   burnHistory: String
 }
 """
+
+
+@pytest.fixture
+def consent_trace(monkeypatch):
+    return watch_consent(monkeypatch)
 
 
 @pytest.fixture

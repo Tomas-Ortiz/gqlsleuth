@@ -10,6 +10,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from fixtures.cli_output import plain_cli_output
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase23_target import SDL, response_for
 from gqlsleuth import cli
 from gqlsleuth.ai.context import build_ai_context
@@ -61,6 +62,28 @@ def test_ctrl_c_stops_mutation_authorization_confirmation(controlled, run_interr
         "Execute mutation authorization",
         "\n",
     )
+
+
+def test_default_mutation_policy_request_and_warning_before_consent(controlled, consent_trace):
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "scan",
+            TARGET,
+            *OPTIONS,
+            "-H",
+            "Authorization: " + SECRET,
+        ],
+        input="\ny\n\n",
+    )
+    assert result.exit_code == 0, result.exception
+    confirmation = consent_trace.confirmation("Execute mutation authorization")
+    preview = confirmation.output.split("Mutation Authorization Validation", 1)[1]
+    requests = consent_trace.sent_after(confirmation)
+    assert len(requests) == 1
+    assert_request_preview(preview, requests[0].json_body)
+    assert "This request may modify server-side state." in preview
+    consent_trace.assert_private(SECRET)
 
 
 @pytest.mark.parametrize(

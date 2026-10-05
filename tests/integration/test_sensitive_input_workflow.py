@@ -9,6 +9,7 @@ import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
+from fixtures.consent_preview import assert_request_preview
 from fixtures.phase24_target import SDL, response_for
 from gqlsleuth import cli
 from gqlsleuth.ai.context import build_ai_context
@@ -66,6 +67,28 @@ def test_ctrl_c_stops_sensitive_confirmation(controlled, run_interrupted_cli):
         "Execute sensitive input",
         "\n",
     )
+
+
+def test_default_sensitive_request_and_warning_before_consent(controlled, consent_trace):
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "scan",
+            TARGET,
+            *OPTIONS,
+            "-H",
+            "Authorization: " + SECRET,
+        ],
+        input="\ny\n\n",
+    )
+    assert result.exit_code == 0, result.exception
+    confirmation = consent_trace.confirmation("Execute sensitive input")
+    preview = confirmation.output.split("Sensitive Input Validation", 1)[1]
+    requests = consent_trace.sent_after(confirmation)
+    assert len(requests) == 1
+    assert_request_preview(preview, requests[0].json_body)
+    assert "This Mutation may change server-side state." in preview
+    consent_trace.assert_private(SECRET)
 
 
 @pytest.mark.parametrize(
