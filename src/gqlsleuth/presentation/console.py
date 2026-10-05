@@ -207,7 +207,12 @@ def render_scan(
             )
         tested = introspections.get(detected.candidate_url)
         if tested:
-            console.print(Text.assemble("Introspection: ", _status(tested.status.value)))
+            console.print(
+                Text.assemble("Introspection: ", _status(tested.minimal_result.status.value))
+            )
+            console.print(
+                Text.assemble("Schema retrieval: ", _status(tested.schema_retrieval_status.value))
+            )
             if verbose or tested.status.value != "enabled":
                 console.print(tested.reason, markup=False)
         else:

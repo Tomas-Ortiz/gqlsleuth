@@ -84,7 +84,14 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             entries=tuple(
                 ReportEntry(
                     item.endpoint,
-                    details=(("Status", item.introspection_status.upper()),),
+                    details=(
+                        ("Status", (item.observed_introspection_status or "not_attempted").upper()),
+                    )
+                    + (
+                        (("Schema retrieval", item.schema_retrieval_status.upper()),)
+                        if item.schema_retrieval_status
+                        else ()
+                    ),
                     paragraphs=(item.introspection_reason or "",),
                 )
                 for item in report.endpoints

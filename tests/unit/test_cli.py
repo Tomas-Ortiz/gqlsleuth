@@ -91,14 +91,20 @@ def scan_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ScanMode]]:
             detections=(detection,),
             confirmation_evidence=(),
         )
+        introspection_response = response.model_copy(
+            update={
+                "status_code": 200,
+                "body": b'{"data":{"__schema":{"queryType":{"name":"Query"}}}}',
+            },
+        )
         introspection = EndpointIntrospectionResult(
             endpoint=candidate_url,
             status=IntrospectionStatus.ENABLED,
-            minimal_response=response,
+            minimal_response=introspection_response,
             minimal_error_type=None,
             minimal_error_message=None,
             full_retrieval_attempted=True,
-            full_response=response,
+            full_response=introspection_response,
             full_error_type=None,
             full_error_message=None,
             reason="Full introspection response was retrieved.",

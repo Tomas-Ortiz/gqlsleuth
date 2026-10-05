@@ -6,6 +6,8 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Fixed
 
+- Introspection presentation distinguishes an enabled minimal probe from blocked or failed full
+  schema retrieval, retaining the server reason and existing evidence without extra requests.
 - Local Ollama failures now distinguish initial connection failures from interrupted requests,
   without guessing why the service became unavailable or failing the deterministic scan.
 - Local AI inference now defaults to a ten-minute wait and supports finite positive

@@ -101,6 +101,11 @@ read-only Query execution. It never executes Mutations or Subscriptions. A base 
 is also accepted; a direct GraphQL URL is tried before fallback endpoint discovery.
 `--mode safe` explicitly selects the same default.
 
+Introspection support and full schema retrieval are shown separately. An enabled minimal probe
+can coexist with `Schema retrieval: BLOCKED`, for example when a server rejects the full query
+with a depth limit. Details retain the server reason; without a valid schema, operation analysis
+cannot proceed. This observation is not a vulnerability finding.
+
 To try the workflow without any external target, run the [local demo](examples/README.md):
 
 ```bash

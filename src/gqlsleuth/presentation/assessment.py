@@ -140,13 +140,19 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
             ConfidenceLevel.PROBABLE,
         )
     )
-    introspection = Counter(e.introspection_status or "not_attempted" for e in meaningful)
+    introspection = Counter(e.observed_introspection_status or "not_attempted" for e in meaningful)
+    retrieval = Counter(e.schema_retrieval_status for e in meaningful if e.schema_retrieval_status)
     schemas = tuple(e.schema_summary for e in report.endpoints if e.schema_summary)
     overview: tuple[tuple[str, str], ...] = (
         ("GraphQL endpoints", str(len(meaningful)) + " confirmed / probable"),
         (
             "Introspection",
             "; ".join(f"{k.upper()}: {v}" for k, v in introspection.items()) or "Not available",
+        ),
+        *(
+            (("Schema retrieval", "; ".join(f"{k.upper()}: {v}" for k, v in retrieval.items())),)
+            if retrieval
+            else ()
         ),
         ("Queries", str(sum(s.query_field_count for s in schemas))),
         ("Mutations", str(sum(s.mutation_field_count for s in schemas))),
@@ -171,8 +177,10 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
     limitations = []
     if not meaningful:
         limitations.append("No confirmed or probable GraphQL endpoint was retained.")
-    if meaningful and any(e.introspection_status != "enabled" for e in meaningful):
+    if meaningful and any(e.observed_introspection_status != "enabled" for e in meaningful):
         limitations.append("Introspection was unavailable for at least one GraphQL endpoint.")
+    if any(e.schema_retrieval_status in {"blocked", "failed"} for e in meaningful):
+        limitations.append("Full schema retrieval was blocked or failed for at least one endpoint.")
     if not schemas:
         limitations.append("No parsed schema was available; operation coverage is limited.")
     transport_messages = {

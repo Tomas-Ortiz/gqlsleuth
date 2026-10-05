@@ -104,6 +104,7 @@ def build_report(
         )
         schema = next((item for item in schema_scan.schemas if item.endpoint == url), None)
         analyzed = next((item for item in analysis.endpoints if item.endpoint == url), None)
+        retrieval = introspected.full_result if introspected else None
         endpoints.append(
             EndpointReport(
                 endpoint=url,
@@ -115,6 +116,14 @@ def build_report(
                 else (),
                 introspection_status=introspected.status.value if introspected else None,
                 introspection_reason=introspected.reason if introspected else None,
+                minimal_introspection_status=introspected.minimal_result.status.value
+                if introspected
+                else None,
+                schema_retrieval_status=introspected.schema_retrieval_status.value
+                if introspected
+                else None,
+                schema_retrieval_category=retrieval.status.value if retrieval else None,
+                schema_retrieval_reason=retrieval.reason if retrieval else None,
                 schema_summary=schema.summary if schema else None,
                 analyzed_operation_count=len(analyzed.operations)
                 if analyzed and analyzed.success

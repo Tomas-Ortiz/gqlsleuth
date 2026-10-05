@@ -90,9 +90,13 @@ def differential_sections(report: DifferentialReportContext) -> tuple[ReportSect
                             ),
                             (
                                 "Introspection",
-                                endpoint.introspection_status.upper()
-                                if endpoint.introspection_status
+                                endpoint.observed_introspection_status.upper()
+                                if endpoint.observed_introspection_status
                                 else "Not observed",
+                            ),
+                            (
+                                "Schema retrieval",
+                                (endpoint.schema_retrieval_status or "not_attempted").upper(),
                             ),
                             (
                                 "Query fields",

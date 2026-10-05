@@ -47,6 +47,15 @@ class EndpointReport:
     introspection_reason: str | None
     schema_summary: SchemaSummary | None
     analyzed_operation_count: int | None
+    minimal_introspection_status: str | None = None
+    schema_retrieval_status: str | None = None
+    schema_retrieval_category: str | None = None
+    schema_retrieval_reason: str | None = None
+
+    @property
+    def observed_introspection_status(self) -> str | None:
+        """Prefer the probe fact; older report projections retain their legacy status."""
+        return self.minimal_introspection_status or self.introspection_status
 
 
 @dataclass(frozen=True)

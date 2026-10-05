@@ -12,7 +12,9 @@ from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType, Sca
 from gqlsleuth.graphql.introspection import (
     FULL_INTROSPECTION_QUERY,
     MINIMAL_INTROSPECTION_QUERY,
+    IntrospectionResponseClassification,
     IntrospectionStatus,
+    SchemaRetrievalStatus,
     classify_introspection_response,
 )
 from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings, HttpRequest, HttpResponse
@@ -34,6 +36,48 @@ class EndpointIntrospectionResult:
     full_error_type: str | None
     full_error_message: str | None
     reason: str
+
+    @property
+    def minimal_result(self) -> IntrospectionResponseClassification:
+        """Expose the probe fact without replacing the legacy final-stage status."""
+        if self.minimal_response is not None:
+            return classify_introspection_response(
+                self.minimal_response.status_code, self.minimal_response.body
+            )
+        return IntrospectionResponseClassification(
+            IntrospectionStatus.NETWORK_FAILURE,
+            self.minimal_error_message or self.reason,
+        )
+
+    @property
+    def full_result(self) -> IntrospectionResponseClassification | None:
+        """Classify retained retrieval facts locally; never send another request."""
+        if not self.full_retrieval_attempted:
+            return None
+        if self.full_response is not None:
+            return classify_introspection_response(
+                self.full_response.status_code, self.full_response.body
+            )
+        return IntrospectionResponseClassification(
+            IntrospectionStatus.NETWORK_FAILURE,
+            self.full_error_message or self.reason,
+        )
+
+    @property
+    def schema_retrieval_status(self) -> SchemaRetrievalStatus:
+        full = self.full_result
+        if full is None:
+            return SchemaRetrievalStatus.NOT_ATTEMPTED
+        if full.status is IntrospectionStatus.ENABLED:
+            return SchemaRetrievalStatus.RETRIEVED
+        if full.status in {
+            IntrospectionStatus.DISABLED,
+            IntrospectionStatus.AUTHENTICATION_REQUIRED,
+            IntrospectionStatus.AUTHORIZATION_DENIED,
+            IntrospectionStatus.ENDPOINT_ERROR,
+        }:
+            return SchemaRetrievalStatus.BLOCKED
+        return SchemaRetrievalStatus.FAILED
 
 
 @dataclass(frozen=True)

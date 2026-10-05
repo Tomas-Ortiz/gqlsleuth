@@ -505,6 +505,18 @@ The full response is classified using the same rules. A full-retrieval transport
 failure becomes the endpoint's final status while the successful minimal response remains
 preserved.
 
+The endpoint's `minimal_result` and `full_result` expose separate deterministic classifications
+from these retained responses. `schema_retrieval_status` distinguishes `RETRIEVED`, `BLOCKED`
+(a server rejection), `FAILED` (transport or invalid response), and `NOT_ATTEMPTED`. Retrieval
+does not imply successful schema parsing; Phase 6 still validates the returned schema.
+Human console/reports use the minimal probe for introspection availability, so a full-query
+depth-limit rejection displays introspection `ENABLED` and schema retrieval `BLOCKED`, with the
+server reason in details. This is not a vulnerability or Finding. No fallback query is sent.
+Canonical JSON retains the legacy final-stage `introspection_status` and evidence unchanged,
+adding `minimal_introspection_status`, `schema_retrieval_status`, `schema_retrieval_category`
+and `schema_retrieval_reason` to each endpoint. The category uses the existing response
+classification (for example `endpoint_error`); the reason preserves its concise explanation.
+
 Phase 5 retains the existing `HttpResponse` objects for both requests, including the raw full
 introspection JSON body. It does not convert that JSON into schema models, extract operations,
 or add `graphql-core`; those responsibilities begin in Phase 6. Each processed endpoint creates

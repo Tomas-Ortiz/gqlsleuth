@@ -118,6 +118,15 @@ class IntrospectionStatus(StrEnum):
     NETWORK_FAILURE = "network_failure"
 
 
+class SchemaRetrievalStatus(StrEnum):
+    """Full request outcome, separate from demonstrated introspection support."""
+
+    NOT_ATTEMPTED = "not_attempted"
+    RETRIEVED = "retrieved"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True)
 class IntrospectionResponseClassification:
     """Status and concise reason derived from one HTTP response."""
