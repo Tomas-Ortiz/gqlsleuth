@@ -9,6 +9,7 @@ from rich.text import Text
 from gqlsleuth.domain.idor import IDOR_NOTICE, IdorContextType, IdorDetectionResult, expected_policy
 from gqlsleuth.domain.sequential_discovery import MAX_PHASE22_REQUESTS
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.statuses import status_text
 
 
 def context_description(result: IdorDetectionResult) -> str:
@@ -60,8 +61,8 @@ def render_idor(
                 probe.requested_identifier,
                 role,
                 expected.upper(),
-                evidence.outcome.value.upper() if evidence else "NOT_ATTEMPTED",
-                execution.policy_result.value.upper() if execution else "PLANNED",
+                status_text(evidence.outcome.value.upper() if evidence else "NOT_ATTEMPTED"),
+                status_text(execution.policy_result.value.upper() if execution else "PLANNED"),
             )
         console.print(table)
         if preview or verbose:

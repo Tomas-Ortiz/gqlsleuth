@@ -18,17 +18,22 @@ from gqlsleuth.presentation.assessment import (
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.console import _section, _table
 from gqlsleuth.presentation.priorities import style_priority_terms
+from gqlsleuth.presentation.statuses import status_text, style_status_terms
 from gqlsleuth.reporting.assessment import grouped_technical_sections
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.presentation import ReportSection, technical_sections
 
 
-def _rows(console: Console, rows: tuple[tuple[str, str], ...]) -> None:
+def _rows(
+    console: Console, rows: tuple[tuple[str, str], ...], *, status_labels: bool = False
+) -> None:
     table = Table.grid(padding=(0, 2), expand=False)
     table.add_column(ratio=1)
     table.add_column(ratio=2, overflow="fold")
     for label, value in rows:
-        table.add_row(Text(label), Text(value))
+        table.add_row(
+            status_text(label) if status_labels else Text(label), style_status_terms(value)
+        )
     console.print(table)
 
 
@@ -41,11 +46,15 @@ def _items(
     table = _table("Result / review", "Operation")
     multiple = len({i.endpoint for i in items if i.endpoint}) > 1
     for item in items if cap is None else items[:cap]:
-        prefix = item.state + ": " if title == "Manual Review" else ""
+        prefix = ""
         if item.state in {"VIOLATION", "UNRESOLVED"}:
             prefix += item.capability + " — "
         table.add_row(
-            style_priority_terms(prefix + item.label),
+            Text.assemble(
+                status_text(item.state) if title == "Manual Review" else "",
+                ": " if title == "Manual Review" else "",
+                style_priority_terms(prefix + item.label),
+            ),
             Text(
                 item.operation + ("\n" + item.endpoint if multiple and item.endpoint else ""),
                 style="gql.metadata",
@@ -81,7 +90,7 @@ def render_completed_assessment(
         console.print()
         table = _table("Capability", "Result")
         for capability, status in view.capabilities:
-            table.add_row(Text(capability), Text(status))
+            table.add_row(Text(capability), style_status_terms(status))
         console.print(table)
     _items(console, "Findings", view.findings, None if verbose else DEFAULT_MAX_FINDINGS)
     _items(
@@ -92,7 +101,11 @@ def render_completed_assessment(
     )
     if view.query_outcomes:
         _section(console, "Query Execution")
-        _rows(console, tuple((name, str(count)) for name, count in view.query_outcomes))
+        _rows(
+            console,
+            tuple((name, str(count)) for name, count in view.query_outcomes),
+            status_labels=True,
+        )
     if view.mutations:
         _section(console, "Mutation Execution")
         _rows(console, view.mutations)

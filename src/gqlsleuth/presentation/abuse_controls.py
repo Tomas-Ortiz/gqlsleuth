@@ -9,6 +9,7 @@ from rich.text import Text
 from gqlsleuth.domain.abuse_controls import AbuseControlResult
 from gqlsleuth.presentation.console import _document, _section
 from gqlsleuth.presentation.priorities import priority_label
+from gqlsleuth.presentation.statuses import status_text, style_status_terms
 
 
 def render_abuse_controls(
@@ -35,7 +36,7 @@ def render_abuse_controls(
             )
         )
         console.print(
-            Text(
+            style_status_terms(
                 f"Existing baseline: {candidate.baseline_status.value.upper()} / "
                 f"HTTP {candidate.baseline_http_status}. "
                 f"Planned repeats: {candidate.planned_attempts}."
@@ -52,7 +53,7 @@ def render_abuse_controls(
         console.print("Sequential exact repeats only; no concurrency, retries or threshold search.")
     else:
         console.print(
-            Text(
+            style_status_terms(
                 f"Confirmed: {result.confirmed}; {result.attempted_request_count} requests; "
                 f"result: {result.policy_result.value.upper()}."
             )
@@ -63,9 +64,9 @@ def render_abuse_controls(
         for item in result.attempts:
             table.add_row(
                 str(item.attempt_index),
-                item.outcome.value.upper(),
+                status_text(item.outcome.value.upper()),
                 item.signal.kind.value.upper() if item.signal else "—",
-                item.repeat_status.value.upper(),
+                status_text(item.repeat_status.value.upper()),
                 str(item.response_status_code or "—"),
             )
         if result.attempts:

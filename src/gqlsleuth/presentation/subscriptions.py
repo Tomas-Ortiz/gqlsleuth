@@ -7,6 +7,7 @@ from rich.text import Text
 
 from gqlsleuth.domain.subscriptions import SUBSCRIPTION_NOTICE, SubscriptionSecurityResult
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.statuses import style_status_terms
 
 
 def render_subscriptions(console: Console, result: SubscriptionSecurityResult) -> None:
@@ -46,14 +47,18 @@ def render_subscriptions(console: Console, result: SubscriptionSecurityResult) -
         )
     for attempt in result.attempts:
         console.print(
-            f"{attempt.outcome.value.upper()}; protocol: {attempt.negotiated_protocol}; "
-            f"ACK: {attempt.acknowledged}; Subscription sent: {attempt.subscription_sent}; "
-            f"frames: {attempt.inbound_frame_count}; events: {attempt.application_event_count}"
+            style_status_terms(
+                f"{attempt.outcome.value.upper()}; protocol: {attempt.negotiated_protocol}; "
+                f"ACK: {attempt.acknowledged}; Subscription sent: {attempt.subscription_sent}; "
+                f"frames: {attempt.inbound_frame_count}; events: {attempt.application_event_count}"
+            )
         )
         console.print(
-            attempt.evaluation.value.upper()
-            if attempt.evaluation
-            else "OBSERVE: no DENY policy evaluation or Finding."
+            style_status_terms(
+                attempt.evaluation.value.upper()
+                if attempt.evaluation
+                else "OBSERVE: no DENY policy evaluation or Finding."
+            )
         )
         if attempt.limitation:
             console.print(Text(attempt.limitation))

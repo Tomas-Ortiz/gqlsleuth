@@ -9,6 +9,7 @@ from rich.text import Text
 from gqlsleuth.domain.sequential_discovery import SEQUENTIAL_NOTICE, SequentialDiscoveryResult
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.statuses import status_text
 
 
 def render_sequential_discovery(
@@ -46,13 +47,15 @@ def render_sequential_discovery(
             table.add_row(
                 probe.requested_identifier,
                 "baseline" if probe.offset == 0 else f"generated offset {probe.offset:+d}",
-                "baseline"
-                if preview and probe.offset == 0
-                else "only if baseline returns exact object"
-                if preview
-                else execution.outcome.value.upper()
-                if execution and execution.outcome
-                else "NOT_ATTEMPTED",
+                status_text(
+                    "baseline"
+                    if preview and probe.offset == 0
+                    else "only if baseline returns exact object"
+                    if preview
+                    else execution.outcome.value.upper()
+                    if execution and execution.outcome
+                    else "NOT_ATTEMPTED"
+                ),
             )
             if preview or verbose:
                 _document(console, probe.query)

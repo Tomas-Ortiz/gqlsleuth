@@ -10,6 +10,7 @@ from gqlsleuth.domain.mutation_authorization import (
     MutationAuthorizationResult,
 )
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.statuses import style_status_terms
 
 
 def render_mutation_authorization(
@@ -52,11 +53,13 @@ def render_mutation_authorization(
             f"Confirmed: {result.confirmed}; attempted requests: {result.attempted_request_count}"
         )
         console.print(
-            "Observed: "
-            + (result.execution.outcome.value.upper() if result.execution else "NOT_ATTEMPTED")
+            style_status_terms(
+                "Observed: "
+                + (result.execution.outcome.value.upper() if result.execution else "NOT_ATTEMPTED")
+            )
         )
         if result.evaluation:
-            console.print("Result: " + result.evaluation.status.value.upper())
+            console.print(style_status_terms("Result: " + result.evaluation.status.value.upper()))
             console.print(Text(result.evaluation.reason))
         if result.violation:
             console.print("MUTATION_AUTHORIZATION_POLICY_VIOLATION")

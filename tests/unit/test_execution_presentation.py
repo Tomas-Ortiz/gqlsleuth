@@ -27,6 +27,7 @@ from gqlsleuth.application.safe_execution import execute_generated_queries
 from gqlsleuth.domain.analysis import InterestPriority
 from gqlsleuth.infrastructure.http import HttpClient
 from gqlsleuth.infrastructure.ollama import OllamaClient
+from gqlsleuth.presentation.completed import render_completed_assessment
 from gqlsleuth.presentation.console import (
     CONSOLE_THEME,
     render_active_execution,
@@ -135,6 +136,37 @@ def test_priority_terms_do_not_match_substrings_or_interpret_markup():
     )
     assert len(styled.spans) == 5
     assert all(span.style != "bold" for span in styled.spans)
+
+
+@pytest.mark.parametrize(
+    "renderer,which",
+    [
+        (render_completed_assessment, 1),
+        (render_active_execution, 1),
+        (render_scan, 0),
+    ],
+)
+def test_execution_status_segments_share_semantics(execution_views, renderer, which):
+    console = Console(file=StringIO(), theme=CONSOLE_THEME, force_terminal=True, width=120)
+    segments = []
+
+    def collect(*objects, **kwargs):
+        for value in objects:
+            if not isinstance(value, str):
+                segments.extend(console.render(value))
+
+    console.print = collect
+    if renderer is render_scan:
+        renderer(console, execution_views[which], verbose=True)
+    else:
+        renderer(console, execution_views[which])
+    for word, color in (("SUCCESS", "green"), ("GRAPHQL_ERROR", "yellow")):
+        matches = [s for s in segments if s.text.strip() == word]
+        assert matches and all(s.style.color.name == color for s in matches)
+    if renderer is not render_active_execution:
+        for word, color in (("NETWORK_FAILURE", "red"), ("SKIPPED_SAFETY", "magenta")):
+            matches = [s for s in segments if s.text.strip() == word]
+            assert matches and all(s.style.color.name == color for s in matches)
 
 
 @pytest.mark.parametrize("title", ["Active Mutation candidates:", "Selected Mutations:"])

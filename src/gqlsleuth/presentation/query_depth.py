@@ -15,6 +15,7 @@ from gqlsleuth.domain.query_depth import (
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.console import _document, _section
 from gqlsleuth.presentation.responses import ResponsePresentation, present_response_body
+from gqlsleuth.presentation.statuses import status_text
 
 
 def depth_response(evidence: QueryDepthEvidence) -> ResponsePresentation:
@@ -41,8 +42,10 @@ def render_depth_previews(
             Text("Operation: query " + candidate.base.operation_name, style="gql.metadata")
         )
         console.print(
-            f"Baseline depth: {candidate.baseline_depth}; "
-            f"outcome: {candidate.baseline_status.value.upper()}"
+            Text.assemble(
+                f"Baseline depth: {candidate.baseline_depth}; outcome: ",
+                status_text(candidate.baseline_status.value.upper()),
+            )
         )
         console.print(
             f"Probe depth: {candidate.probe_depth}; composite list edges: {candidate.list_edges}"
@@ -66,9 +69,9 @@ def render_query_depth(
     for item in result.executions:
         status = item.evidence.observation.value if item.evidence else item.decision.value
         console.print(
-            Text(
-                f"Controlled Query Depth / query {item.candidate.base.operation_name}: "
-                f"{status.upper()}"
+            Text.assemble(
+                f"Controlled Query Depth / query {item.candidate.base.operation_name}: ",
+                status_text(status.upper()),
             )
         )
         if verbose and item.evidence:

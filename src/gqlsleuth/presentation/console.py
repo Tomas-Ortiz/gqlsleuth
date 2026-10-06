@@ -47,6 +47,7 @@ from gqlsleuth.presentation.security_review import (
     candidate_label,
     candidate_summary,
 )
+from gqlsleuth.presentation.statuses import status_text
 
 CONSOLE_THEME = Theme(
     {
@@ -131,13 +132,7 @@ def _render_help_rows(console: Console, content: Text | Table | Panel) -> None:
 
 
 def _status(value: str) -> Text:
-    if value in {"success", "enabled", "parsed", "confirmed", "probable"}:
-        style = "gql.positive"
-    elif value in {"http_error", "network_failure", "failed", "invalid_response", "endpoint_error"}:
-        style = "gql.error"
-    else:
-        style = "gql.warning"
-    return Text(value.upper(), style=style)
+    return status_text(value.upper())
 
 
 def _table(*columns: str) -> Table:

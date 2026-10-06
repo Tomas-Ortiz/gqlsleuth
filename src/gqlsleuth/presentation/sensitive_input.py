@@ -13,6 +13,7 @@ from gqlsleuth.domain.sensitive_input import (
     SensitiveInputValidationResult,
 )
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.statuses import style_status_terms
 
 
 def render_sensitive_review(
@@ -125,11 +126,13 @@ def render_sensitive_validation(
             f"Confirmed: {result.confirmed}; attempted requests: {result.attempted_request_count}"
         )
         console.print(
-            "Observed: "
-            + (result.execution.outcome.value.upper() if result.execution else "NOT_ATTEMPTED")
+            style_status_terms(
+                "Observed: "
+                + (result.execution.outcome.value.upper() if result.execution else "NOT_ATTEMPTED")
+            )
         )
         if result.evaluation:
-            console.print("Result: " + result.evaluation.status.value.upper())
+            console.print(style_status_terms("Result: " + result.evaluation.status.value.upper()))
             console.print(Text(result.evaluation.reason))
         if result.violation:
             console.print("SENSITIVE_INPUT_POLICY_VIOLATION")

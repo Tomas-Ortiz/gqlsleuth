@@ -7,6 +7,7 @@ from rich.text import Text
 
 from gqlsleuth.domain.federation import FEDERATION_LIMITATION, FederationSecurityResult
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.statuses import style_status_terms
 
 
 def render_federation(
@@ -33,12 +34,14 @@ def render_federation(
         console.print("Maximum two sequential requests; no retries or follow-up requests.")
     for attempt in result.attempts:
         console.print(
-            f"{attempt.probe.value}: {attempt.outcome.value.upper()}; "
-            f"HTTP {attempt.response_status_code}; "
-            + (
-                attempt.evaluation.value.upper()
-                if attempt.evaluation
-                else "OBSERVE (no policy evaluation)"
+            style_status_terms(
+                f"{attempt.probe.value}: {attempt.outcome.value.upper()}; "
+                f"HTTP {attempt.response_status_code}; "
+                + (
+                    attempt.evaluation.value.upper()
+                    if attempt.evaluation
+                    else "OBSERVE (no policy evaluation)"
+                )
             )
         )
         if attempt.sdl_returned:

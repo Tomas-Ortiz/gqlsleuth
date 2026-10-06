@@ -8,6 +8,7 @@ from rich.text import Text
 
 from gqlsleuth.domain.file_upload import UPLOAD_LIMITATION, UPLOAD_WARNING, FileUploadSecurityResult
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.statuses import status_text, style_status_terms
 
 
 def render_file_upload(
@@ -48,8 +49,10 @@ def render_file_upload(
                 console.print(Text(note))
     if not preview:
         console.print(
-            f"Confirmed: {result.confirmed}; attempted: {result.attempted_request_count}; "
-            f"{result.baseline_status.value.upper()}."
+            style_status_terms(
+                f"Confirmed: {result.confirmed}; attempted: {result.attempted_request_count}; "
+                f"{result.baseline_status.value.upper()}."
+            )
         )
         table = Table(box=None)
         for title in ("Probe", "Expected", "Outcome", "Evaluation", "HTTP"):
@@ -58,8 +61,8 @@ def render_file_upload(
             table.add_row(
                 attempt.probe.value.replace("_", " "),
                 attempt.expected.value.upper(),
-                attempt.outcome.value.upper(),
-                attempt.evaluation.value.upper(),
+                status_text(attempt.outcome.value.upper()),
+                status_text(attempt.evaluation.value.upper()),
                 str(attempt.response_status_code or "—"),
             )
         if result.attempts:

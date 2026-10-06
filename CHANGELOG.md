@@ -6,6 +6,8 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- Compact execution and capability statuses share semantic console colors; GraphQL errors remain
+  yellow observed outcomes, while hard failures are red and safety blocks/skips are magenta.
 - All CLI commands and help paths start with the installed version and author header exactly once.
   Scans show terminal activity indicators during deterministic scanning and optional local AI
   interpretation. Interactive prompts remain

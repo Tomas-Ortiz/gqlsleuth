@@ -22,6 +22,8 @@ from gqlsleuth.infrastructure.websocket import WebSocketClient
 from gqlsleuth.presentation.assessment import CAPABILITY_ORDER, build_assessment
 from gqlsleuth.presentation.completed import render_completed_assessment
 from gqlsleuth.presentation.console import CONSOLE_THEME, render_ai
+from gqlsleuth.presentation.multiplicity import render_multiplicity
+from gqlsleuth.presentation.query_depth import render_query_depth
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.models import ReportFormat, ReportIssue
 from gqlsleuth.reporting.presentation import human_sections, technical_sections
@@ -66,6 +68,44 @@ def test_summary_counts_only_existing_facts_in_explicit_order(whole):
     assert ("Query Depth", "CONTROL") in summary.capabilities
     assert dict(summary.overview)["Upload surface"] == "Detected"
     assert summary.mutations == ()  # Separate capability Mutations are not ordinary executions.
+
+
+def test_compact_capability_and_manual_review_status_colors(whole):
+    console = Console(file=StringIO(), theme=CONSOLE_THEME, force_terminal=True, width=160)
+    segments = []
+
+    def collect(*objects, **kwargs):
+        for value in objects:
+            if not isinstance(value, str):
+                segments.extend(console.render(value))
+
+    console.print = collect
+    render_completed_assessment(console, whole)
+    for word, color in (("OBSERVED", "green"), ("CONTROL", "green"), ("REVIEW", "yellow")):
+        matches = [segment for segment in segments if segment.text.strip() == word]
+        assert matches and all(segment.style.color.name == color for segment in matches)
+
+
+@pytest.mark.parametrize(
+    "renderer,attribute,word,color",
+    [
+        (render_multiplicity, "multiplicity", "ACCEPTED", "green"),
+        (render_query_depth, "query_depth", "REJECTED", "yellow"),
+    ],
+)
+def test_compact_active_runtime_observation_colors(whole, renderer, attribute, word, color):
+    console = Console(file=StringIO(), theme=CONSOLE_THEME, force_terminal=True, width=160)
+    segments = []
+
+    def collect(*objects, **kwargs):
+        for value in objects:
+            if not isinstance(value, str):
+                segments.extend(console.render(value))
+
+    console.print = collect
+    renderer(console, getattr(whole, attribute))
+    matches = [segment for segment in segments if segment.text.strip() == word]
+    assert matches and all(segment.style.color.name == color for segment in matches)
 
 
 @pytest.mark.parametrize(

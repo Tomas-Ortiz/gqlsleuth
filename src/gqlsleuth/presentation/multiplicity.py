@@ -15,6 +15,7 @@ from gqlsleuth.domain.multiplicity import (
 )
 from gqlsleuth.presentation.console import _document, _section
 from gqlsleuth.presentation.responses import ResponsePresentation, present_response_body
+from gqlsleuth.presentation.statuses import status_text
 
 
 def probe_label(kind: MultiplicityProbeType) -> str:
@@ -89,9 +90,10 @@ def render_multiplicity(
     for item in result.executions:
         outcome = item.evidence.observation.value if item.evidence else item.decision.value
         console.print(
-            Text(
+            Text.assemble(
                 f"{probe_label(item.candidate.probe_type)} / "
-                f"query {item.candidate.base.operation_name}: {outcome.upper()}"
+                f"query {item.candidate.base.operation_name}: ",
+                status_text(outcome.upper()),
             )
         )
         if verbose and item.evidence:

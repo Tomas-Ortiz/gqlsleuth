@@ -14,6 +14,7 @@ from gqlsleuth.domain.authentication import (
 )
 from gqlsleuth.domain.nested_authorization import NestedOutcome
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.statuses import status_text
 
 PROBE_LABELS = {
     AuthenticationProbe.AUTHORIZATION_REMOVED: "Authorization-removed control",
@@ -98,8 +99,8 @@ def render_authentication(
             evidence = execution.evidence
             table.add_row(
                 PROBE_LABELS[execution.probe_type],
-                outcome_label(evidence.outcome) if evidence else "NOT_ATTEMPTED",
-                evidence.policy_result.value.upper() if evidence else "NOT_EVALUATED",
+                status_text(outcome_label(evidence.outcome) if evidence else "NOT_ATTEMPTED"),
+                status_text(evidence.policy_result.value.upper() if evidence else "NOT_EVALUATED"),
                 str(evidence.response_status_code)
                 if evidence and evidence.response_status_code
                 else "—",
