@@ -52,6 +52,24 @@ def answer(context):
     return payload
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "No deterministic Findings were produced.",
+        "No confirmed Findings were recorded.",
+        "Zero findings were observed.",
+        "The executed checks produced no Findings, while manual-review items are still present.",
+    ],
+)
+def test_findings_cannot_be_denied_in_prose(whole, text):
+    context = build_ai_context(whole)
+    assert context.metadata.deterministic_findings > 0
+    payload = answer(context)
+    payload["security_summary"]["text"] = text
+    with pytest.raises(ValueError, match="false_absence_claim"):
+        validate_interpretation(json.dumps(payload), context)
+
+
 def test_all_supported_capabilities_read_named_semantic_fields(whole):
     before = deepcopy(whole)
     facts, coverage = ordered_security_context(whole.safe_execution, whole)
@@ -244,6 +262,30 @@ def test_valid_correlation_and_scoped_control_are_only_interpretation(whole):
     output = validate_interpretation(json.dumps(payload), context)
     assert len(output.cross_capability_insights) == 1
     assert not hasattr(output, "findings") and not hasattr(output, "evidence")
+
+
+@pytest.mark.parametrize("section", ["control_observations", "cross_capability_insights"])
+@pytest.mark.parametrize(
+    "text,code",
+    [
+        ("The target appears secure.", "unsupported_security_assurance"),
+        ("No security facts were observed.", "false_absence_claim"),
+    ],
+)
+def test_valid_security_references_do_not_authorize_false_prose(whole, section, text, code):
+    context = build_ai_context(whole)
+    payload = answer(context)
+    if section == "control_observations":
+        control = next(f for f in context.security_facts if f.control_observed)
+        entry = {"security_fact_ref": control.security_fact_ref}
+    else:
+        first = context.security_facts[0]
+        second = next(f for f in context.security_facts if f.capability != first.capability)
+        entry = {"security_facts": [first.security_fact_ref, second.security_fact_ref]}
+    entry["text"] = text
+    payload[section] = [entry]
+    with pytest.raises(ValueError, match=code):
+        validate_interpretation(json.dumps(payload), context)
 
 
 def test_generation_controls_are_restricted_to_supplied_control_facts(whole):

@@ -15,6 +15,11 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Fixed
 
+- Optional AI interpretation rejects absence claims contradicted by supplied review facts or
+  Findings, while preserving the distinction between manual-review candidates and Findings.
+- Optional AI interpretation rejects unsupported overall security-assurance claims and visibly
+  incomplete summaries. Summaries request two short sentences with headroom below the retained
+  structural ceiling; rejected interpretation remains non-fatal to the deterministic scan.
 - Compact assessments show confirmed/probable GraphQL endpoint URLs separately from the supplied
   target, with consistent endpoint labels in pre-ACTIVE context.
 - Ctrl+C at any ACTIVE selection or confirmation now stops the entire scan interaction with

@@ -30,6 +30,7 @@ MAX_AI_OPERATIONS = 12
 MAX_CONTEXT_BYTES = 12_000
 DEFAULT_AI_MODEL = "qwen3:8b"
 DEFAULT_AI_TIMEOUT_SECONDS = 600.0
+MAX_AI_SUMMARY_CHARACTERS = 800
 AI_NOTICE = "Model-generated interpretation — not evidence or vulnerability confirmation."
 
 
@@ -265,7 +266,16 @@ class AILimitation(AIStatement):
 
 
 class AISecuritySummary(AIModel):
-    text: Annotated[str, Field(strict=True, min_length=1, max_length=800)]
+    text: Annotated[
+        str,
+        Field(
+            strict=True,
+            min_length=1,
+            max_length=MAX_AI_SUMMARY_CHARACTERS,
+            description="Two complete concise sentences, aiming for 180–350 characters. "
+            "The maximum is a safety ceiling, not a writing target. No overall security assurance.",
+        ),
+    ]
     security_facts: tuple[FactReference, ...] = Field(max_length=8)
 
 

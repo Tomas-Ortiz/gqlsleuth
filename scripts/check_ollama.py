@@ -6,12 +6,13 @@ Requires an already running Ollama and installed model. No model downloads or pu
 
 import json
 import sys
+from copy import deepcopy
 from unittest.mock import patch
 
 import httpx
 from graphql import build_schema, introspection_from_schema
 
-from gqlsleuth.ai.models import AIAnalysisStatus
+from gqlsleuth.ai.models import MAX_AI_SUMMARY_CHARACTERS, AIAnalysisStatus
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
 from gqlsleuth.graphql.introspection import FULL_INTROSPECTION_QUERY, MINIMAL_INTROSPECTION_QUERY
@@ -79,14 +80,23 @@ def local_only(event: str, args: tuple[object, ...]) -> None:
 def main() -> None:
     sys.addaudithook(local_only)
     scan = fixture_scan()
+    before = deepcopy(scan)
     transport = LocalInferenceTransport()
     result = interpret_completed_scan(scan, client=OllamaClient(transport=transport))
+    assert scan == before and scan.evidence == before.evidence
     print(f"Ollama acceptance: {result.status.value}; inference requests: {transport.calls}")
     if result.status is not AIAnalysisStatus.SUCCESS:
         print(f"Controlled diagnostic: {result.error_code}")
         raise SystemExit(1)
     assert transport.calls == 1 and result.interpretation is not None
     print("Typed interpretation and supplied references validated; no raw output retained.")
+    summary = result.interpretation.security_summary.text
+    print(
+        f"Summary: {len(summary)} characters; structural ceiling: {MAX_AI_SUMMARY_CHARACTERS}; "
+        "completion/assurance/absence checks passed; deterministic scan unchanged."
+    )
+    # This explicitly invoked fixture uses no target data; permit human prose inspection.
+    print(summary)
 
 
 if __name__ == "__main__":

@@ -1212,8 +1212,26 @@ recorded outcome and non-destructive follow-up; interest never becomes severity.
 operation refs and locally generated `SF1`, `SF2`, ... references are accepted. Unknown/missing
 references, duplicates within a section, extra fields and invalid structures reject the entire
 response. Correlations require distinct facts from at least two capabilities. Control entries
-must reference an existing explicit control or satisfied policy. Model prose remains unverified
-interpretation requiring manual validation, not fact or proven causality.
+must reference an existing explicit control or satisfied policy.
+
+Security Summary (`security_summary.text`) requests exactly two concise, complete sentences,
+with a requested total length of 180–350 characters. The hard Pydantic/JSON-schema ceiling remains
+800 characters: a safety bound, not a generation target. Sentence count and the requested length
+range are prompt guidance, not additional schema constraints. Post-response completion checks
+reject summaries reaching the ceiling, missing terminal punctuation (`.`, `!`, or `?`, allowing
+closing quotes/brackets), or ending in ellipses (`...` or `…`). This also rejects visibly incomplete
+summaries below the ceiling; rejected prose is not clipped, rewritten or repaired.
+
+Model prose remains interpretation requiring manual validation and is not generally fact-checked.
+Narrow deterministic guards across prose sections reject unsupported overall security/safety
+assurance, including inferences from zero Findings, successful Queries/checks or limited observed
+controls. They also reject explicit absence claims that contradict supplied Findings, review
+candidates/review-interest operations or security facts. Zero deterministic Findings means only
+that the executed checks produced no deterministic Findings; review/security facts can still be
+present. A calibrated statement such as “No deterministic Findings were produced, but manual-review
+candidates remain” is permitted when supported. Review facts are not escalated into Findings.
+These guards check specific assertion forms and supplied categories, not arbitrary natural-language
+truth, and do not establish that accepted prose is fact or proven causality.
 
 Ordinary Phase 9/10 execution totals are calculated from complete results before truncation;
 specialized probe outcomes remain separate security facts and coverage counts. A canonical
@@ -1245,15 +1263,24 @@ deterministic scan or prevent report generation. No new Python dependencies are 
 Connection establishment failures (including connection timeouts) use `connection_failed`;
 interrupted reads/writes and other request failures use `transport_failed`, without inferring
 an OS or resource-exhaustion cause. Inference timeouts retain the separate `timeout` code.
-Internal validation errors identify JSON parsing, typed schema, reference or execution-fact
-validation using static stage/codes. Result error codes distinguish these failures without
-retaining model content or Pydantic input dumps; default console wording remains unchanged.
+Post-response validation covers JSON parsing, strict typed schema validation, exact supplied
+references (including eligible controls and distinct capability pairs), canonical execution-fact
+validation, narrow prose assertion/factual-consistency checks, and summary completion. Internal
+errors use static stage/codes; `unsupported_security_assurance`, `false_absence_claim`, and
+`incomplete_security_summary` use the existing `facts` stage. Result error codes distinguish
+failures without retaining model content or Pydantic input dumps; default console wording remains
+unchanged. Invalid AI output remains non-fatal to the completed deterministic scan, with no prose
+rewriting/repair, retry or additional inference.
 
 For optional real-model acceptance, run `uv run python scripts/check_ollama.py` with an already
 running local Ollama and installed `qwen3:8b`. The script uses a synthetic fully mocked SAFE scan,
-makes exactly one real local inference and validates the ordinary typed/reference contract.
+makes exactly one real local inference per invocation and checks the structured/typed output,
+supplied references, canonical execution facts, narrow assurance/false-absence guards, and summary
+completion contract. It verifies the deterministic scan/Evidence remain unchanged and displays
+the accepted fixture summary with its character count and schema ceiling for manual inspection.
 A socket/DNS guard permits only `127.0.0.1:11434`; there are no public target requests, model
-downloads or retained raw replies. This manual check is separate from deterministic pytest/CI.
+downloads or retained raw model replies. This acceptance check does not generally verify prose
+as factual. It is separate from deterministic pytest/CI.
 
 Reports receive the already-produced result and perform no inference themselves. Optional JSON
 `ai_interpretation` is an additive field under report schema version 1, absent without `--ai`.
@@ -3423,7 +3450,8 @@ the original byte cap is deliberately not increased while prompt/schema grow. By
 payload bound, not an exact tokenizer measurement. Oversized context is reduced deterministically
 rather than sent; truncated model output is rejected without another call.
 
-Output retains the canonical ordinary execution summary and adds security_summary (800 chars),
+Output retains the canonical ordinary execution summary and adds security_summary (requested:
+exactly two concise sentences, 180–350 characters total; hard Pydantic/schema ceiling: 800 chars),
 security_fact_reviews (8 entries, interpretation 450/manual follow-up 350 chars),
 control_observations (6 entries/400 chars), cross_capability_insights (4 entries/500 chars,
 2–4 distinct fact references across capabilities), operation_review (8 entries/600 chars), and
@@ -3431,8 +3459,14 @@ limitations (8 entries/500 chars). Every reference must exist in the final bound
 unknown/missing/duplicate references, extra fields or oversized output reject the whole response.
 Controls must reference supplied explicit controls/satisfied policies. Aggregate security counts
 are local metadata outside model prose; ordinary execution counts require exact canonical text.
-Model correlations remain uncertain interpretations requiring manual validation, never new facts,
-Findings, severity, CWE, CVSS or proven causality.
+The summary ceiling is a safety bound, not the writing target. As detailed in Section 22,
+post-response validation checks JSON, typed structure, exact references, canonical execution facts,
+narrow prose assertion/factual consistency, and summary completion. Summaries reaching the ceiling,
+lacking terminal punctuation or ending in ellipses are rejected. Across prose sections, narrow
+deterministic guards reject unsupported overall security assurance and absence claims contradicting
+supplied Findings/review/security facts. Zero Findings does not mean zero review/security facts.
+Accepted prose and model correlations still require manual validation; these guards are not a
+general NLP fact checker and create no facts, Findings, severity, CWE, CVSS or proven causality.
 
 AI receives no credentials, tokens/claim values/signatures, object or neighbor IDs, business
 values, variables/documents, upload paths/names/bytes/hashes, federation SDL, target/WebSocket
@@ -3440,6 +3474,10 @@ URLs, init/event/frame values, raw responses/errors, schema descriptions or Evid
 GraphQL names remain untrusted data. The same local-only Ollama adapter makes at most one call,
 with stream=false, think=false, temperature=0, no retries, finite timeout and no tools. Invalid
 projection, unavailable provider or invalid output is non-fatal to scanning and reporting.
+Invalid prose is not rewritten or repaired, and no additional inference is made. The local
+`scripts/check_ollama.py` acceptance path described in Section 22 exercises this same contract
+with mocked target requests and one real loopback inference; it downloads no model and retains
+no raw model reply. No generic redaction is introduced.
 
 Shared `ai/sections.py` supplies only the existing AI section in console and human reports:
 validated execution facts, Security Summary, Security Fact Reviews, Security Controls Observed,
