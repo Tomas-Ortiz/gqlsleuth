@@ -90,6 +90,68 @@ def test_accept_calibrated_scope_without_rewriting(completed, text):
     assert result.security_summary.text == text
 
 
+def test_real_qwen_passive_denial_does_not_offer_assurance(completed):
+    context = build_ai_context(completed)
+    text = (
+        "No overall security assurance can be inferred from zero Findings "
+        "or successful Queries alone."
+    )
+    result = validate_interpretation(json.dumps(answer(context, text)), context)
+    assert result.security_summary.text == text
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "Overall security assurance can be inferred from zero Findings.",
+        "No failures occurred, so overall security assurance can be inferred.",
+        "No overall security assurance can be inferred, but the target appears secure.",
+        "No overall security assurance can be inferred; no meaningful vulnerabilities exist.",
+    ],
+)
+def test_passive_denial_does_not_exempt_a_positive_assurance_claim(completed, claim):
+    context = build_ai_context(completed)
+    with pytest.raises(AIValidationError, match="unsupported_security_assurance"):
+        validate_interpretation(json.dumps(answer(context, claim)), context)
+
+
+def test_real_qwen_repeated_limitations_still_fail_summary_completion(completed):
+    context = build_ai_context(completed)
+    text = (
+        "Limited runtime assessment due to unexecuted capability probes. No deterministic Findings "
+        "observed. Review candidates exist but require manual follow-up without escalating to "
+        "vulnerabilities. Scope limitations apply to all observations and interpretations. "
+        "No overall security assurance can be inferred from zero Findings or successful Queries "
+        "alone. Untested behavior remains outside the scope of this scan. The absence of Findings "
+        "does not imply security, safety, or effective controls. Manual review of supplied "
+        "candidates is required without assuming vulnerabilities or business impact. No policy "
+        "violations or "
+        "unresolved observations were upgraded beyond their supplied category. The scan did not "
+        "test authorization, authentication, or abuse controls, and no evidence of runtime "
+        "behavior was ob-"
+    )
+    assert len(text) == 800
+    with pytest.raises(AIValidationError, match="incomplete_security_summary"):
+        validate_interpretation(json.dumps(answer(context, text)), context)
+
+
+def test_schema_descriptions_steer_concise_grounded_prose_without_changing_bounds(completed):
+    context = build_ai_context(completed)
+    definitions = build_response_schema(context)["$defs"]
+    for name, field, maximum, guidance in (
+        ("AISecuritySummary", "text", 800, "Finish naturally well before"),
+        ("AIOperationExplanation", "explanation", 600, "interest is not risk/severity"),
+        ("AISecurityFactReview", "interpretation", 450, "not a vulnerability"),
+        ("AIControlObservation", "text", 400, "Generic errors do not establish"),
+    ):
+        description = definitions[name]["properties"][field]
+        assert description["maxLength"] == maximum
+        assert guidance in description["description"]
+    prompt = build_system_prompt(context)
+    assert "do not repeat these instructions/disclaimers" in prompt
+    assert "180–350 characters TOTAL" in prompt
+
+
 @pytest.mark.parametrize(
     "section,key",
     [
@@ -140,6 +202,7 @@ def test_summary_schema_ceiling_and_requested_headroom(completed):
     field = build_response_schema(context)["$defs"]["AISecuritySummary"]["properties"]["text"]
     assert field["maxLength"] == MAX_AI_SUMMARY_CHARACTERS == 800
     assert "180–350" in field["description"] and "180–350" in build_system_prompt(context)
+    assert "2–4" in field["description"] and "2–4" in build_system_prompt(context)
     text = "No deterministic Findings were produced by the executed checks. Untested behavior "
     text += "remains outside scope; these observations do not establish overall target security."
     assert len(text) < MAX_AI_SUMMARY_CHARACTERS / 2
@@ -147,6 +210,18 @@ def test_summary_schema_ceiling_and_requested_headroom(completed):
     assert json.loads(result.model_dump_json())["security_summary"]["text"] == text
     with pytest.raises(AIValidationError, match="invalid_schema"):
         validate_interpretation(json.dumps(answer(context, "x" * 801)), context)
+
+
+def test_four_complete_short_sentences_are_a_generation_preference_not_a_parser(completed):
+    context = build_ai_context(completed)
+    text = (
+        "The executed checks produced no deterministic Findings. Manual-review candidates remain. "
+        "Untested authorization behavior is outside this assessment. "
+        "These observations do not establish overall target security."
+    )
+    assert 180 <= len(text) <= 350
+    result = validate_interpretation(json.dumps(answer(context, text)), context)
+    assert result.security_summary.text == text
 
 
 @pytest.mark.parametrize(
@@ -177,7 +252,7 @@ def test_prose_failure_is_nonfatal_single_inference_and_preserves_scan(completed
         completed, client=OllamaClient(transport=httpx.MockTransport(respond))
     )
     assert result.status is AIAnalysisStatus.INVALID_RESPONSE and result.error_code == code
-    assert result.interpretation is None and len(calls) == 1
+    assert result.interpretation is None and len(calls) == 5
     assert completed == before and completed.evidence == before.evidence
     assert text not in result.error_message
 

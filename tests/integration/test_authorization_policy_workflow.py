@@ -227,7 +227,7 @@ def test_invalid_policy_fails_before_scanning(monkeypatch, extra):
 def test_ai_context_and_one_call_unchanged(controlled, monkeypatch):
     contexts = []
 
-    def interpret(result):
+    def interpret(result, **options):
         contexts.append(build_ai_context(result))
         return None
 

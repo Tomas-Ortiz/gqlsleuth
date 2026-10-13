@@ -101,7 +101,10 @@ def test_all_supported_capabilities_read_named_semantic_fields(whole):
     assert whole == before
 
 
-def test_exact_request_privacy_one_inference_no_scanner_actions(whole, monkeypatch):
+@pytest.mark.parametrize("invalid_count", [0, 1, 4])
+def test_exact_request_privacy_bounded_inferences_no_scanner_actions(
+    whole, monkeypatch, invalid_count
+):
     before = deepcopy(whole)
     context = build_ai_context(whole)
     requests = []
@@ -118,6 +121,7 @@ def test_exact_request_privacy_one_inference_no_scanner_actions(whole, monkeypat
         )
         assert all(str(e.evidence_id) not in outgoing for e in whole.evidence)
         payload = json.loads(outgoing)
+        assert "REJECTED_MODEL_CANARY" not in outgoing
         assert payload["messages"][1]["content"] == serialize_context(context)
         assert (
             payload["model"] == "qwen3:8b"
@@ -132,14 +136,21 @@ def test_exact_request_privacy_one_inference_no_scanner_actions(whole, monkeypat
             json={
                 "model": "qwen3:8b",
                 "done": True,
-                "message": {"role": "assistant", "content": json.dumps(answer(context))},
+                "message": {
+                    "role": "assistant",
+                    "content": (
+                        "REJECTED_MODEL_CANARY"
+                        if len(requests) <= invalid_count
+                        else json.dumps(answer(context))
+                    ),
+                },
             },
         )
 
     result = interpret_completed_scan(
         whole, client=OllamaClient(transport=httpx.MockTransport(respond))
     )
-    assert result.status is AIAnalysisStatus.SUCCESS and len(requests) == 1
+    assert result.status is AIAnalysisStatus.SUCCESS and len(requests) == invalid_count + 1
     assert whole == before and whole.evidence == before.evidence
     assert context.metadata.deterministic_findings == 6
     assert context.metadata.policy_violations == 9

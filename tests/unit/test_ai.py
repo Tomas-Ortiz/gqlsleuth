@@ -504,7 +504,7 @@ def test_operation_review_replaces_obsolete_fields_and_retains_bounds(completed,
         ("nested_404", AIAnalysisStatus.HTTP_ERROR, "http_error"),
     ],
 )
-def test_adapter_failures_are_nonfatal_without_retry_or_raw_error_leaks(
+def test_adapter_failures_are_nonfatal_with_content_only_regeneration(
     completed, failure, expected, code
 ):
     calls = []
@@ -562,8 +562,13 @@ def test_adapter_failures_are_nonfatal_without_retry_or_raw_error_leaks(
         "invalid_response": "Local Ollama returned an invalid structured interpretation.",
         "invalid_json": "Local Ollama returned an invalid structured interpretation.",
     }
-    assert result.error_message == messages[code]
-    assert len(calls) == 1
+    content_failure = expected is AIAnalysisStatus.INVALID_RESPONSE
+    assert result.error_message == (
+        "AI assistance could not produce a valid interpretation after 5 attempts."
+        if content_failure
+        else messages[code]
+    )
+    assert len(calls) == (5 if content_failure else 1)
     assert result.interpretation is None
     assert "SECRET" not in str(result)
     assert completed == before
@@ -723,7 +728,9 @@ def test_execution_summary_separates_attempts_success_errors_and_skips(mixed_que
         "Query requests: 9 attempted; 9 SUCCESS.",
     ],
 )
-def test_false_execution_summary_is_rejected_without_retry(mixed_query_outcomes, claim):
+def test_false_execution_summary_is_rejected_after_bounded_regeneration(
+    mixed_query_outcomes, claim
+):
     context = build_ai_context(mixed_query_outcomes)
     payload = answer(context)
     payload["scan_summary"]["text"] = claim
@@ -738,7 +745,7 @@ def test_false_execution_summary_is_rejected_without_retry(mixed_query_outcomes,
     )
     assert result.status is AIAnalysisStatus.INVALID_RESPONSE
     assert result.interpretation is None
-    assert len(calls) == 1
+    assert len(calls) == 5
 
 
 @pytest.mark.parametrize(

@@ -179,7 +179,9 @@ def test_disabled_noninteractive_baseline_requests_ai_unchanged(controlled, monk
     monkeypatch.setattr(cli, "_interactive_stdin", lambda: False)
     contexts = []
     monkeypatch.setattr(
-        cli, "interpret_completed_scan", lambda result: contexts.append(build_ai_context(result))
+        cli,
+        "interpret_completed_scan",
+        lambda result, **options: contexts.append(build_ai_context(result)),
     )
     monkeypatch.setattr(cli, "render_ai", lambda *args, **kwargs: None)
     options = [

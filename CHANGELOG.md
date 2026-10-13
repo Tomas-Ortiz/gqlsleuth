@@ -6,6 +6,10 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- Optional local AI now regenerates a complete interpretation after deterministic model-output
+  validation failures, with category-specific corrections and a hard five-attempt limit. It stops
+  at the first valid result, shows progress and retains only safe attempt metadata. Provider errors
+  are not retried; `--ai-timeout` applies per request. Scanning and reporting add no target traffic.
 - Compact execution and capability statuses share semantic console colors; GraphQL errors remain
   yellow observed outcomes, while hard failures are red and safety blocks/skips are magenta.
 - All CLI commands and help paths start with the installed version and author header exactly once.
@@ -15,10 +19,18 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Fixed
 
+- Local AI summary guidance avoids repeated disclaimers, and the assurance guard accepts the
+  calibrated denial “No overall security assurance can be inferred” while retaining all positive
+  assurance, grounding and summary-completion rejection checks.
+- Conditional manual-review questions no longer become false control-enforcement assertions;
+  hedged claims that successful execution implies enforcement remain rejected.
+- Optional AI interpretation rejects unsupported error-cause/control assertions and escalation of
+  review interest into risk or vulnerability claims. Explicit cited control facts remain scoped.
+- Documented UTF-8 native-command redirection for Windows PowerShell 5.1 encoding mismatches.
 - Optional AI interpretation rejects absence claims contradicted by supplied review facts or
   Findings, while preserving the distinction between manual-review candidates and Findings.
 - Optional AI interpretation rejects unsupported overall security-assurance claims and visibly
-  incomplete summaries. Summaries request two short sentences with headroom below the retained
+  incomplete summaries. Summaries request 2–4 short sentences with headroom below the retained
   structural ceiling; rejected interpretation remains non-fatal to the deterministic scan.
 - Compact assessments show confirmed/probable GraphQL endpoint URLs separately from the supplied
   target, with consistent endpoint labels in pre-ACTIVE context.

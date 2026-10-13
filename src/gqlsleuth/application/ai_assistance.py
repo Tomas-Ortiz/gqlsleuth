@@ -1,5 +1,6 @@
 """Optional one-way interpretation of a completed SAFE/ACTIVE result."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from time import perf_counter
 
@@ -7,11 +8,14 @@ from gqlsleuth.ai.context import build_ai_context
 from gqlsleuth.ai.models import (
     DEFAULT_AI_MODEL,
     DEFAULT_AI_TIMEOUT_SECONDS,
+    MAX_AI_ATTEMPTS,
     AIAnalysisStatus,
     AIContextMetadata,
     AIInterpretationResult,
+    AIProgress,
     AIServiceError,
 )
+from gqlsleuth.ai.regeneration import corrective_instruction
 from gqlsleuth.application.active_execution import ActiveExecutionScanResult
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult
 from gqlsleuth.infrastructure.ollama import OllamaClient
@@ -22,6 +26,7 @@ def interpret_completed_scan(
     *,
     client: OllamaClient | None = None,
     timeout_seconds: float = DEFAULT_AI_TIMEOUT_SECONDS,
+    on_progress: Callable[[AIProgress], None] | None = None,
 ) -> AIInterpretationResult:
     """Never call scanner stages or alter results; expected AI failures are non-fatal."""
     started = perf_counter()
@@ -46,24 +51,64 @@ def interpret_completed_scan(
             error_message="Could not build a safe bounded AI context.",
         )
     try:
-        interpretation = (client or OllamaClient(timeout_seconds=timeout_seconds)).interpret(
-            context
-        )
-    except AIServiceError as error:
+        provider = client or OllamaClient(timeout_seconds=timeout_seconds)
+    except ValueError:
         return AIInterpretationResult(
-            error.status,
+            AIAnalysisStatus.UNAVAILABLE,
             DEFAULT_AI_MODEL,
             generated_at,
             perf_counter() - started,
             context.metadata,
-            error_code=error.code,
-            error_message=str(error),
+            error_code="invalid_configuration",
+            error_message="AI timeout must be finite and positive.",
         )
-    return AIInterpretationResult(
-        AIAnalysisStatus.SUCCESS,
-        DEFAULT_AI_MODEL,
-        generated_at,
-        perf_counter() - started,
-        context.metadata,
-        interpretation=interpretation,
-    )
+    failures: list[str] = []
+    for attempt in range(1, MAX_AI_ATTEMPTS + 1):
+        if on_progress:
+            on_progress(AIProgress(attempt, "started"))
+        try:
+            interpretation = (
+                provider.interpret(context)
+                if not failures
+                else provider.interpret(context, validation_code=failures[-1], attempt=attempt)
+            )
+        except AIServiceError as error:
+            retryable = (
+                error.status is AIAnalysisStatus.INVALID_RESPONSE
+                and corrective_instruction(error.code, attempt + 1) is not None
+            )
+            if retryable:
+                failures.append(error.code)
+                if on_progress:
+                    on_progress(AIProgress(attempt, "rejected", error.code))
+                if attempt < MAX_AI_ATTEMPTS:
+                    continue
+            return AIInterpretationResult(
+                error.status,
+                DEFAULT_AI_MODEL,
+                generated_at,
+                perf_counter() - started,
+                context.metadata,
+                error_code=error.code,
+                error_message=(
+                    "AI assistance could not produce a valid interpretation "
+                    f"after {attempt} attempts."
+                    if retryable
+                    else str(error)
+                ),
+                attempt_count=0 if error.code == "context_too_large" else attempt,
+                validation_failures=tuple(failures),
+            )
+        if on_progress:
+            on_progress(AIProgress(attempt, "accepted"))
+        return AIInterpretationResult(
+            AIAnalysisStatus.SUCCESS,
+            DEFAULT_AI_MODEL,
+            generated_at,
+            perf_counter() - started,
+            context.metadata,
+            interpretation=interpretation,
+            attempt_count=attempt,
+            validation_failures=tuple(failures),
+        )
+    raise AssertionError("Bounded AI loop must return at its final attempt")

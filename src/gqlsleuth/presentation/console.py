@@ -1,7 +1,7 @@
 """Compact and detailed Rich views of existing results; never initiate scanner work."""
 
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from json import dumps
 from pathlib import Path
@@ -174,16 +174,16 @@ def render_scan_header(console: Console, version: str) -> None:
 
 
 @contextmanager
-def activity_status(console: Console, message: str) -> Iterator[None]:
+def activity_status(console: Console, message: str) -> Iterator[Callable[[str], None]]:
     """Animate only on terminals, and always stop before subsequent output or prompts."""
     if not console.is_terminal:
         console.print(message, markup=False)
-        yield
+        yield lambda updated: console.print(updated, markup=False)
         return
     # ASCII frames also work on legacy Windows terminals. Rich removes the transient
     # status on exit, including when the workflow raises a controlled error.
-    with console.status(Text(message), spinner="line", spinner_style="gql.metadata"):
-        yield
+    with console.status(Text(message), spinner="line", spinner_style="gql.metadata") as status:
+        yield lambda updated: status.update(Text(updated))
 
 
 def render_active_gate(console: Console) -> None:

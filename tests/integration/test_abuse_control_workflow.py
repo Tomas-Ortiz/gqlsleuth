@@ -197,7 +197,9 @@ def test_phase27_does_not_add_ai_calls(controlled, monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "_interactive_stdin", lambda: True)
     monkeypatch.setattr(
-        cli, "interpret_completed_scan", lambda result: calls.append(build_ai_context(result))
+        cli,
+        "interpret_completed_scan",
+        lambda result, **options: calls.append(build_ai_context(result)),
     )
     monkeypatch.setattr(cli, "render_ai", lambda *args, **kwargs: None)
     result = CliRunner().invoke(cli.app, ["scan", TARGET, *OPTIONS, "--ai"], input="\n1\ny\n")

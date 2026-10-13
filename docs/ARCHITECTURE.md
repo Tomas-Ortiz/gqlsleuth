@@ -1153,7 +1153,7 @@ The application flow is strictly one-way:
 Completed SafeExecutionScanResult | ActiveExecutionScanResult
     → application.ai_assistance.interpret_completed_scan
     → ai.context.build_ai_context → AIContext
-    → infrastructure.ollama.OllamaClient (one local POST /api/chat)
+    → infrastructure.ollama.OllamaClient (at most five local POST /api/chat attempts)
     → validated AIInterpretationResult
     → CLI and optional reports
 ```
@@ -1214,13 +1214,20 @@ references, duplicates within a section, extra fields and invalid structures rej
 response. Correlations require distinct facts from at least two capabilities. Control entries
 must reference an existing explicit control or satisfied policy.
 
-Security Summary (`security_summary.text`) requests exactly two concise, complete sentences,
+Security Summary (`security_summary.text`) requests 2–4 concise, complete sentences,
 with a requested total length of 180–350 characters. The hard Pydantic/JSON-schema ceiling remains
 800 characters: a safety bound, not a generation target. Sentence count and the requested length
 range are prompt guidance, not additional schema constraints. Post-response completion checks
 reject summaries reaching the ceiling, missing terminal punctuation (`.`, `!`, or `?`, allowing
 closing quotes/brackets), or ending in ellipses (`...` or `…`). This also rejects visibly incomplete
 summaries below the ceiling; rejected prose is not clipped, rewritten or repaired.
+Generation instructions favor one material observation and one scope limitation, without repeated
+disclaimers; field descriptions reinforce this preference. Fact/operation reviews normally select
+1–3 material entries and limitations 1–2 distinct entries, within the unchanged structural maxima.
+Limitations request 100–200 characters each with a natural ending below their unchanged 500-character
+ceiling. These are generation preferences, not new validation constraints. The base prompt also
+prohibits speculative error causes across sentence boundaries and distinguishes scanner safety
+skips from target protections.
 
 Model prose remains interpretation requiring manual validation and is not generally fact-checked.
 Narrow deterministic guards across prose sections reject unsupported overall security/safety
@@ -1230,8 +1237,22 @@ candidates/review-interest operations or security facts. Zero deterministic Find
 that the executed checks produced no deterministic Findings; review/security facts can still be
 present. A calibrated statement such as “No deterministic Findings were produced, but manual-review
 candidates remain” is permitted when supported. Review facts are not escalated into Findings.
+Additional narrow guards reject outcome-to-cause assertions, success-based security reassurance,
+and review-only risk/vulnerability conclusions. Generic GraphQL/HTTP errors, indeterminate results
+and network failures do not establish authorization, authentication, rate-limiting, input-validation,
+depth or abuse-control enforcement. Control assertions require explicitly cited control/satisfied-
+policy facts from the matching capability; an unrelated control cannot justify an operation's
+error cause. Unqualified runtime list-bounding absence cannot be inferred from a schema-only
+candidate. Scoped manual-review guidance and explicitly supported control interpretation remain
+permitted. Apparent functional roles should derive from names/categories, not execution success.
 These guards check specific assertion forms and supplied categories, not arbitrary natural-language
 truth, and do not establish that accepted prose is fact or proven causality.
+The assurance guard recognizes the calibrated passive denial “No overall security assurance can
+be inferred …”; this does not exempt a positive assurance claim elsewhere in the same response.
+The control guard also recognizes the conditional question “Manual review is needed to determine
+if the authentication policy is correctly enforced”, rather than treating it as proof of enforcement.
+The exception covers that bounded question form, not an appended assertion or a success/error cause.
+Generic outcome/control, false-absence and summary-completion checks still apply independently.
 
 Ordinary Phase 9/10 execution totals are calculated from complete results before truncation;
 specialized probe outcomes remain separate security facts and coverage counts. A canonical
@@ -1242,17 +1263,37 @@ The summary is labeled as validated facts. Other sections remain model-generated
 interpretation, instructed to preserve per-operation classifications and never treat HTTP 200,
 GraphQL errors, skips, or mere attempts as successful execution.
 
+The application owns bounded content regeneration (`MAX_AI_ATTEMPTS = 5`): one accepted
+interpretation maximum; one to five local inference attempts only when deterministic validation
+rejects model output. Attempt 1 uses the base prompt. Further attempts append a concise static
+correction from `ai/regeneration.py`, keyed only by the normalized rejection code, plus the attempt
+number. Each regenerates the complete response with the SAME bounded context and schema. No
+rejected text, variables, Evidence, URLs, target responses or new context are replayed. Generation
+stops immediately on acceptance. No self-critique, chain-of-thought request or prose repair occurs.
+
+Retryable categories are structured JSON/schema/envelope failures, supplied-reference violations,
+execution-summary mismatch, assurance/false-absence/outcome/control/review-conclusion violations
+and incomplete summaries. Unknown categories, invalid local context/configuration, provider HTTP
+errors, missing models, connection failures, timeouts and transport failures stop without content
+regeneration. No transport retry policy is introduced. KeyboardInterrupt propagates to the CLI's
+scan cancellation path (exit 130), without starting another attempt or target stage.
+
 `AIInterpretationResult` retains model, status, timestamp, measured duration, context metadata,
-optional validated interpretation, and normalized error code/message. Statuses are `SUCCESS`,
+optional validated interpretation, normalized error code/message, `attempt_count` and ordered
+`validation_failures` containing only safe rejection codes. Context/configuration failure before
+inference has zero attempts; provider failure records the attempted request. Only the final
+accepted interpretation is retained; exhausted validation leaves it null. Statuses are `SUCCESS`,
 `UNAVAILABLE`, `HTTP_ERROR`, and `INVALID_RESPONSE`; when disabled, no result is produced.
 Thinking/reasoning and other raw envelope metadata are ignored, never logged, displayed, or
 persisted. Malformed final content is rejected rather than extracting reasoning or partial JSON.
 
 The dedicated HTTPX adapter is independent from target `HttpClient`. It uses a fixed loopback
-destination, no redirects or environment proxies, one request, no retries, a default 600-second
+destination, no redirects or environment proxies, one request per adapter call, no transport
+retries, a default 600-second
 inference wait with a five-second connection timeout, and a 128 KiB response limit. `--ai-timeout`
 accepts finite positive seconds and is passed only to the Ollama adapter's read/write/pool waits;
-it does not enable AI or change target HTTP/discovery timeouts. The non-streaming response wait
+it applies separately to EACH attempt, does not enable AI or change target HTTP/discovery timeouts.
+Regeneration can increase total AI-stage time; this is not a total stage deadline. The non-streaming response wait
 includes inference. The ten-minute default gives CPU-only prompt processing and up to 2,048 output
 tokens more headroom than the former three-minute ceiling; slower hardware can choose a longer
 explicit wait. This is not a hardware performance guarantee or total scan deadline. Model-not-
@@ -1266,18 +1307,25 @@ an OS or resource-exhaustion cause. Inference timeouts retain the separate `time
 Post-response validation covers JSON parsing, strict typed schema validation, exact supplied
 references (including eligible controls and distinct capability pairs), canonical execution-fact
 validation, narrow prose assertion/factual-consistency checks, and summary completion. Internal
-errors use static stage/codes; `unsupported_security_assurance`, `false_absence_claim`, and
+errors use static stage/codes; `unsupported_security_assurance`, `false_absence_claim`,
+`unsupported_outcome_inference`, `unsupported_control_claim`, `unsupported_review_conclusion`, and
 `incomplete_security_summary` use the existing `facts` stage. Result error codes distinguish
 failures without retaining model content or Pydantic input dumps; default console wording remains
-unchanged. Invalid AI output remains non-fatal to the completed deterministic scan, with no prose
-rewriting/repair, retry or additional inference.
+content-free. The CLI shows initial generation and regeneration progress without alarming errors;
+verbose mode may show safe codes. After five rejected attempts it states that no valid
+interpretation was produced and deterministic scanning completed normally. Invalid output remains
+non-fatal, without prose rewriting/repair or any target retry/request.
 
 For optional real-model acceptance, run `uv run python scripts/check_ollama.py` with an already
 running local Ollama and installed `qwen3:8b`. The script uses a synthetic fully mocked SAFE scan,
-makes exactly one real local inference per invocation and checks the structured/typed output,
-supplied references, canonical execution facts, narrow assurance/false-absence guards, and summary
-completion contract. It verifies the deterministic scan/Evidence remain unchanged and displays
-the accepted fixture summary with its character count and schema ceiling for manual inspection.
+makes one to five real local inferences per invocation and checks the structured/typed output,
+supplied references, canonical execution facts, narrow assurance/absence/causal-control guards,
+and summary completion contract. It verifies the deterministic scan/Evidence remain unchanged and
+displays the accepted typed fixture interpretation and summary length/ceiling for manual inspection.
+Normal acceptance records attempt counts and safe validation codes only. An explicitly invoked
+synthetic-only diagnostic helper can inspect typed rejected prose locally without bypassing
+validation; it is not enabled by the acceptance command or normal scans. Rejected replies are not
+retained in results/reports, and malformed/schema-invalid replies are not dumped.
 A socket/DNS guard permits only `127.0.0.1:11434`; there are no public target requests, model
 downloads or retained raw model replies. This acceptance check does not generally verify prose
 as factual. It is separate from deterministic pytest/CI.
@@ -1979,12 +2027,14 @@ Optional AI interpretations are produced separately by Phase 12 and passed into 
 ### Phase 12 — AI assistance
 
 Implemented originally as operation-focused assistance. Phase 31 extends its safe context and
-structured output; the provider, optional behavior and single-inference boundary are retained.
+structured output; the provider and optional behavior remain. AI-008 replaces the original
+single-inference boundary with the bounded regeneration contract in Section 22.
 
 Original deliverables:
 
 - Opt-in `--ai`, after the complete deterministic SAFE/ACTIVE workflow and before reports.
-- Fixed local Ollama adapter using installed `qwen3:8b`, with one bounded structured inference.
+- Fixed local Ollama adapter using installed `qwen3:8b`, originally one structured inference;
+  now at most five attempts after content validation failures, with one accepted interpretation.
 - Explicit allowlisted context, maximum 20 operations and 12,000 serialized UTF-8 bytes.
 - Strict typed output and supplied-operation reference validation across all sections.
 - Separate AI interpretation/status models, with no Evidence or Findings.
@@ -2235,7 +2285,7 @@ report field follows report schema version 1's optional-field convention, absent
 Markdown/HTML show Controlled GraphQL Multiplicity Validation and reuse bounded response display;
 Safety Notice remains final. Evidence is canonical and lossless in JSON. These observations are
 not Findings or vulnerability claims and cannot establish higher limits or global resolver policy.
-Phase 31 projects only safe probe types/counts/outcomes into the existing single AI inference. Phase
+Phase 31 projects only safe probe types/counts/outcomes into the existing bounded AI stage. Phase
 16 remains solely schema-derived.
 
 `tests/fixtures/phase17_target.py` is a loopback-only development target sharing deterministic
@@ -2309,7 +2359,7 @@ Query Depth Validation and reuse bounded human response rendering only for attem
 Notice is still the final section exactly once. Console previews use neutral headings and cyan
 references; verbose results include bounded responses. No Findings are created.
 
-Phase 31 projects only safe depth numbers/outcomes into the existing single AI inference. Phase 9,
+Phase 31 projects only safe depth numbers/outcomes into the existing bounded AI stage. Phase 9,
 Mutation controls and the Phase 17 two-request budget
 remain independent. `tests/fixtures/phase18_target.py --smoke` provides deterministic loopback
 accepted/rejected/indeterminate and unselected runs; MockTransport covers network failure and
@@ -2551,7 +2601,7 @@ JSON retains references rather than copying Phase 20 response bytes. Console and
 report presentation add Authorization Policy Validation immediately after object review; reports
 keep Safety Notice final exactly once. Authentication values/configuration and raw business bodies
 are absent from policy projections. Phase 31 projects single-context policy enums/provenance
-without identifiers. Named-context AI stays unsupported and inference count stays one. The disabled
+without identifiers. Named-context AI stays unsupported; the same bounded AI stage is reused. The disabled
 path retains previous behavior.
 
 `tests/fixtures/phase21_smoke.py` reuses the existing Phase 20 loopback server. Offline tests and
@@ -2736,7 +2786,7 @@ Active scan/report results compose optional `mutation_authorization`, omitted fr
 disabled. Evidence order is previous SAFE/probes → sequential discovery → Mutation authorization
 → generic Mutation executions. Console and Markdown/HTML use capability names, preserve complete
 request facts without unrelated raw business bodies, and keep Safety Notice final exactly once.
-Phase 31 adds safe policy/outcome facts without IDs/variables to the same AI inference. Phase 20/21
+Phase 31 adds safe policy/outcome facts without IDs/variables to the same AI stage. Phase 20/21
 cases/policies and Phase 22 discovered IDs are never automatically consumed.
 
 `tests/fixtures/phase23_target.py --smoke` validates loopback success, explicit denial, business
@@ -2952,7 +3002,7 @@ JSON omits the field when disabled. Shared human presentation adds IDOR / BOLA D
 conditional IDOR / BOLA Findings, without raw business-body dumps. Safety Notice remains final
 once and qualifies policy-backed Findings when this capability is present. Renderers create no
 Findings or new classifications. Phase 31 projects existing IDOR Finding types, context mode and
-policy outcomes, never identifiers or ownership data, within the same single inference.
+policy outcomes, never identifiers or ownership data, within the same bounded AI stage.
 
 `tests/fixtures/phase25_target.py --smoke` reuses the Phase 22 schema/loopback server infrastructure
 with explicit test scenarios and fake headers. It covers anonymous/supplied-context success,
@@ -3046,7 +3096,7 @@ local metadata, selection, consent, attempted counts, decisions and Findings. Di
 the field. Shared human presentation adds Authentication & Token Security and conditional
 Authentication & Token Findings before the final single Safety Notice. Phase 31 projects safe
 token kind/algorithm/presence/temporal enums and outcomes/Findings, never token/claim values.
-The local provider and single-inference boundary are unchanged.
+The local provider and one-accepted-interpretation boundary remain; Section 22 defines bounded regeneration.
 
 Offline tests use mock transports and `tests/fixtures/phase26_target.py --smoke`, a loopback-only
 target with fake signing material. Coverage includes strict consent, exact replay, canonical-plan
@@ -3127,7 +3177,7 @@ retain candidates, selection, confirmation, attempt results, first-signal index,
 and limitations. Disabled JSON omits the field. Console and human reports add Rate Limiting &
 Abuse Controls and conditional Rate Limiting / Abuse-Control Findings, before the final single
 Safety Notice. Phase 31 projects safe counts/control types/policy outcomes and Findings into the
-same AI inference, never credentials, variables or response messages.
+same AI stage, never credentials, variables or response messages.
 
 Offline mock tests and `tests/fixtures/phase27_target.py --smoke` cover exact replay, independent
 consent, strict budgets and canonical-plan checks, prior-probe exclusion, all control classes,
@@ -3448,10 +3498,10 @@ serialization, including self-counting metadata, must be at most **12,000 bytes*
 **12 ordinary operations**. The unchanged 8192-token context/2048-token output settings are kept;
 the original byte cap is deliberately not increased while prompt/schema grow. Bytes are a hard
 payload bound, not an exact tokenizer measurement. Oversized context is reduced deterministically
-rather than sent; truncated model output is rejected without another call.
+rather than sent; truncated model output is rejected and may trigger bounded regeneration (Section 22).
 
 Output retains the canonical ordinary execution summary and adds security_summary (requested:
-exactly two concise sentences, 180–350 characters total; hard Pydantic/schema ceiling: 800 chars),
+2–4 concise sentences, 180–350 characters total; hard Pydantic/schema ceiling: 800 chars),
 security_fact_reviews (8 entries, interpretation 450/manual follow-up 350 chars),
 control_observations (6 entries/400 chars), cross_capability_insights (4 entries/500 chars,
 2–4 distinct fact references across capabilities), operation_review (8 entries/600 chars), and
@@ -3465,18 +3515,22 @@ narrow prose assertion/factual consistency, and summary completion. Summaries re
 lacking terminal punctuation or ending in ellipses are rejected. Across prose sections, narrow
 deterministic guards reject unsupported overall security assurance and absence claims contradicting
 supplied Findings/review/security facts. Zero Findings does not mean zero review/security facts.
+Narrow causal/control and review-conclusion guards also reject generic outcomes being promoted to
+causes, enforcement or security conclusions without supporting typed references (see Section 22).
 Accepted prose and model correlations still require manual validation; these guards are not a
 general NLP fact checker and create no facts, Findings, severity, CWE, CVSS or proven causality.
 
 AI receives no credentials, tokens/claim values/signatures, object or neighbor IDs, business
 values, variables/documents, upload paths/names/bytes/hashes, federation SDL, target/WebSocket
 URLs, init/event/frame values, raw responses/errors, schema descriptions or Evidence UUIDs/objects.
-GraphQL names remain untrusted data. The same local-only Ollama adapter makes at most one call,
-with stream=false, think=false, temperature=0, no retries, finite timeout and no tools. Invalid
+GraphQL names remain untrusted data. The local-only Ollama adapter uses
+stream=false, think=false, temperature=0, no transport retries, per-request finite timeout and no tools.
+The application allows at most five attempts only after model-content validation failure, with
+safe category corrections and one accepted interpretation maximum (Section 22). Invalid
 projection, unavailable provider or invalid output is non-fatal to scanning and reporting.
-Invalid prose is not rewritten or repaired, and no additional inference is made. The local
+Invalid prose is not rewritten, repaired, replayed or retained in results. The local
 `scripts/check_ollama.py` acceptance path described in Section 22 exercises this same contract
-with mocked target requests and one real loopback inference; it downloads no model and retains
+with mocked target requests and bounded loopback regeneration; it downloads no model and retains
 no raw model reply. No generic redaction is introduced.
 
 Shared `ai/sections.py` supplies only the existing AI section in console and human reports:
@@ -3488,7 +3542,7 @@ persisted there. Report schema version remains 1. Safety Notice stays final exac
 Offline `tests/fixtures/whole_scan_ai.py` composes real project-owned results with fake canaries;
 `tests/unit/test_whole_scan_ai.py` captures the exact mocked Ollama request and exercises all
 supported capabilities, privacy, stable truncation, scoped outcomes, reference rejection and
-report/isolation behavior. Existing CLI regressions cover disabled AI, one inference and identical
+report/isolation behavior. CLI regressions cover disabled AI, bounded regeneration and identical
 scanner request sequences. No public target or real credentials are used. Phase 32 changes only the human presentation described below; no future vulnerability
 functionality is implemented.
 

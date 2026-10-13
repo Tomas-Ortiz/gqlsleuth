@@ -54,6 +54,8 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
 
     def ollama_handler(request):
         ai_requests.append(json.loads(request.content))
+        if behavior.get("interrupt_at") == len(ai_requests):
+            raise KeyboardInterrupt
         if behavior["fail"] == "transport":
             raise httpx.RemoteProtocolError("Private error detail", request=request)
         if behavior["fail"]:
@@ -65,6 +67,8 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
             "operation_review": [],
             "limitations": [],
         }
+        if len(ai_requests) <= behavior.get("invalid_count", 0):
+            payload["security_summary"]["text"] = "The target appears secure. REJECTED_CANARY."
         return httpx.Response(
             200,
             json={
@@ -78,11 +82,11 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
             },
         )
 
-    def interpret(result):
+    def interpret(result, **options):
         events.append("ai")
         before = deepcopy(result)
         output = interpret_completed_scan(
-            result, client=OllamaClient(transport=httpx.MockTransport(ollama_handler))
+            result, client=OllamaClient(transport=httpx.MockTransport(ollama_handler)), **options
         )
         assert result == before
         return output
@@ -93,6 +97,47 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_interactive_stdin", lambda: True)
     monkeypatch.chdir(tmp_path)
     return events, target_requests, ai_requests, results, behavior
+
+
+@pytest.mark.parametrize("mode", ["safe", "active"])
+@pytest.mark.parametrize("verbose", [False, True])
+@pytest.mark.parametrize("invalid_count", [1, 5])
+def test_regeneration_progress_and_reports_follow_all_scanning(
+    ai_cli, tmp_path, mode, verbose, invalid_count
+):
+    events, targets, requests, _, behavior = ai_cli
+    behavior["invalid_count"] = invalid_count
+    result = invoke(mode, ai=True, reports=True, verbose=verbose, input="1\ny\n")
+    assert result.exit_code == 0, result.exception
+    text = " ".join(plain_cli_output(result.stdout).split())
+    assert "Generating AI-assisted interpretation..." in text
+    assert "Regenerating (2/5)..." in text
+    assert ("unsupported_security_assurance" in text) is verbose
+    assert "REJECTED_CANARY" not in text
+    assert len(requests) == min(invalid_count + 1, 5)
+    assert len(targets) == int(mode == "active")
+    assert events == (["safe", "active_complete", "ai"] if mode == "active" else ["safe", "ai"])
+    if invalid_count == 5:
+        assert "could not produce a valid interpretation after 5 attempts" in text
+        assert "Deterministic scan completed normally" in text
+    else:
+        assert text.count("AI-Assisted Interpretation") == 1
+    report = json.loads(next((tmp_path / "gqlsleuth-reports").glob("*.json")).read_text("utf8"))
+    ai_result = report["ai_interpretation"]
+    assert ai_result["attempt_count"] == len(requests)
+    assert ai_result["validation_failures"] == ["unsupported_security_assurance"] * invalid_count
+
+
+@pytest.mark.parametrize("interrupt_at", [1, 2])
+def test_ctrl_c_in_ai_generation_aborts_scan_without_regeneration(ai_cli, interrupt_at, tmp_path):
+    _, targets, requests, _, behavior = ai_cli
+    behavior.update(invalid_count=5, interrupt_at=interrupt_at)
+    result = invoke("safe", ai=True, reports=True)
+    assert result.exit_code == 130
+    assert "Scan cancelled by user." in result.stdout
+    assert "Traceback" not in result.stdout
+    assert len(requests) == interrupt_at and targets == []
+    assert not (tmp_path / "gqlsleuth-reports").exists()
 
 
 def invoke(mode, *, ai=False, reports=False, input="\n", verbose=False):
@@ -142,7 +187,7 @@ def test_scan_header_and_terminal_status_lifetimes(ai_cli, monkeypatch, mode, ai
         return original_scan(*args, **kwargs)
 
     def interpret(*args, **kwargs):
-        assert running == ["Interpreting completed scan with local qwen3:8b..."]
+        assert running == ["Generating AI-assisted interpretation..."]
         return original_interpret(*args, **kwargs)
 
     def require_idle(function):
@@ -163,7 +208,7 @@ def test_scan_header_and_terminal_status_lifetimes(ai_cli, monkeypatch, mode, ai
     result = invoke(mode, ai=ai, reports=True, input="1\ny\n", verbose=verbose)
     assert result.exit_code == 0, result.exception
     assert activities == ["Scanning target, please wait..."] + (
-        ["Interpreting completed scan with local qwen3:8b..."] if ai else []
+        ["Generating AI-assisted interpretation..."] if ai else []
     )
     assert not running
     text = plain_cli_output(stream.getvalue())
@@ -203,8 +248,15 @@ def test_one_ai_inference_follows_completed_safe_and_active_behavior(
     events.clear()
     result = invoke(mode, ai=True, input=selection, verbose=verbose)
     assert result.exit_code == baseline.exit_code == 0
-    displayed = result.stdout.replace("Interpreting completed scan with local qwen3:8b...\n", "")
-    assert displayed.split("\nAI-Assisted Interpretation")[0] == baseline.stdout
+    displayed = result.stdout.replace("Generating AI-assisted interpretation...\n", "")
+    assert (
+        "\n".join(
+            line
+            for line in displayed.split("\nAI-Assisted Interpretation")[0].split("\n")
+            if not line.startswith("AI attempt ")
+        )
+        == baseline.stdout
+    )
     assert events == (["safe", "active_complete", "ai"] if mode == "active" else ["safe", "ai"])
     assert len(ai_requests) == 1
     assert len(target_requests) == mutation_count * 2

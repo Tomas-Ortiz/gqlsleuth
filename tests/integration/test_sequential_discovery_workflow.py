@@ -306,7 +306,7 @@ def test_redirect_header_scope_and_fresh_cookies(phase_ten_scan, monkeypatch):
 def test_cli_ai_call_count_unchanged(controlled, monkeypatch):
     calls = []
 
-    def interpret(result):
+    def interpret(result, **options):
         calls.append(build_ai_context(result))
         return None
 

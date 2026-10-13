@@ -68,6 +68,26 @@ Do not change system execution policy just for this installation.
 Installed users run **`gqlsleuth` directly**. `python -m gqlsleuth` is also supported.
 Normal wheel installation resolves runtime dependencies; it does not require developer tools.
 
+For **Windows PowerShell 5.1** native-command redirection, a UTF-8 console can decode Python's
+legacy piped encoding incorrectly (for example, corrupting `Tomás`). Interactive output is
+unaffected. Align both encodings for the command and explicitly write UTF-8; restore them afterward:
+
+```powershell
+$savedPythonEncoding = $env:PYTHONIOENCODING
+$savedConsoleEncoding = [Console]::OutputEncoding
+try {
+    $env:PYTHONIOENCODING = 'utf-8'
+    [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+    gqlsleuth version | Out-File -Encoding utf8 ./version.txt
+} finally {
+    $env:PYTHONIOENCODING = $savedPythonEncoding
+    [Console]::OutputEncoding = $savedConsoleEncoding
+}
+```
+
+`Out-File -Encoding utf8` alone cannot repair text already decoded incorrectly by PowerShell.
+Repository contributors can use `uv run gqlsleuth` in the same invocation.
+
 ### Contributors: run from the repository
 
 Use Python 3.13 and [uv](https://docs.astral.sh/uv/):
@@ -152,7 +172,7 @@ gqlsleuth scan https://authorized.example/graphql --ai
 ```
 
 Prepare the local Ollama service and `qwen3:8b` first, as described [below](#optional-local-ai).
-GQLSleuth does not install Ollama or pull models. At most one inference interprets retained scan
+GQLSleuth does not install Ollama or pull models. Bounded local inference interprets retained scan
 facts; the deterministic engine remains authoritative. AI creates no Findings or Evidence.
 
 ## Understanding output
@@ -342,10 +362,19 @@ gqlsleuth scan https://authorized.example/graphql --ai --ai-timeout 1200
 
 `--ai-timeout` accepts finite positive seconds and is used only with `--ai`; it does not enable
 AI itself. It changes only local Ollama read/write/pool waits; the connection timeout remains
-5 seconds. It is a network wait timeout, not a total scan deadline. Target `--timeout` and
+5 seconds. It applies to EACH individual inference request, not a total AI-stage or scan deadline.
+Bounded regeneration can increase total AI-stage time to several request timeouts. Target `--timeout` and
 discovery/introspection/Query/Mutation requests are unaffected. AI timeouts remain non-fatal.
 
-At most **one inference** interprets the completed single-context scan. It can discuss retained
+At most **five local inference attempts** produce **one accepted interpretation** of the completed
+single-context scan. After a deterministic model-output validation failure, a concise correction
+based only on its safe rejection category requests a complete replacement using the same bounded
+context. Generation stops on the first valid interpretation. Connection, timeout, HTTP and missing-
+model failures are not retried. Rejected prose is never replayed, repaired or stored in results.
+Progress shows regeneration attempts; `--verbose` also shows normalized rejection codes.
+If all five attempts fail, AI remains unavailable while the deterministic assessment completes.
+Reports consume the final result without further inference. This adds no target requests/retries.
+The interpretation can discuss retained
 Findings, policy outcomes, controls, unresolved checks, structural candidates and operations.
 Deterministic execution facts remain authoritative. AI adds no target requests, Findings,
 Evidence, scores or consent. Its prose and cross-capability correlations still require review.
@@ -362,7 +391,8 @@ interpretation. AI is optional and disabled without `--ai`.
 
 Developers can check the real local model without scanning a target:
 `uv run python scripts/check_ollama.py`. This optional acceptance script uses a mocked SAFE scan
-and one real local inference, validates structured output and supplied references, and never
+and up to five real local inference attempts, validates the full structured/reference/grounding
+contract, reports attempt counts and safe rejection codes, and never
 downloads a model. It is not part of normal pytest/CI.
 
 ## Capability reference

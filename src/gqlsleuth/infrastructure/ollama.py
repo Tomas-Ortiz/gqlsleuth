@@ -16,6 +16,7 @@ from gqlsleuth.ai.models import (
     AIValidationError,
 )
 from gqlsleuth.ai.prompt import build_response_schema, build_system_prompt, validate_interpretation
+from gqlsleuth.ai.regeneration import corrective_instruction
 from gqlsleuth.graphql.response_json import decode_response_json, response_json_object
 
 OLLAMA_ENDPOINT = "http://127.0.0.1:11434"
@@ -36,7 +37,9 @@ class OllamaClient:
         self._transport = transport
         self._timeout = timeout_seconds
 
-    def interpret(self, context: AIContext) -> AIInterpretation:
+    def interpret(
+        self, context: AIContext, *, validation_code: str | None = None, attempt: int = 1
+    ) -> AIInterpretation:
         serialized = serialize_context(context)
         if len(serialized.encode("utf-8")) > MAX_CONTEXT_BYTES:
             raise AIServiceError(
@@ -44,12 +47,18 @@ class OllamaClient:
                 "context_too_large",
                 "AI context exceeds its size limit.",
             )
+        system_prompt = build_system_prompt(context)
+        if validation_code is not None:
+            correction = corrective_instruction(validation_code, attempt)
+            if correction is None:
+                raise ValueError("Unknown AI validation category.")
+            system_prompt += "\n\n" + correction
         payload = {
             "model": DEFAULT_AI_MODEL,
             "stream": False,
             "think": False,
             "messages": [
-                {"role": "system", "content": build_system_prompt(context)},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": serialized},
             ],
             "format": build_response_schema(context),

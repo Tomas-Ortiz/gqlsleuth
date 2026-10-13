@@ -31,6 +31,7 @@ MAX_CONTEXT_BYTES = 12_000
 DEFAULT_AI_MODEL = "qwen3:8b"
 DEFAULT_AI_TIMEOUT_SECONDS = 600.0
 MAX_AI_SUMMARY_CHARACTERS = 800
+MAX_AI_ATTEMPTS = 5
 AI_NOTICE = "Model-generated interpretation — not evidence or vulnerability confirmation."
 
 
@@ -258,11 +259,29 @@ class AIStatement(AIModel):
 
 class AIOperationExplanation(AIModel):
     operation: OperationReference
-    explanation: AIText
+    explanation: Annotated[
+        AIText,
+        Field(
+            description="Concise manual-review interpretation: interest is not risk/severity. "
+            "State the recorded outcome separately from the manual-review task. SUCCESS does not "
+            "establish correctness or control enforcement; errors do not establish their cause. "
+            "Scanner safety skips are not evidence of target protections. Do not speculate about "
+            "query structure or data access, including in a separate 'This may indicate' sentence."
+        ),
+    ]
 
 
 class AILimitation(AIStatement):
-    text: Annotated[str, Field(strict=True, min_length=1, max_length=500)]
+    text: Annotated[
+        str,
+        Field(
+            strict=True,
+            min_length=1,
+            max_length=500,
+            description="One complete scope limitation, normally 100–200 characters; "
+            "finish naturally well below the 500-character safety ceiling. Do not infer causes.",
+        ),
+    ]
 
 
 class AISecuritySummary(AIModel):
@@ -272,8 +291,10 @@ class AISecuritySummary(AIModel):
             strict=True,
             min_length=1,
             max_length=MAX_AI_SUMMARY_CHARACTERS,
-            description="Two complete concise sentences, aiming for 180–350 characters. "
-            "The maximum is a safety ceiling, not a writing target. No overall security assurance.",
+            description="2–4 complete concise sentences, normally 180–350 characters TOTAL: "
+            "one supplied observation and one scope limitation. Finish naturally well before "
+            "the 800-character safety ceiling. Do not repeat disclaimers or offer "
+            "security assurance.",
         ),
     ]
     security_facts: tuple[FactReference, ...] = Field(max_length=8)
@@ -281,13 +302,31 @@ class AISecuritySummary(AIModel):
 
 class AISecurityFactReview(AIModel):
     security_fact_ref: FactReference
-    interpretation: Annotated[str, Field(strict=True, min_length=1, max_length=450)]
+    interpretation: Annotated[
+        str,
+        Field(
+            strict=True,
+            min_length=1,
+            max_length=450,
+            description="Interpret only this referenced fact. A review candidate warrants manual "
+            "review; it is not a vulnerability or proof of absent runtime controls.",
+        ),
+    ]
     manual_follow_up: Annotated[str, Field(strict=True, min_length=1, max_length=350)]
 
 
 class AIControlObservation(AIModel):
     security_fact_ref: FactReference
-    text: Annotated[str, Field(strict=True, min_length=1, max_length=400)]
+    text: Annotated[
+        str,
+        Field(
+            strict=True,
+            min_length=1,
+            max_length=400,
+            description="Scope the control to this explicit control/satisfied-policy fact only. "
+            "Generic errors do not establish enforcement or its cause.",
+        ),
+    ]
 
 
 class AICrossCapabilityInsight(AIModel):
@@ -315,6 +354,17 @@ class AIInterpretationResult:
     interpretation: AIInterpretation | None = None
     error_code: str | None = None
     error_message: str | None = None
+    attempt_count: int = 0
+    validation_failures: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AIProgress:
+    """Content-free application progress; presentation belongs to the caller."""
+
+    attempt: int
+    state: Literal["started", "rejected", "accepted"]
+    validation_code: str | None = None
 
 
 class AIServiceError(Exception):

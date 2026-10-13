@@ -16,7 +16,12 @@ from typer._click import Context, HelpFormatter
 from typer.core import TyperGroup
 
 from gqlsleuth import __version__
-from gqlsleuth.ai.models import DEFAULT_AI_TIMEOUT_SECONDS, AIInterpretationResult
+from gqlsleuth.ai.models import (
+    DEFAULT_AI_TIMEOUT_SECONDS,
+    MAX_AI_ATTEMPTS,
+    AIInterpretationResult,
+    AIProgress,
+)
 from gqlsleuth.application.abuse_controls import AbuseControlSession, prepare_abuse_controls
 from gqlsleuth.application.active_execution import (
     ActiveExecutionScanResult,
@@ -973,12 +978,31 @@ def scan(
             )
     ai_result = None
     if ai:
-        with activity_status(console, "Interpreting completed scan with local qwen3:8b..."):
-            ai_result = (
-                interpret_completed_scan(report_result)
-                if ai_timeout is None
-                else interpret_completed_scan(report_result, timeout_seconds=ai_timeout)
-            )
+        try:
+            with activity_status(console, "Generating AI-assisted interpretation...") as update:
+
+                def ai_progress(event: AIProgress) -> None:
+                    if event.state == "started" and event.attempt > 1:
+                        update(
+                            "AI response did not pass validation. "
+                            f"Regenerating ({event.attempt}/{MAX_AI_ATTEMPTS})..."
+                        )
+                    elif verbose and event.state in {"rejected", "accepted"}:
+                        detail = f": {event.validation_code}" if event.validation_code else ""
+                        console.print(
+                            f"AI attempt {event.attempt}/{MAX_AI_ATTEMPTS} {event.state}{detail}",
+                            markup=False,
+                        )
+
+                ai_result = interpret_completed_scan(
+                    report_result,
+                    timeout_seconds=(
+                        DEFAULT_AI_TIMEOUT_SECONDS if ai_timeout is None else ai_timeout
+                    ),
+                    on_progress=ai_progress,
+                )
+        except (typer.Abort, KeyboardInterrupt):
+            _cancel_scan()
     render_completed_assessment(console, report_result, verbose=verbose, ai_result=ai_result)
     if ai_result is not None:
         render_ai(console, ai_result, verbose=verbose)

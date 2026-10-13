@@ -1,4 +1,4 @@
-"""Manual acceptance: mocked SAFE scan -> one real local qwen3:8b interpretation.
+"""Manual acceptance: mocked SAFE scan -> bounded local qwen3:8b interpretation.
 
 Run explicitly with `uv run python scripts/check_ollama.py`; never run in normal CI.
 Requires an already running Ollama and installed model. No model downloads or public targets.
@@ -12,7 +12,15 @@ from unittest.mock import patch
 import httpx
 from graphql import build_schema, introspection_from_schema
 
-from gqlsleuth.ai.models import MAX_AI_SUMMARY_CHARACTERS, AIAnalysisStatus
+from gqlsleuth.ai.models import (
+    MAX_AI_ATTEMPTS,
+    MAX_AI_SUMMARY_CHARACTERS,
+    AIAnalysisStatus,
+    AIContext,
+    AIInterpretation,
+    AIValidationError,
+)
+from gqlsleuth.ai.prompt import validate_interpretation
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
 from gqlsleuth.graphql.introspection import FULL_INTROSPECTION_QUERY, MINIMAL_INTROSPECTION_QUERY
@@ -56,7 +64,7 @@ class LocalInferenceTransport(httpx.HTTPTransport):
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         assert str(request.url) == OLLAMA_ENDPOINT + "/api/chat" and request.method == "POST"
         self.calls += 1
-        assert self.calls == 1, "Only one inference is allowed"
+        assert self.calls <= MAX_AI_ATTEMPTS, "AI attempt limit exceeded"
         return super().handle_request(request)
 
 
@@ -77,26 +85,47 @@ def local_only(event: str, args: tuple[object, ...]) -> None:
         raise RuntimeError("Acceptance smoke permits only local Ollama networking")
 
 
+def validate_fixture_reply(text: str, context: AIContext) -> AIInterpretation:
+    """Expose only typed synthetic-fixture prose for manual triage; never bypass validation."""
+    try:
+        return validate_interpretation(text, context)
+    except AIValidationError as error:
+        if error.stage not in {"json", "schema"}:
+            # The real validator already passed the strict typed contract. This helper runs
+            # only on the fixed synthetic fixture, never on target scans or in the normal CLI.
+            typed = AIInterpretation.model_validate_json(text, strict=True)
+            print("Rejected fixture prose (NOT an accepted interpretation):")
+            print(json.dumps(typed.model_dump(mode="json"), indent=2, ensure_ascii=True))
+            print(f"Rejected summary length: {len(typed.security_summary.text)}")
+        raise
+
+
 def main() -> None:
     sys.addaudithook(local_only)
     scan = fixture_scan()
     before = deepcopy(scan)
     transport = LocalInferenceTransport()
+    # Normal acceptance retains only safe rejection codes, never rejected model prose.
     result = interpret_completed_scan(scan, client=OllamaClient(transport=transport))
     assert scan == before and scan.evidence == before.evidence
+    print(
+        "Deterministic scan/Evidence unchanged; target requests mocked; five-attempt guard active."
+    )
     print(f"Ollama acceptance: {result.status.value}; inference requests: {transport.calls}")
+    print(f"Validation failures: {result.validation_failures}")
+    assert transport.calls == result.attempt_count
     if result.status is not AIAnalysisStatus.SUCCESS:
         print(f"Controlled diagnostic: {result.error_code}")
         raise SystemExit(1)
-    assert transport.calls == 1 and result.interpretation is not None
+    assert 1 <= transport.calls <= MAX_AI_ATTEMPTS and result.interpretation is not None
     print("Typed interpretation and supplied references validated; no raw output retained.")
     summary = result.interpretation.security_summary.text
     print(
         f"Summary: {len(summary)} characters; structural ceiling: {MAX_AI_SUMMARY_CHARACTERS}; "
-        "completion/assurance/absence checks passed; deterministic scan unchanged."
+        "completion/assurance/absence/grounding checks passed; deterministic scan unchanged."
     )
-    # This explicitly invoked fixture uses no target data; permit human prose inspection.
-    print(summary)
+    # This explicitly invoked fixture uses no target data; permit complete prose inspection.
+    print(json.dumps(result.interpretation.model_dump(mode="json"), indent=2, ensure_ascii=True))
 
 
 if __name__ == "__main__":
