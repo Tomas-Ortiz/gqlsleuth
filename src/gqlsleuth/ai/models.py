@@ -31,8 +31,13 @@ MAX_CONTEXT_BYTES = 12_000
 DEFAULT_AI_MODEL = "qwen3:8b"
 DEFAULT_AI_TIMEOUT_SECONDS = 600.0
 MAX_AI_SUMMARY_CHARACTERS = 800
-MAX_AI_ATTEMPTS = 5
-AI_NOTICE = "Model-generated interpretation — not evidence or vulnerability confirmation."
+MAX_AI_ATTEMPTS = 10
+AI_NOTICE = (
+    "AI-generated interpretation. It may be incomplete, inaccurate, or contain unsupported "
+    "inferences. Treat it as analyst assistance only and validate it against GQLSleuth's "
+    "deterministic facts and evidence. It is not evidence, a Finding, "
+    "or vulnerability confirmation."
+)
 
 
 class AIAnalysisStatus(StrEnum):
@@ -245,103 +250,144 @@ class AIContext(AIModel):
     security_facts: tuple[AISecurityFact, ...] = ()
 
 
-AIText = Annotated[str, Field(strict=True, min_length=1, max_length=600)]
 OperationReference = Annotated[str, Field(strict=True, min_length=1, max_length=180)]
 
 
-class AIStatement(AIModel):
-    """References live in explicit fields, including summary and limitations."""
-
-    text: AIText
-    operations: tuple[OperationReference, ...] = Field(max_length=MAX_AI_OPERATIONS)
-    security_facts: tuple[FactReference, ...] = Field(default=(), max_length=8)
+class AIOperationReference(AIModel):
+    kind: Literal["operation"]
+    ref: OperationReference
 
 
-class AIOperationExplanation(AIModel):
-    operation: OperationReference
-    explanation: Annotated[
-        AIText,
+class AISecurityFactReference(AIModel):
+    kind: Literal["security_fact"]
+    ref: FactReference
+
+
+AIReference = Annotated[AIOperationReference | AISecurityFactReference, Field(discriminator="kind")]
+
+
+class AIReferences(AIModel):
+    """One structural bound across both exact reference kinds."""
+
+    references: tuple[AIReference, ...] = Field(
+        max_length=3, json_schema_extra={"uniqueItems": True}
+    )
+
+    @property
+    def operations(self) -> tuple[str, ...]:
+        return tuple(item.ref for item in self.references if item.kind == "operation")
+
+    @property
+    def security_facts(self) -> tuple[str, ...]:
+        return tuple(item.ref for item in self.references if item.kind == "security_fact")
+
+
+class AISummaryInterpretation(AIReferences):
+    text: Annotated[
+        str,
         Field(
-            description="Concise manual-review interpretation: interest is not risk/severity. "
-            "State the recorded outcome separately from the manual-review task. SUCCESS does not "
-            "establish correctness or control enforcement; errors do not establish their cause. "
-            "Scanner safety skips are not evidence of target protections. Do not speculate about "
-            "query structure or data access, including in a separate 'This may indicate' sentence."
+            strict=True,
+            min_length=1,
+            max_length=800,
+            description="2-4 complete sentences, normally 180-350 characters total. "
+            "Interpret review themes, not counts or outcomes. "
+            "Finish naturally well before the 800-character ceiling.",
         ),
     ]
 
 
-class AILimitation(AIStatement):
+class AIOperationInterpretation(AIModel):
+    operation: OperationReference
+    interpretation: Annotated[
+        str,
+        Field(
+            strict=True,
+            min_length=1,
+            max_length=300,
+            description="One short complete sentence about the apparent review role, "
+            "not a metadata recap. Interest is not risk/severity; "
+            "schema roles are not runtime observations.",
+        ),
+    ]
+    manual_follow_up: Annotated[
+        str,
+        Field(
+            strict=True,
+            min_length=1,
+            max_length=220,
+            description="One short, specific non-destructive manual-review direction. "
+            "Finish naturally.",
+        ),
+    ]
+
+
+class AIReviewInsight(AIReferences):
+    references: tuple[AIReference, ...] = Field(
+        min_length=2, max_length=3, json_schema_extra={"uniqueItems": True}
+    )
+    interpretation: Annotated[str, Field(strict=True, min_length=1, max_length=350)]
+    manual_follow_up: Annotated[str, Field(strict=True, min_length=1, max_length=220)]
+
+
+class AIInterpretiveLimitation(AIReferences):
     text: Annotated[
         str,
         Field(
             strict=True,
             min_length=1,
             max_length=500,
-            description="One complete scope limitation, normally 100–200 characters; "
-            "finish naturally well below the 500-character safety ceiling. Do not infer causes.",
+            description="One distinct interpretive scope limitation, normally 150-300 characters; "
+            "finish naturally with punctuation well below the ceiling. "
+            "No ellipsis or guessed cause.",
         ),
     ]
-
-
-class AISecuritySummary(AIModel):
-    text: Annotated[
-        str,
-        Field(
-            strict=True,
-            min_length=1,
-            max_length=MAX_AI_SUMMARY_CHARACTERS,
-            description="2–4 complete concise sentences, normally 180–350 characters TOTAL: "
-            "one supplied observation and one scope limitation. Finish naturally well before "
-            "the 800-character safety ceiling. Do not repeat disclaimers or offer "
-            "security assurance.",
-        ),
-    ]
-    security_facts: tuple[FactReference, ...] = Field(max_length=8)
-
-
-class AISecurityFactReview(AIModel):
-    security_fact_ref: FactReference
-    interpretation: Annotated[
-        str,
-        Field(
-            strict=True,
-            min_length=1,
-            max_length=450,
-            description="Interpret only this referenced fact. A review candidate warrants manual "
-            "review; it is not a vulnerability or proof of absent runtime controls.",
-        ),
-    ]
-    manual_follow_up: Annotated[str, Field(strict=True, min_length=1, max_length=350)]
-
-
-class AIControlObservation(AIModel):
-    security_fact_ref: FactReference
-    text: Annotated[
-        str,
-        Field(
-            strict=True,
-            min_length=1,
-            max_length=400,
-            description="Scope the control to this explicit control/satisfied-policy fact only. "
-            "Generic errors do not establish enforcement or its cause.",
-        ),
-    ]
-
-
-class AICrossCapabilityInsight(AIModel):
-    security_facts: tuple[FactReference, ...] = Field(min_length=2, max_length=4)
-    text: Annotated[str, Field(strict=True, min_length=1, max_length=500)]
 
 
 class AIInterpretation(AIModel):
-    scan_summary: AIStatement
-    security_summary: AISecuritySummary
-    security_fact_reviews: tuple[AISecurityFactReview, ...] = Field(max_length=8)
-    control_observations: tuple[AIControlObservation, ...] = Field(max_length=6)
-    cross_capability_insights: tuple[AICrossCapabilityInsight, ...] = Field(max_length=4)
-    operation_review: tuple[AIOperationExplanation, ...] = Field(max_length=8)
-    limitations: tuple[AILimitation, ...] = Field(max_length=8)
+    """V2 generated contract; deterministic metadata and telemetry are application-owned."""
+
+    summary_interpretation: AISummaryInterpretation
+    operation_interpretations: tuple[AIOperationInterpretation, ...] = Field(max_length=12)
+    review_insights: tuple[AIReviewInsight, ...] = Field(max_length=3)
+    limitations: tuple[AIInterpretiveLimitation, ...] = Field(max_length=2)
+
+
+class AIReferenceProjection(AIModel):
+    """Exact supplied references only; no result graph or private request material."""
+
+    operations: tuple[AIOperation, ...] = ()
+    security_facts: tuple[AISecurityFact, ...] = ()
+
+
+@dataclass(frozen=True)
+class AIProviderUsage:
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    completion_token_limit: int | None = None
+    completion_tokens_remaining: int | None = None
+    context_token_limit: int | None = None
+    approx_context_tokens_remaining: int | None = None
+    done_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class AIAttemptUsage:
+    attempt: int
+    usage: AIProviderUsage
+    validation_failure: str | None = None
+    provider_failure: str | None = None
+
+
+@dataclass(frozen=True)
+class AISessionUsage:
+    total_prompt_tokens: int | None
+    total_completion_tokens: int | None
+    max_completion_tokens: int | None
+    output_limit_hit_count: int
+    done_reason_counts: tuple[tuple[str, int], ...]
+    accepted_attempt: int | None
+    accepted_attempt_prompt_tokens: int | None
+    accepted_attempt_completion_tokens: int | None
 
 
 @dataclass(frozen=True)
@@ -356,6 +402,12 @@ class AIInterpretationResult:
     error_message: str | None = None
     attempt_count: int = 0
     validation_failures: tuple[str, ...] = ()
+    ai_contract_version: int = 2
+    references: AIReferenceProjection = AIReferenceProjection()
+    execution_summary: str | None = None
+    attempts: tuple[AIAttemptUsage, ...] = ()
+    usage: AISessionUsage | None = None
+    quality_warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

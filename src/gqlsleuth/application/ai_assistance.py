@@ -10,12 +10,17 @@ from gqlsleuth.ai.models import (
     DEFAULT_AI_TIMEOUT_SECONDS,
     MAX_AI_ATTEMPTS,
     AIAnalysisStatus,
+    AIAttemptUsage,
     AIContextMetadata,
     AIInterpretationResult,
     AIProgress,
+    AIProviderUsage,
+    AIReferenceProjection,
     AIServiceError,
 )
+from gqlsleuth.ai.prompt import collect_interpretation_quality_warnings, execution_summary
 from gqlsleuth.ai.regeneration import corrective_instruction
+from gqlsleuth.ai.usage import summarize_usage
 from gqlsleuth.application.active_execution import ActiveExecutionScanResult
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult
 from gqlsleuth.infrastructure.ollama import OllamaClient
@@ -63,20 +68,46 @@ def interpret_completed_scan(
             error_message="AI timeout must be finite and positive.",
         )
     failures: list[str] = []
+    attempts: list[AIAttemptUsage] = []
+    references = AIReferenceProjection(
+        operations=context.operations, security_facts=context.security_facts
+    )
+    canonical_summary = execution_summary(context)
+    usage = AIProviderUsage()
+
+    def record_usage(value: AIProviderUsage) -> None:
+        nonlocal usage
+        usage = value
+
     for attempt in range(1, MAX_AI_ATTEMPTS + 1):
+        usage = AIProviderUsage()
         if on_progress:
             on_progress(AIProgress(attempt, "started"))
         try:
             interpretation = (
-                provider.interpret(context)
+                provider.interpret(context, on_usage=record_usage)
                 if not failures
-                else provider.interpret(context, validation_code=failures[-1], attempt=attempt)
+                else provider.interpret(
+                    context,
+                    validation_codes=tuple(dict.fromkeys(failures)),
+                    attempt=attempt,
+                    on_usage=record_usage,
+                )
             )
         except AIServiceError as error:
             retryable = (
                 error.status is AIAnalysisStatus.INVALID_RESPONSE
                 and corrective_instruction(error.code, attempt + 1) is not None
             )
+            if error.code != "context_too_large":
+                attempts.append(
+                    AIAttemptUsage(
+                        attempt,
+                        usage,
+                        validation_failure=error.code if retryable else None,
+                        provider_failure=error.status.value if not retryable else None,
+                    )
+                )
             if retryable:
                 failures.append(error.code)
                 if on_progress:
@@ -98,7 +129,12 @@ def interpret_completed_scan(
                 ),
                 attempt_count=0 if error.code == "context_too_large" else attempt,
                 validation_failures=tuple(failures),
+                references=references,
+                execution_summary=canonical_summary,
+                attempts=tuple(attempts),
+                usage=summarize_usage(tuple(attempts), accepted=False),
             )
+        attempts.append(AIAttemptUsage(attempt, usage))
         if on_progress:
             on_progress(AIProgress(attempt, "accepted"))
         return AIInterpretationResult(
@@ -108,7 +144,12 @@ def interpret_completed_scan(
             perf_counter() - started,
             context.metadata,
             interpretation=interpretation,
+            quality_warnings=collect_interpretation_quality_warnings(interpretation, context),
             attempt_count=attempt,
             validation_failures=tuple(failures),
+            references=references,
+            execution_summary=canonical_summary,
+            attempts=tuple(attempts),
+            usage=summarize_usage(tuple(attempts), accepted=True),
         )
     raise AssertionError("Bounded AI loop must return at its final attempt")

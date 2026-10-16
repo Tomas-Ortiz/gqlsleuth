@@ -683,7 +683,15 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
         return
     _section(console, "AI-Assisted Interpretation")
     console.print(AI_NOTICE, markup=False, style="gql.secondary")
+    _render_ai_quality(console, result, verbose=True)
     console.print(f"Model: {result.model}", markup=False)
+    from gqlsleuth.ai.sections import usage_rows
+
+    _section(console, "AI Generation Metadata")
+    usage_table = _table("Metric", "Value")
+    for label, value in usage_rows(result):
+        usage_table.add_row(label, value)
+    _render_table(console, usage_table)
     if result.status is not AIAnalysisStatus.SUCCESS:
         console.print(
             f"AI assistance {result.status.value}: {result.error_message}",
@@ -702,7 +710,7 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
     facts.columns[0].ratio = 1
     facts.columns[1].ratio = 3
     # Keep the canonical, validated summary clauses intact; do not ask AI to count or recount.
-    for clause in interpretation.scan_summary.text.split(". "):
+    for clause in (result.execution_summary or "Not recorded.").split(". "):
         scope, separator, values = clause.partition(": ")
         facts.add_row(
             Text(scope if separator else "Summary"), Text(values if separator else clause)
@@ -722,7 +730,28 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
     _render_table(console, facts)
     from gqlsleuth.ai.sections import interpretation_sections
 
-    collections = interpretation_sections(interpretation)
+    console.print(
+        "Operation interpretation scope: "
+        f"{len(interpretation.operation_interpretations)} supplied; "
+        f"{metadata.operations_omitted} omitted from bounded context.",
+        markup=False,
+    )
+    controls = tuple(
+        f
+        for f in result.references.security_facts
+        if f.control_observed or f.evaluation == "satisfied"
+    )
+    if controls:
+        _section(console, "Scoped Controls (deterministic facts)")
+        table = _table("Reference", "Capability", "Observation")
+        for fact in controls:
+            table.add_row(
+                fact.security_fact_ref,
+                fact.capability.value,
+                str(fact.control_kind or fact.evaluation or fact.outcome or "control_observed"),
+            )
+        _render_table(console, table)
+    collections = interpretation_sections(result)
     for title, entries in collections:
         _section(console, title)
         if not entries:
@@ -742,6 +771,21 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
             )
 
 
+def _render_ai_quality(console: Console, result: AIInterpretationResult, *, verbose: bool) -> None:
+    if not result.quality_warnings:
+        return
+    console.print(
+        f"AI quality checks flagged {len(result.quality_warnings)} potential issues. "
+        "These are heuristic quality flags, not deterministic Findings."
+        + ("" if verbose else " Use --verbose or reports for details."),
+        markup=False,
+        style="gql.warning",
+    )
+    if verbose:
+        for code in result.quality_warnings:
+            console.print(code, markup=False, style="gql.secondary")
+
+
 def _render_ai_summary(console: Console, result: AIInterpretationResult) -> None:
     from gqlsleuth.presentation.assessment import DEFAULT_MAX_AI_INSIGHTS
 
@@ -756,21 +800,24 @@ def _render_ai_summary(console: Console, result: AIInterpretationResult) -> None
         return
     interpretation = result.interpretation
     _section(console, "AI-Assisted Interpretation")
-    console.print(
-        "Model-generated interpretation - manual validation required.", style="gql.secondary"
-    )
-    _section(console, "Security Summary")
-    console.print(Text(interpretation.security_summary.text))
-    insights = interpretation.cross_capability_insights
+    console.print(AI_NOTICE, markup=False, style="gql.secondary")
+    _render_ai_quality(console, result, verbose=False)
+    _section(console, "Interpretive Summary")
+    console.print(Text(interpretation.summary_interpretation.text))
+    insights = interpretation.review_insights
     if insights:
-        _section(console, "Key Cross-Capability Insights")
+        _section(console, "Cross-Operation Review Themes")
         for insight in insights[:DEFAULT_MAX_AI_INSIGHTS]:
-            console.print(Text(", ".join(insight.security_facts) + ": " + insight.text))
+            console.print(
+                Text(
+                    ", ".join((*insight.operations, *insight.security_facts))
+                    + ": "
+                    + insight.interpretation
+                )
+            )
     hidden = (
         max(0, len(insights) - DEFAULT_MAX_AI_INSIGHTS)
-        + len(interpretation.security_fact_reviews)
-        + len(interpretation.control_observations)
-        + len(interpretation.operation_review)
+        + len(interpretation.operation_interpretations)
         + len(interpretation.limitations)
     )
     if hidden:

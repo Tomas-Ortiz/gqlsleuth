@@ -137,7 +137,7 @@ def build_report(
     if timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=UTC)
     context = ReportContext(
-        report_schema_version=1,
+        report_schema_version=2,
         gqlsleuth_version=__version__,
         generated_at=timestamp.astimezone(UTC),
         target=discovery.target,

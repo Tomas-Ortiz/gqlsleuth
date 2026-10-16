@@ -1,6 +1,7 @@
 """One non-streaming inference against local Ollama, independent of target HTTP/evidence."""
 
 import math
+from collections.abc import Callable
 
 import httpx
 
@@ -12,6 +13,7 @@ from gqlsleuth.ai.models import (
     AIAnalysisStatus,
     AIContext,
     AIInterpretation,
+    AIProviderUsage,
     AIServiceError,
     AIValidationError,
 )
@@ -21,6 +23,40 @@ from gqlsleuth.graphql.response_json import decode_response_json, response_json_
 
 OLLAMA_ENDPOINT = "http://127.0.0.1:11434"
 MAX_AI_RESPONSE_BYTES = 131_072
+COMPLETION_TOKEN_LIMIT = 2048
+CONTEXT_TOKEN_LIMIT = 8192
+
+
+def provider_usage(
+    envelope: object, *, completion_limit: int | None, context_limit: int | None
+) -> AIProviderUsage:
+    """Project only provider counters and allowlisted reasons, never arbitrary strings."""
+    metadata = envelope if isinstance(envelope, dict) else {}
+
+    def count(key: str) -> int | None:
+        value = metadata.get(key)
+        return value if type(value) is int and 0 <= value <= 2**63 - 1 else None
+
+    prompt = count("prompt_eval_count")
+    completion = count("eval_count")
+    reason = metadata.get("done_reason")
+    return AIProviderUsage(
+        prompt_tokens=prompt,
+        completion_tokens=completion,
+        completion_token_limit=completion_limit,
+        completion_tokens_remaining=max(completion_limit - completion, 0)
+        if completion_limit is not None and completion is not None
+        else None,
+        context_token_limit=context_limit,
+        approx_context_tokens_remaining=max(context_limit - prompt - completion, 0)
+        if context_limit is not None and prompt is not None and completion is not None
+        else None,
+        done_reason=reason
+        if reason in ("stop", "length")
+        else "unknown"
+        if reason is not None
+        else None,
+    )
 
 
 class OllamaClient:
@@ -38,7 +74,12 @@ class OllamaClient:
         self._timeout = timeout_seconds
 
     def interpret(
-        self, context: AIContext, *, validation_code: str | None = None, attempt: int = 1
+        self,
+        context: AIContext,
+        *,
+        validation_codes: tuple[str, ...] = (),
+        attempt: int = 1,
+        on_usage: Callable[[AIProviderUsage], None] | None = None,
     ) -> AIInterpretation:
         serialized = serialize_context(context)
         if len(serialized.encode("utf-8")) > MAX_CONTEXT_BYTES:
@@ -48,8 +89,8 @@ class OllamaClient:
                 "AI context exceeds its size limit.",
             )
         system_prompt = build_system_prompt(context)
-        if validation_code is not None:
-            correction = corrective_instruction(validation_code, attempt)
+        if validation_codes:
+            correction = corrective_instruction(validation_codes, attempt)
             if correction is None:
                 raise ValueError("Unknown AI validation category.")
             system_prompt += "\n\n" + correction
@@ -62,8 +103,18 @@ class OllamaClient:
                 {"role": "user", "content": serialized},
             ],
             "format": build_response_schema(context),
-            "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 2048},
+            "options": {
+                "temperature": 0,
+                "num_ctx": CONTEXT_TOKEN_LIMIT,
+                "num_predict": COMPLETION_TOKEN_LIMIT,
+            },
         }
+        if on_usage:
+            on_usage(
+                provider_usage(
+                    None, completion_limit=COMPLETION_TOKEN_LIMIT, context_limit=CONTEXT_TOKEN_LIMIT
+                )
+            )
         try:
             with (
                 httpx.Client(
@@ -82,6 +133,21 @@ class OllamaClient:
                 if response.status_code != 200:
                     _raise_http_error(response.status_code, body)
                 envelope = decode_response_json(body)
+                usage = provider_usage(
+                    envelope,
+                    completion_limit=COMPLETION_TOKEN_LIMIT,
+                    context_limit=CONTEXT_TOKEN_LIMIT,
+                )
+                if on_usage:
+                    on_usage(usage)
+                # Explicit provider length termination takes precedence over parsing the
+                # generated content, even if its truncated payload happens to be valid JSON.
+                if usage.done_reason == "length":
+                    raise AIServiceError(
+                        AIAnalysisStatus.INVALID_RESPONSE,
+                        "output_token_limit_reached",
+                        "Local Ollama reached the output generation limit.",
+                    )
             if not isinstance(envelope, dict) or envelope.get("done") is not True:
                 raise ValueError("Incomplete Ollama response.")
             if envelope.get("model") != DEFAULT_AI_MODEL or envelope.get("error"):
@@ -94,9 +160,10 @@ class OllamaClient:
             ):
                 raise ValueError("Invalid Ollama message.")
             content = message.get("content")
-            if not isinstance(content, str) or envelope.get("done_reason") == "length":
+            if not isinstance(content, str):
                 raise ValueError("Missing or incomplete final answer.")
-            # Ignore thinking and all other model metadata. Never retain the raw envelope.
+            # Apart from the allowlisted counters above, ignore provider metadata and
+            # thinking. Never retain the raw envelope.
             return validate_interpretation(content, context)
         except (httpx.ConnectError, httpx.ConnectTimeout) as error:
             raise AIServiceError(

@@ -15,7 +15,6 @@ from fixtures.ai_response import security_answer_fields
 from fixtures.cli_output import plain_cli_output
 from gqlsleuth import __version__
 from gqlsleuth.ai.models import AIContext
-from gqlsleuth.ai.prompt import execution_summary
 from gqlsleuth.application.active_execution import execute_selected_mutations
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.domain.models import ScanMode
@@ -63,12 +62,10 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
         context = AIContext.model_validate_json(ai_requests[-1]["messages"][1]["content"])
         payload = {
             **security_answer_fields(context),
-            "scan_summary": {"text": execution_summary(context), "operations": []},
-            "operation_review": [],
             "limitations": [],
         }
         if len(ai_requests) <= behavior.get("invalid_count", 0):
-            payload["security_summary"]["text"] = "The target appears secure. REJECTED_CANARY."
+            payload["extra"] = "REJECTED_CANARY"
         return httpx.Response(
             200,
             json={
@@ -101,7 +98,7 @@ def ai_cli(phase_ten_scan, monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("mode", ["safe", "active"])
 @pytest.mark.parametrize("verbose", [False, True])
-@pytest.mark.parametrize("invalid_count", [1, 5])
+@pytest.mark.parametrize("invalid_count", [1, 10])
 def test_regeneration_progress_and_reports_follow_all_scanning(
     ai_cli, tmp_path, mode, verbose, invalid_count
 ):
@@ -111,21 +108,21 @@ def test_regeneration_progress_and_reports_follow_all_scanning(
     assert result.exit_code == 0, result.exception
     text = " ".join(plain_cli_output(result.stdout).split())
     assert "Generating AI-assisted interpretation..." in text
-    assert "Regenerating (2/5)..." in text
-    assert ("unsupported_security_assurance" in text) is verbose
+    assert "Regenerating (2/10)..." in text
+    assert ("invalid_schema" in text) is verbose
     assert "REJECTED_CANARY" not in text
-    assert len(requests) == min(invalid_count + 1, 5)
+    assert len(requests) == min(invalid_count + 1, 10)
     assert len(targets) == int(mode == "active")
     assert events == (["safe", "active_complete", "ai"] if mode == "active" else ["safe", "ai"])
-    if invalid_count == 5:
-        assert "could not produce a valid interpretation after 5 attempts" in text
+    if invalid_count == 10:
+        assert "could not produce a valid interpretation after 10 attempts" in text
         assert "Deterministic scan completed normally" in text
     else:
         assert text.count("AI-Assisted Interpretation") == 1
     report = json.loads(next((tmp_path / "gqlsleuth-reports").glob("*.json")).read_text("utf8"))
     ai_result = report["ai_interpretation"]
     assert ai_result["attempt_count"] == len(requests)
-    assert ai_result["validation_failures"] == ["unsupported_security_assurance"] * invalid_count
+    assert ai_result["validation_failures"] == ["invalid_schema"] * invalid_count
 
 
 @pytest.mark.parametrize("interrupt_at", [1, 2])
@@ -264,13 +261,13 @@ def test_one_ai_inference_follows_completed_safe_and_active_behavior(
     context = json.loads(ai_requests[0]["messages"][1]["content"])
     assert context["counts"]["mutation_requests"] == mutation_count
     prompt = ai_requests[0]["messages"][0]["content"]
-    assert f"{mutation_count} Mutation requests" in prompt
-    assert ("ZERO ordinary Phase 10 Mutations were attempted" in prompt) is (mutation_count == 0)
+    assert "ordinary totals exclude specialized probes" in prompt
+    assert "application renders execution totals" in prompt
     if mode == "active":
         assert results[-1].selected_indices == ((1,) if mutation_count else ())
         assert results[-1].confirmed is bool(mutation_count)
     assert "AI-Assisted Interpretation" in result.stdout
-    assert "Model-generated interpretation" in result.stdout
+    assert "AI-generated interpretation" in result.stdout
     assert "HIDDEN_REASONING_CANARY" not in result.stdout
 
 

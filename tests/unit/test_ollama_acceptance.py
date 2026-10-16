@@ -9,7 +9,7 @@ import pytest
 from fixtures.ai_response import security_answer_fields
 from gqlsleuth.ai.context import build_ai_context
 from gqlsleuth.ai.models import AIValidationError
-from gqlsleuth.ai.prompt import execution_summary
+from gqlsleuth.ai.prompt import collect_interpretation_quality_warnings
 
 
 @pytest.fixture
@@ -49,22 +49,19 @@ def test_manual_acceptance_network_guard_allows_only_fixed_local_ollama(acceptan
         ("The supplied observations require further", "incomplete_security_summary"),
     ],
 )
-def test_fixture_diagnostics_preserve_rejections_and_show_exact_prose(
+def test_fixture_diagnostics_preserve_rejections_without_showing_prose(
     acceptance, capsys, text, code
 ):
     context = build_ai_context(acceptance["fixture_scan"]())
     answer = {
         **security_answer_fields(context),
-        "scan_summary": {"text": execution_summary(context), "operations": []},
-        "operation_review": [],
         "limitations": [],
     }
-    answer["security_summary"]["text"] = text
-    with pytest.raises(AIValidationError, match=code):
-        acceptance["validate_fixture_reply"](json.dumps(answer), context)
+    answer["summary_interpretation"]["text"] = text
+    typed = acceptance["validate_fixture_reply"](json.dumps(answer), context)
+    assert code in collect_interpretation_quality_warnings(typed, context)
     output = capsys.readouterr().out
-    assert "NOT an accepted interpretation" in output and text in output
-    assert f"Rejected summary length: {len(text)}" in output
+    assert output == ""
 
 
 def test_fixture_diagnostics_do_not_dump_unstructured_replies(acceptance, capsys):

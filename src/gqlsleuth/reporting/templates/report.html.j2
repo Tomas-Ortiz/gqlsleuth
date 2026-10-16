@@ -73,7 +73,7 @@
       </details>
 {% endif %}
 {% for paragraph in entry.paragraphs %}
-      <p>{{ paragraph | brief }}</p>
+      <p>{{ paragraph if section.title == 'AI-Assisted Interpretation' else paragraph | brief }}</p>
 {% endfor %}
 {% for language, text in entry.code_blocks %}
       <pre><code class="language-{{ language }}">{{ text }}</code></pre>

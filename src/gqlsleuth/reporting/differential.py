@@ -22,7 +22,7 @@ def build_differential_report(
         timestamp = timestamp.replace(tzinfo=UTC)
     timestamp = timestamp.astimezone(UTC)
     return DifferentialReportContext(
-        1,
+        2,
         __version__,
         timestamp,
         result.target,

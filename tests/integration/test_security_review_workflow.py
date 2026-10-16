@@ -18,7 +18,6 @@ from fixtures.ai_response import security_answer_fields
 from fixtures.phase16_smoke import SDL
 from gqlsleuth.ai.context import build_ai_context
 from gqlsleuth.ai.models import AIAnalysisStatus
-from gqlsleuth.ai.prompt import execution_summary
 from gqlsleuth.application.active_execution import (
     execute_selected_mutations,
     prepare_active_mutations,
@@ -149,8 +148,6 @@ def test_console_reports_and_ai_remain_local(phase_ten_scan, monkeypatch):
                     "content": json.dumps(
                         {
                             **security_answer_fields(context),
-                            "scan_summary": {"text": execution_summary(context), "operations": []},
-                            "operation_review": [],
                             "limitations": [],
                         }
                     ),

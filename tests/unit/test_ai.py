@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from fixtures.ai_response import security_answer_fields
+from fixtures.ai_response import reference_items, security_answer_fields
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import (
     MAX_AI_OPERATIONS,
@@ -34,21 +34,7 @@ from gqlsleuth.reporting.renderers import render_report
 
 
 def answer(context):
-    operation = context.operations[0].operation if context.operations else None
-    return {
-        **security_answer_fields(context),
-        "scan_summary": {"text": execution_summary(context), "operations": []},
-        "operation_review": [
-            {
-                "operation": operation,
-                "explanation": "The apparent role needs manual review against the schema; "
-                "only the recorded execution outcome is known.",
-            }
-        ]
-        if operation
-        else [],
-        "limitations": [{"text": "No vulnerability is confirmed.", "operations": []}],
-    }
+    return security_answer_fields(context)
 
 
 def envelope(content):
@@ -70,8 +56,8 @@ def test_generation_schema_uses_exact_supplied_refs_and_does_not_mutate_context(
     schema = build_response_schema(context)
     definitions = schema["$defs"]
     refs = [o.operation for o in context.operations]
-    assert definitions["AIOperationExplanation"]["properties"]["operation"]["enum"] == refs
-    assert definitions["AILimitation"]["properties"]["operations"]["items"]["enum"] == refs
+    assert definitions["AIOperationInterpretation"]["properties"]["operation"]["enum"] == refs
+    assert definitions["AIOperationReference"]["properties"]["ref"]["enum"] == refs
     assert serialize_context(context) == before
     assert build_response_schema(context) == schema
 
@@ -82,21 +68,16 @@ def test_empty_reference_sets_produce_empty_sections_without_invented_refs(compl
     )
     schema = build_response_schema(context)
     for section in (
-        "operation_review",
-        "security_fact_reviews",
-        "control_observations",
-        "cross_capability_insights",
+        "operation_interpretations",
+        "review_insights",
     ):
         assert schema["properties"][section]["maxItems"] == 0
-    for name in ("AISecuritySummary", "AILimitation"):
-        assert schema["$defs"][name]["properties"]["security_facts"]["maxItems"] == 0
+    for name in ("AISummaryInterpretation", "AIInterpretiveLimitation"):
+        assert schema["$defs"][name]["properties"]["references"]["maxItems"] == 0
     # Building an empty schema must not modify the next populated request.
-    assert (
-        build_response_schema(build_ai_context(completed))["properties"]["operation_review"][
-            "maxItems"
-        ]
-        == 8
-    )
+    assert build_response_schema(build_ai_context(completed))["properties"][
+        "operation_interpretations"
+    ]["maxItems"] == len(build_ai_context(completed).operations)
 
 
 @pytest.mark.parametrize(
@@ -106,7 +87,7 @@ def test_empty_reference_sets_produce_empty_sections_without_invented_refs(compl
         ("schema", "schema", "invalid_schema"),
         ("bare_name", "reference", "unknown_operation_reference"),
         ("unknown_fact", "reference", "invalid_security_references"),
-        ("summary", "facts", "execution_summary_mismatch"),
+        ("summary", "reference", "incomplete_operation_interpretation_set"),
     ],
 )
 def test_validation_diagnostics_are_safe_and_never_retry(completed, change, stage, code):
@@ -116,11 +97,13 @@ def test_validation_diagnostics_are_safe_and_never_retry(completed, change, stag
         payload["MODEL_OUTPUT_CANARY"] = "PRIVATE_CANARY"
     elif change == "bare_name":
         # Reproduced with real qwen3: valid typed JSON, but bare names instead of refs.
-        payload["operation_review"][0]["operation"] = context.operations[0].name
+        payload["operation_interpretations"][0]["operation"] = context.operations[0].name
     elif change == "unknown_fact":
-        payload["security_summary"]["security_facts"] = ["SF99999"]
+        payload["summary_interpretation"]["references"] = reference_items(
+            security_facts=["SF99999"]
+        )
     elif change == "summary":
-        payload["scan_summary"]["text"] = "All requests succeeded PRIVATE_CANARY"
+        payload["operation_interpretations"].pop()
     content = "{PRIVATE_CANARY" if change == "malformed" else json.dumps(payload)
     with pytest.raises(AIValidationError) as caught:
         validate_interpretation(content, context)
@@ -364,24 +347,16 @@ def test_canaries_are_excluded_from_exact_ollama_request_by_construction(complet
         assert payload["stream"] is False
         assert payload["think"] is False
         assert payload["messages"][1]["content"] == serialize_context(build_ai_context(active))
-        assert payload["format"]["properties"]["scan_summary"]["properties"]["text"]["enum"] == [
-            execution_summary(build_ai_context(active))
-        ]
         assert set(payload["format"]["properties"]) == {
-            "scan_summary",
-            "operation_review",
+            "summary_interpretation",
+            "operation_interpretations",
+            "review_insights",
             "limitations",
-            "security_summary",
-            "security_fact_reviews",
-            "control_observations",
-            "cross_capability_insights",
         }
         prompt = payload["messages"][0]["content"]
-        assert "operation_review: Write one concise paragraph per operation" in prompt
-        assert "recorded outcome, reason for attention and non-destructive manual review" in prompt
-        assert "Express priority only as" in prompt
-        assert "CRITICAL-interest, HIGH-interest, MEDIUM-interest" in prompt
-        assert "never 'this operation is CRITICAL'" in prompt
+        assert "Analyze EVERY supplied operation exactly once" in prompt
+        assert "one specific non-destructive manual follow-up" in prompt
+        assert "Review interest is" in prompt and "not severity" in prompt
         assert "review_focus" not in prompt
         assert "operation_explanations" not in prompt
         assert "manual_review_suggestions" not in prompt
@@ -403,8 +378,8 @@ def test_canaries_are_excluded_from_exact_ollama_request_by_construction(complet
 @pytest.mark.parametrize(
     "section",
     [
-        "scan_summary",
-        "operation_review",
+        "summary_interpretation",
+        "operation_interpretations",
         "limitations",
     ],
 )
@@ -412,12 +387,14 @@ def test_unknown_operation_references_reject_the_whole_response(completed, secti
     context = build_ai_context(completed)
     payload = answer(context)
     invented = "endpoint_1/mutation/totallyInventedAdminBackdoor"
-    if section == "scan_summary":
-        payload[section]["operations"] = [invented]
-    elif section == "operation_review":
+    if section == "summary_interpretation":
+        payload[section]["references"] = reference_items([invented])
+    elif section == "operation_interpretations":
         payload[section][0]["operation"] = invented
     else:
-        payload[section][0]["operations"] = [invented]
+        payload[section] = [
+            {"text": "Review scope.", "references": reference_items([invented], [])}
+        ]
     client = OllamaClient(
         transport=httpx.MockTransport(
             lambda request: httpx.Response(200, json=envelope(json.dumps(payload)))
@@ -448,11 +425,11 @@ def test_output_structure_is_strict_and_bounded(completed, change):
     if change == "extra":
         payload["execute_mutations"] = True
     elif change == "long_text":
-        payload["scan_summary"]["text"] = "x" * 601
+        payload["summary_interpretation"]["text"] = "x" * 801
     elif change == "too_many":
-        payload["operation_review"] *= 11
+        payload["operation_interpretations"] *= 11
     else:
-        payload["scan_summary"]["text"] = 42
+        payload["summary_interpretation"]["text"] = 42
     with pytest.raises(ValueError):
         validate_interpretation(json.dumps(payload), context)
 
@@ -462,21 +439,21 @@ def test_output_structure_is_strict_and_bounded(completed, change):
     [
         "missing",
         "review_focus",
-        "operation_explanations",
+        "operation_interpretations",
         "manual_review_suggestions",
         "long_text",
         "too_many",
     ],
 )
-def test_operation_review_replaces_obsolete_fields_and_retains_bounds(completed, change):
+def test_operation_interpretations_replaces_obsolete_fields_and_retains_bounds(completed, change):
     context = build_ai_context(completed)
     payload = answer(context)
     if change == "missing":
-        del payload["operation_review"]
+        del payload["operation_interpretations"]
     elif change == "long_text":
-        payload["operation_review"][0]["explanation"] = "x" * 601
+        payload["operation_interpretations"][0]["interpretation"] = "x" * 601
     elif change == "too_many":
-        payload["operation_review"] *= 11
+        payload["operation_interpretations"] *= 11
     else:
         payload[change] = []
     with pytest.raises(ValueError):
@@ -564,11 +541,11 @@ def test_adapter_failures_are_nonfatal_with_content_only_regeneration(
     }
     content_failure = expected is AIAnalysisStatus.INVALID_RESPONSE
     assert result.error_message == (
-        "AI assistance could not produce a valid interpretation after 5 attempts."
+        "AI assistance could not produce a valid interpretation after 10 attempts."
         if content_failure
         else messages[code]
     )
-    assert len(calls) == (5 if content_failure else 1)
+    assert len(calls) == (10 if content_failure else 1)
     assert result.interpretation is None
     assert "SECRET" not in str(result)
     assert completed == before
@@ -622,7 +599,7 @@ def test_inference_timeout_must_remain_finite_and_bounded(seconds):
 def test_ai_reports_are_additive_escaped_and_exclude_thinking(completed, monkeypatch):
     context = build_ai_context(completed)
     payload = answer(context)
-    payload["operation_review"][0]["explanation"] = (
+    payload["operation_interpretations"][0]["interpretation"] = (
         '<script>alert("test")</script> Model interpretation.'
     )
     client = OllamaClient(
@@ -649,14 +626,14 @@ def test_ai_reports_are_additive_escaped_and_exclude_thinking(completed, monkeyp
         assert "THINKING_CANARY" not in rendered
         if format is not ReportFormat.JSON:
             assert "AI-Assisted Interpretation" in rendered
-            assert "Model-generated interpretation" in rendered.replace("\\-", "-")
+            assert "AI-generated interpretation" in rendered.replace("\\-", "-")
             assert "AI-Assisted Interpretation" not in render_report(before, format)
             assert "Operation Explanations" not in rendered
             assert "Manual Review Suggestions" not in rendered
             assert "Review Focus" not in rendered
             titles = (
-                "Execution Summary (validated facts)",
-                "Operation Review",
+                "Execution Summary (deterministic facts)",
+                "Operation Analysis",
                 "Limitations",
                 "Safety Notice",
             )
@@ -665,7 +642,7 @@ def test_ai_reports_are_additive_escaped_and_exclude_thinking(completed, monkeyp
             ai_section = ai_section.replace("\\(", "(").replace("\\)", ")")
             positions = [ai_section.index(title) for title in titles]
             assert positions == sorted(positions)
-            assert ai_section.count("Operation Review") == 1
+            assert ai_section.count("Operation Analysis") == 1
             assert "<script>" not in rendered
             assert "&lt;script&gt;" in rendered
 
@@ -701,7 +678,8 @@ def test_execution_summary_separates_attempts_success_errors_and_skips(mixed_que
     )
     assert execution_summary(context) == expected
     assert (
-        validate_interpretation(json.dumps(answer(context)), context).scan_summary.text == expected
+        "scan_summary"
+        not in validate_interpretation(json.dumps(answer(context)), context).model_dump()
     )
     # Summary totals must not be recounted from only the included operations.
     omitted = context.model_copy(
@@ -733,7 +711,7 @@ def test_false_execution_summary_is_rejected_after_bounded_regeneration(
 ):
     context = build_ai_context(mixed_query_outcomes)
     payload = answer(context)
-    payload["scan_summary"]["text"] = claim
+    payload["scan_summary"] = {"text": claim, "operations": []}
     calls = []
 
     def handler(request):
@@ -745,7 +723,7 @@ def test_false_execution_summary_is_rejected_after_bounded_regeneration(
     )
     assert result.status is AIAnalysisStatus.INVALID_RESPONSE
     assert result.interpretation is None
-    assert len(calls) == 5
+    assert len(calls) == 10
 
 
 @pytest.mark.parametrize(

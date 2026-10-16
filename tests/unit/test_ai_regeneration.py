@@ -7,10 +7,10 @@ from dataclasses import asdict
 import httpx
 import pytest
 
-from fixtures.ai_response import security_answer_fields
+from fixtures.ai_response import reference_items, security_answer_fields
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import MAX_AI_ATTEMPTS, AIAnalysisStatus, AIServiceError
-from gqlsleuth.ai.prompt import build_response_schema, build_system_prompt, execution_summary
+from gqlsleuth.ai.prompt import build_response_schema, build_system_prompt
 from gqlsleuth.ai.regeneration import corrective_instruction
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.infrastructure.http import HttpClient
@@ -26,38 +26,36 @@ def scan(phase_ten_scan):
 
 
 def answer(context):
-    return {
-        **security_answer_fields(context),
-        "scan_summary": {"text": execution_summary(context), "operations": []},
-        "operation_review": [],
-        "limitations": [],
-    }
+    return security_answer_fields(context)
 
 
 def test_initial_prompt_and_schema_keep_inference_and_limitations_calibrated(scan):
     context = build_ai_context(scan)
-    prompt = build_system_prompt(context)
+    prompt = " ".join(build_system_prompt(context).split())
     assert "Scanner safety skips describe GQLSleuth's own restraint" in prompt
     assert "Do not speculate about query structure, data access or exposure" in prompt
+    assert "Review need or unobserved controls do not establish that a control is absent" in prompt
+    assert "no security cause, misconfiguration or data exposure" in prompt
     schema = build_response_schema(context)
-    limitation = schema["$defs"]["AILimitation"]["properties"]["text"]
+    limitation = schema["$defs"]["AIInterpretiveLimitation"]["properties"]["text"]
     assert limitation["maxLength"] == 500
     assert "finish naturally" in limitation["description"]
-    assert schema["$defs"]["AISecuritySummary"]["properties"]["text"]["maxLength"] == 800
+    assert schema["$defs"]["AISummaryInterpretation"]["properties"]["text"]["maxLength"] == 800
 
 
 def envelope(content):
     return {"model": "qwen3:8b", "done": True, "message": {"role": "assistant", "content": content}}
 
 
-@pytest.mark.parametrize("invalid_count", [0, 1, 4, 5])
+@pytest.mark.parametrize("invalid_count", [0, 1, 5, 9, 10])
 def test_bounded_regeneration_same_context_final_only_and_reports(scan, invalid_count, monkeypatch):
+    assert MAX_AI_ATTEMPTS == 10
     context = build_ai_context(scan)
     before = deepcopy(scan)
     requests = []
     progress = []
     bad = answer(context)
-    bad["security_summary"]["text"] = "The target appears secure. REJECTED_PROSE_CANARY."
+    bad["extra"] = "REJECTED_PROSE_CANARY"
     good = answer(context)
 
     def handler(request):
@@ -75,7 +73,7 @@ def test_bounded_regeneration_same_context_final_only_and_reports(scan, invalid_
     )
     attempts = min(invalid_count + 1, MAX_AI_ATTEMPTS)
     assert len(requests) == result.attempt_count == attempts
-    assert result.validation_failures == ("unsupported_security_assurance",) * invalid_count
+    assert result.validation_failures == ("invalid_schema",) * invalid_count
     assert scan == before and scan.evidence == before.evidence
     assert all(p["messages"][1]["content"] == serialize_context(context) for p in requests)
     assert all(p["format"] == requests[0]["format"] for p in requests)
@@ -90,13 +88,16 @@ def test_bounded_regeneration_same_context_final_only_and_reports(scan, invalid_
         for n in range(1, attempts + 1)
         for pair in [(n, "started"), (n, "rejected" if n <= invalid_count else "accepted")]
     ]
-    if invalid_count == 5:
+    if invalid_count == MAX_AI_ATTEMPTS:
         assert result.status is AIAnalysisStatus.INVALID_RESPONSE
         assert result.interpretation is None
-        assert "after 5 attempts" in result.error_message
+        assert "after 10 attempts" in result.error_message
     else:
         assert result.status is AIAnalysisStatus.SUCCESS
-        assert result.interpretation.security_summary.text == good["security_summary"]["text"]
+        assert (
+            result.interpretation.summary_interpretation.text
+            == good["summary_interpretation"]["text"]
+        )
     report = build_report(scan, ai_interpretation=result)
     for format in ReportFormat:
         text = render_report(report, format)
@@ -110,22 +111,16 @@ def test_bounded_regeneration_same_context_final_only_and_reports(scan, invalid_
 @pytest.mark.parametrize(
     "code,phrase",
     [
-        ("unsupported_control_claim", "eligible explicit supplied control"),
-        ("unsupported_security_assurance", "overall security"),
-        ("false_absence_claim", "Zero deterministic Findings"),
-        ("unsupported_outcome_inference", "do not establish a security cause"),
-        ("unsupported_review_conclusion", "not vulnerability"),
-        ("incomplete_security_summary", "180-350 characters"),
-        ("execution_summary_mismatch", "Copy the canonical execution summary exactly"),
+        ("incomplete_operation_interpretation_set", "exactly one interpretation"),
         ("invalid_json", "complete JSON"),
         ("invalid_schema", "field types"),
         ("invalid_response", "complete JSON"),
         ("unknown_operation_reference", "exact supplied references"),
         ("invalid_security_references", "exact supplied references"),
         ("missing_summary_references", "exact supplied references"),
-        ("duplicate_operation_reference", "exact supplied references"),
-        ("insufficient_distinct_capabilities", "distinct capability pairs"),
-        ("unsupported_control_reference", "eligible control references"),
+        ("incomplete_operation_interpretation_set", "every supplied operation"),
+        ("insufficient_insight_references", "two or three distinct"),
+        ("output_token_limit_reached", "output generation limit"),
     ],
 )
 def test_each_known_content_failure_has_safe_distinct_correction(scan, code, phrase):
@@ -146,7 +141,10 @@ def test_each_known_content_failure_has_safe_distinct_correction(scan, code, phr
     result = interpret_completed_scan(scan, client=Client())
     assert result.status is AIAnalysisStatus.SUCCESS and result.attempt_count == 2
     assert seen[0][0] is seen[1][0]
-    assert seen[1][1] == {"validation_code": code, "attempt": 2}
+    assert {k: v for k, v in seen[1][1].items() if k != "on_usage"} == {
+        "validation_codes": (code,),
+        "attempt": 2,
+    }
     correction = corrective_instruction(code, 2)
     assert phrase in correction and "COMPLETE" in correction
     assert "PRIVATE_CANARY" not in correction
@@ -207,8 +205,7 @@ def test_invalid_configuration_never_attempts(scan, timeout):
         ("json", "invalid_json"),
         ("schema", "invalid_schema"),
         ("reference", "unknown_operation_reference"),
-        ("execution", "execution_summary_mismatch"),
-        ("summary", "incomplete_security_summary"),
+        ("execution", "incomplete_operation_interpretation_set"),
     ],
 )
 def test_real_content_validation_drives_correction_then_success(scan, failure, code):
@@ -218,11 +215,11 @@ def test_real_content_validation_drives_correction_then_success(scan, failure, c
     if failure == "schema":
         invalid["extra"] = "PRIVATE_CANARY"
     elif failure == "reference":
-        invalid["scan_summary"]["operations"] = ["endpoint_1/query/invented"]
+        invalid["summary_interpretation"]["references"] = reference_items(
+            ["endpoint_1/query/invented"]
+        )
     elif failure == "execution":
-        invalid["scan_summary"]["text"] = "All requests succeeded."
-    elif failure == "summary":
-        invalid["security_summary"]["text"] = "The supplied observations require further"
+        invalid["operation_interpretations"].pop()
     calls = []
 
     def handler(request):
@@ -263,7 +260,7 @@ def test_unknown_validation_code_is_not_retried(scan):
     class Client:
         calls = 0
 
-        def interpret(self, context):
+        def interpret(self, context, **options):
             self.calls += 1
             raise AIServiceError(
                 AIAnalysisStatus.INVALID_RESPONSE, "future_category", "Controlled error"
@@ -273,3 +270,46 @@ def test_unknown_validation_code_is_not_retried(scan):
     result = interpret_completed_scan(scan, client=client)
     assert result.attempt_count == client.calls == 1
     assert result.validation_failures == ()
+
+
+def test_distinct_corrections_accumulate_without_repeated_paragraphs(scan):
+    context = build_ai_context(scan)
+    good = answer(context)
+    codes = (
+        "invalid_schema",
+        "unknown_operation_reference",
+        "incomplete_operation_interpretation_set",
+        "incomplete_operation_interpretation_set",
+        "incomplete_operation_interpretation_set",
+    )
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content))
+        reply = deepcopy(good)
+        if len(calls) <= len(codes):
+            code = codes[len(calls) - 1]
+            if code == "invalid_schema":
+                reply["extra"] = "REJECTED_CANARY"
+            elif code == "unknown_operation_reference":
+                reply["summary_interpretation"]["references"] = reference_items(["REJECTED_CANARY"])
+            else:
+                reply["operation_interpretations"].pop()
+        return httpx.Response(200, json=envelope(json.dumps(reply)))
+
+    result = interpret_completed_scan(
+        scan, client=OllamaClient(transport=httpx.MockTransport(handler))
+    )
+    assert result.status is AIAnalysisStatus.SUCCESS
+    assert result.attempt_count == len(calls) == 6
+    assert result.validation_failures == codes
+    for attempt, request in enumerate(calls[1:], 2):
+        distinct = tuple(dict.fromkeys(codes[: attempt - 1]))
+        prompt = request["messages"][0]["content"]
+        assert prompt.endswith(corrective_instruction(distinct, attempt))
+        assert "REJECTED_CANARY" not in json.dumps(request)
+        assert request["messages"][1] == calls[0]["messages"][1]
+        assert request["format"] == calls[0]["format"]
+        assert prompt.count("Provide exactly one interpretation") == int(attempt >= 4)
+    assert len(calls[3]["messages"][0]["content"]) == len(calls[5]["messages"][0]["content"])
+    assert corrective_instruction(("incomplete_prose", "PRIVATE_CANARY"), 2) is None

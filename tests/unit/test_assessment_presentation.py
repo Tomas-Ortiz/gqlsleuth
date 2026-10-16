@@ -8,11 +8,11 @@ from io import StringIO
 import pytest
 from rich.console import Console
 
-from fixtures.ai_response import security_answer_fields
+from fixtures.ai_response import reference_items, security_answer_fields
 from fixtures.whole_scan_ai import SDL, SECRET, assemble
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import AIAnalysisStatus, AIInterpretation, AIInterpretationResult
-from gqlsleuth.ai.prompt import build_system_prompt, execution_summary
+from gqlsleuth.ai.prompt import build_system_prompt
 from gqlsleuth.domain.authorization_policy import PolicyStatus
 from gqlsleuth.domain.models import ConfidenceLevel, ScanMode, Target
 from gqlsleuth.domain.subscriptions import SubscriptionOutcome
@@ -295,31 +295,24 @@ def test_human_hierarchy_retains_every_technical_section_and_safety_last(whole, 
 def test_ai_compact_caps_insights_and_verbose_retains_complete_answer(whole):
     context = build_ai_context(whole)
     fields = security_answer_fields(context)
-    fields["cross_capability_insights"] = [
-        {"security_facts": ["SF1", "SF2"], "text": f"Scoped manual correlation {index}."}
-        for index in range(4)
-    ]
-    interpretation = AIInterpretation.model_validate(
+    fields["review_insights"] = [
         {
-            **fields,
-            "scan_summary": {
-                "text": execution_summary(context),
-                "operations": [],
-                "security_facts": [],
-            },
-            "operation_review": [],
-            "limitations": [],
+            "references": reference_items([], ["SF1", "SF2"]),
+            "interpretation": f"Scoped manual correlation {index}.",
+            "manual_follow_up": "Manually compare the intended policy.",
         }
-    )
+        for index in range(3)
+    ]
+    interpretation = AIInterpretation.model_validate(fields)
     result = AIInterpretationResult(
         AIAnalysisStatus.SUCCESS, "qwen3:8b", STAMP, 1.0, context.metadata, interpretation
     )
     output = StringIO()
     render_ai(Console(file=output, width=120, theme=CONSOLE_THEME), result)
     text = output.getvalue()
-    assert "Security Summary" in text and "Model-generated interpretation" in text
+    assert "Interpretive Summary" in text and "AI-generated interpretation" in text
     assert "Execution Summary" not in text and "Security Fact Reviews" not in text
-    assert "1 additional AI entries" in text
+    assert f"{len(context.operations)} additional AI entries" in text
     output = StringIO()
     render_ai(Console(file=output, width=120, theme=CONSOLE_THEME), result, verbose=True)
     assert "Execution Summary (validated facts)" in output.getvalue()

@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass, fields
 
-from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult, AIStatement
+from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult
 from gqlsleuth.domain.models import Evidence
 from gqlsleuth.domain.multiplicity import MULTIPLICITY_NOTICE
 from gqlsleuth.domain.query_depth import DEPTH_NOTICE
@@ -461,26 +461,91 @@ def security_review_section(
 
 def ai_section(result: AIInterpretationResult) -> ReportSection:
     """Present an already-produced interpretation without modifying deterministic sections."""
-    entries = []
+    from gqlsleuth.ai.sections import operation_metadata, usage_rows
+
+    entries: list[ReportEntry] = []
     interpretation = result.interpretation
     if interpretation is not None:
-        from gqlsleuth.ai.sections import interpretation_sections
-
+        summary = interpretation.summary_interpretation
         entries = [
             ReportEntry(
-                "Execution Summary (validated facts)",
-                paragraphs=(_ai_statement(interpretation.scan_summary),),
+                "Execution Summary (deterministic facts)",
+                paragraphs=(result.execution_summary or "Not recorded.",),
+            ),
+            ReportEntry(
+                "Interpretive Summary",
+                paragraphs=(summary.text,),
+                details=(
+                    ("References", ", ".join((*summary.operations, *summary.security_facts))),
+                ),
+            ),
+            ReportEntry(
+                "Operation Analysis",
+                paragraphs=(
+                    f"{len(interpretation.operation_interpretations)} supplied operations "
+                    f"interpreted; {result.context_metadata.operations_omitted} omitted "
+                    "from bounded AI context.",
+                ),
             ),
             *(
                 ReportEntry(
-                    title,
-                    paragraphs=tuple(
-                        (", ".join(refs) + ": " if refs else "") + text for refs, text in rows
+                    item.operation,
+                    details=operation_metadata(result, item.operation),
+                    paragraphs=(
+                        "AI interpretation: " + item.interpretation,
+                        "Manual follow-up: " + item.manual_follow_up,
                     ),
                 )
-                for title, rows in interpretation_sections(interpretation)
+                for item in interpretation.operation_interpretations
+            ),
+            ReportEntry("Cross-Operation Review Themes"),
+            *(
+                ReportEntry(
+                    ", ".join((*item.operations, *item.security_facts)),
+                    paragraphs=(item.interpretation, "Manual follow-up: " + item.manual_follow_up),
+                )
+                for item in interpretation.review_insights
+            ),
+            ReportEntry(
+                "Limitations", paragraphs=tuple(item.text for item in interpretation.limitations)
             ),
         ]
+        controls = tuple(
+            f
+            for f in result.references.security_facts
+            if f.control_observed or f.evaluation == "satisfied"
+        )
+        if controls:
+            entries.append(
+                ReportEntry(
+                    "Scoped Controls (deterministic facts)",
+                    details=tuple(
+                        (
+                            fact.security_fact_ref + " / " + fact.capability.value,
+                            str(
+                                fact.control_kind
+                                or fact.evaluation
+                                or fact.outcome
+                                or "control_observed"
+                            ),
+                        )
+                        for fact in controls
+                    ),
+                )
+            )
+    if result.quality_warnings:
+        entries.insert(
+            0,
+            ReportEntry(
+                "AI quality warnings",
+                paragraphs=(
+                    "Heuristic quality flags, not deterministic Findings. "
+                    "Absence of flags does not establish that AI prose is correct.",
+                ),
+                details=tuple(("Quality warning", code) for code in result.quality_warnings),
+            ),
+        )
+    entries.append(ReportEntry("AI Generation Metadata", details=usage_rows(result)))
     return ReportSection(
         "AI-Assisted Interpretation",
         paragraphs=(AI_NOTICE,) + ((result.error_message,) if result.error_message else ()),
@@ -500,11 +565,6 @@ def ai_section(result: AIInterpretationResult) -> ReportSection:
         ),
         entries=tuple(entries),
     )
-
-
-def _ai_statement(statement: AIStatement) -> str:
-    references = f" ({', '.join(statement.operations)})" if statement.operations else ""
-    return statement.text + references
 
 
 def _artifact_entry(item: OperationReport) -> ReportEntry:

@@ -82,7 +82,7 @@ def test_context_and_all_report_formats_need_no_http_and_do_not_modify_results(
     context = build_report(result, generated_at=STAMP)
     paths = write_reports(context, tuple(ReportFormat), tmp_path)
     assert len(paths) == 3
-    assert context.report_schema_version == 1
+    assert context.report_schema_version == 2
     assert context.evidence == before == result.evidence
     assert context.mode is (ScanMode.SAFE if index == 0 else ScanMode.ACTIVE)
 
@@ -93,7 +93,7 @@ def test_canonical_json_preserves_complete_report_facts(report_results):
     text = render_report(context, ReportFormat.JSON)
     assert text == render_report(context, ReportFormat.JSON)
     report = json.loads(text)
-    assert report["report_schema_version"] == 1
+    assert report["report_schema_version"] == 2
     assert report["target"]["original_url"] == "https://example.com/graphql"
     assert report["mode"] == "safe"
     assert report["endpoints"][0]["schema_summary"]["query_field_count"] == 5

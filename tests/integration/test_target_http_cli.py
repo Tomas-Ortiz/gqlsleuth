@@ -13,7 +13,6 @@ from fixtures.ai_response import security_answer_fields
 from fixtures.cli_output import plain_cli_output
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import DEFAULT_AI_TIMEOUT_SECONDS, AIContext
-from gqlsleuth.ai.prompt import execution_summary
 from gqlsleuth.application.graphql_detection import MINIMAL_TYPENAME_QUERY
 from gqlsleuth.graphql.introspection import FULL_INTROSPECTION_QUERY, MINIMAL_INTROSPECTION_QUERY
 
@@ -45,8 +44,6 @@ def configured_cli(monkeypatch, tmp_path):
             context = AIContext.model_validate_json(payload["messages"][1]["content"])
             answer = {
                 **security_answer_fields(context),
-                "scan_summary": {"text": execution_summary(context), "operations": []},
-                "operation_review": [],
                 "limitations": [],
             }
             return httpx.Response(

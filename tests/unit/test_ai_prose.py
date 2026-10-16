@@ -8,13 +8,13 @@ from pathlib import Path
 import httpx
 import pytest
 
-from fixtures.ai_response import security_answer_fields
+from fixtures.ai_response import reference_items, security_answer_fields
 from gqlsleuth.ai.context import build_ai_context
 from gqlsleuth.ai.models import MAX_AI_SUMMARY_CHARACTERS, AIAnalysisStatus, AIValidationError
 from gqlsleuth.ai.prompt import (
     build_response_schema,
     build_system_prompt,
-    execution_summary,
+    collect_interpretation_quality_warnings,
     validate_interpretation,
 )
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
@@ -29,14 +29,9 @@ def completed(phase_ten_scan):
     ]
 
 
-def answer(context, text):
-    payload = {
-        **security_answer_fields(context),
-        "scan_summary": {"text": execution_summary(context), "operations": []},
-        "operation_review": [],
-        "limitations": [],
-    }
-    payload["security_summary"]["text"] = text
+def answer(context, text="Review the supplied facts manually."):
+    payload = security_answer_fields(context)
+    payload["summary_interpretation"]["text"] = text
     return payload
 
 
@@ -63,10 +58,9 @@ def test_reject_overall_assurance_with_zero_findings_and_successful_queries(comp
     context = build_ai_context(completed)
     assert context.metadata.deterministic_findings == 0
     assert context.counts["query_success"] == 1
-    with pytest.raises(AIValidationError) as caught:
-        validate_interpretation(json.dumps(answer(context, text)), context)
-    assert (caught.value.stage, caught.value.code) == ("facts", "unsupported_security_assurance")
-    assert text not in str(caught.value)
+    typed = validate_interpretation(json.dumps(answer(context, text)), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_security_assurance" in warnings
 
 
 @pytest.mark.parametrize(
@@ -87,7 +81,7 @@ def test_reject_overall_assurance_with_zero_findings_and_successful_queries(comp
 def test_accept_calibrated_scope_without_rewriting(completed, text):
     context = build_ai_context(completed)
     result = validate_interpretation(json.dumps(answer(context, text)), context)
-    assert result.security_summary.text == text
+    assert result.summary_interpretation.text == text
 
 
 def test_real_qwen_passive_denial_does_not_offer_assurance(completed):
@@ -97,7 +91,7 @@ def test_real_qwen_passive_denial_does_not_offer_assurance(completed):
         "or successful Queries alone."
     )
     result = validate_interpretation(json.dumps(answer(context, text)), context)
-    assert result.security_summary.text == text
+    assert result.summary_interpretation.text == text
 
 
 @pytest.mark.parametrize(
@@ -111,8 +105,9 @@ def test_real_qwen_passive_denial_does_not_offer_assurance(completed):
 )
 def test_passive_denial_does_not_exempt_a_positive_assurance_claim(completed, claim):
     context = build_ai_context(completed)
-    with pytest.raises(AIValidationError, match="unsupported_security_assurance"):
-        validate_interpretation(json.dumps(answer(context, claim)), context)
+    typed = validate_interpretation(json.dumps(answer(context, claim)), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_security_assurance" in warnings
 
 
 def test_real_qwen_repeated_limitations_still_fail_summary_completion(completed):
@@ -131,53 +126,59 @@ def test_real_qwen_repeated_limitations_still_fail_summary_completion(completed)
         "behavior was ob-"
     )
     assert len(text) == 800
-    with pytest.raises(AIValidationError, match="incomplete_security_summary"):
-        validate_interpretation(json.dumps(answer(context, text)), context)
+    typed = validate_interpretation(json.dumps(answer(context, text)), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "incomplete_security_summary" in warnings
 
 
 def test_schema_descriptions_steer_concise_grounded_prose_without_changing_bounds(completed):
     context = build_ai_context(completed)
     definitions = build_response_schema(context)["$defs"]
     for name, field, maximum, guidance in (
-        ("AISecuritySummary", "text", 800, "Finish naturally well before"),
-        ("AIOperationExplanation", "explanation", 600, "interest is not risk/severity"),
-        ("AISecurityFactReview", "interpretation", 450, "not a vulnerability"),
-        ("AIControlObservation", "text", 400, "Generic errors do not establish"),
+        ("AISummaryInterpretation", "text", 800, "Finish naturally well before"),
+        ("AIOperationInterpretation", "interpretation", 300, "Interest is not risk/severity"),
     ):
         description = definitions[name]["properties"][field]
         assert description["maxLength"] == maximum
         assert guidance in description["description"]
     prompt = build_system_prompt(context)
-    assert "do not repeat these instructions/disclaimers" in prompt
-    assert "180–350 characters TOTAL" in prompt
+    assert "Do not repeat disclaimers" in prompt
+    assert "180-350 characters total" in prompt
 
 
 @pytest.mark.parametrize(
     "section,key",
     [
-        ("security_fact_reviews", "interpretation"),
-        ("security_fact_reviews", "manual_follow_up"),
-        ("operation_review", "explanation"),
+        ("review_insights", "interpretation"),
+        ("review_insights", "manual_follow_up"),
+        ("operation_interpretations", "interpretation"),
         ("limitations", "text"),
     ],
 )
 def test_other_prose_sections_cannot_hide_assurance(completed, section, key):
     context = build_ai_context(completed)
-    payload = answer(context, "The observed outcomes require scoped manual review.")
-    if section == "security_fact_reviews":
-        entry = {
-            "security_fact_ref": context.security_facts[0].security_fact_ref,
-            "interpretation": "Review scoped facts.",
-            "manual_follow_up": "Review manually.",
-        }
-    elif section == "operation_review":
-        entry = {"operation": context.operations[0].operation}
+    payload = answer(context)
+    if section == "operation_interpretations":
+        payload[section][0][key] = "The target appears secure."
+    elif section == "review_insights":
+        payload[section] = [
+            {
+                "references": reference_items(
+                    [o.operation for o in context.operations[:2]],
+                    [context.security_facts[0].security_fact_ref],
+                ),
+                "interpretation": "Review related roles.",
+                "manual_follow_up": "Review manually.",
+            }
+        ]
+        payload[section][0][key] = "The target appears secure."
     else:
-        entry = {"operations": []}
-    entry[key] = "The target appears secure."
-    payload[section] = [entry]
-    with pytest.raises(AIValidationError, match="unsupported_security_assurance"):
-        validate_interpretation(json.dumps(payload), context)
+        payload[section] = [
+            {"text": "The target appears secure.", "references": reference_items([], [])}
+        ]
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_security_assurance" in warnings
 
 
 @pytest.mark.parametrize("ending", ["The scan also did not cover", "..."])
@@ -186,28 +187,30 @@ def test_previous_boundary_length_truncation_is_rejected(completed, ending):
     prefix = "The checks cover only supplied facts. "
     text = (prefix * 30)[: MAX_AI_SUMMARY_CHARACTERS - len(ending)] + ending
     assert len(text) == MAX_AI_SUMMARY_CHARACTERS
-    with pytest.raises(AIValidationError, match="incomplete_security_summary"):
-        validate_interpretation(json.dumps(answer(context, text)), context)
+    typed = validate_interpretation(json.dumps(answer(context, text)), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "incomplete_security_summary" in warnings
 
 
 @pytest.mark.parametrize("text", ["Scope is limited and", "Scope remains untested...", "Untested…"])
 def test_incomplete_short_summaries_are_also_rejected(completed, text):
     context = build_ai_context(completed)
-    with pytest.raises(AIValidationError, match="incomplete_security_summary"):
-        validate_interpretation(json.dumps(answer(context, text)), context)
+    typed = validate_interpretation(json.dumps(answer(context, text)), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "incomplete_security_summary" in warnings
 
 
 def test_summary_schema_ceiling_and_requested_headroom(completed):
     context = build_ai_context(completed)
-    field = build_response_schema(context)["$defs"]["AISecuritySummary"]["properties"]["text"]
+    field = build_response_schema(context)["$defs"]["AISummaryInterpretation"]["properties"]["text"]
     assert field["maxLength"] == MAX_AI_SUMMARY_CHARACTERS == 800
-    assert "180–350" in field["description"] and "180–350" in build_system_prompt(context)
-    assert "2–4" in field["description"] and "2–4" in build_system_prompt(context)
+    assert "180-350" in field["description"] and "180-350" in build_system_prompt(context)
+    assert "2-4" in field["description"] and "2-4" in build_system_prompt(context)
     text = "No deterministic Findings were produced by the executed checks. Untested behavior "
     text += "remains outside scope; these observations do not establish overall target security."
     assert len(text) < MAX_AI_SUMMARY_CHARACTERS / 2
     result = validate_interpretation(json.dumps(answer(context, text)), context)
-    assert json.loads(result.model_dump_json())["security_summary"]["text"] == text
+    assert json.loads(result.model_dump_json())["summary_interpretation"]["text"] == text
     with pytest.raises(AIValidationError, match="invalid_schema"):
         validate_interpretation(json.dumps(answer(context, "x" * 801)), context)
 
@@ -221,7 +224,7 @@ def test_four_complete_short_sentences_are_a_generation_preference_not_a_parser(
     )
     assert 180 <= len(text) <= 350
     result = validate_interpretation(json.dumps(answer(context, text)), context)
-    assert result.security_summary.text == text
+    assert result.summary_interpretation.text == text
 
 
 @pytest.mark.parametrize(
@@ -251,10 +254,12 @@ def test_prose_failure_is_nonfatal_single_inference_and_preserves_scan(completed
     result = interpret_completed_scan(
         completed, client=OllamaClient(transport=httpx.MockTransport(respond))
     )
-    assert result.status is AIAnalysisStatus.INVALID_RESPONSE and result.error_code == code
-    assert result.interpretation is None and len(calls) == 5
+    assert result.status is AIAnalysisStatus.SUCCESS and result.error_code is None
+    assert code in result.quality_warnings
+    assert result.validation_failures == ()
+    assert result.interpretation.summary_interpretation.text == text and len(calls) == 1
     assert completed == before and completed.evidence == before.evidence
-    assert text not in result.error_message
+    assert text not in str(result.quality_warnings)
 
 
 @pytest.fixture
@@ -291,10 +296,9 @@ def test_absence_contradicts_real_acceptance_review_facts(acceptance_context, te
         "privilege_control",
     }
     assert all(fact.category == "review_candidate" for fact in context.security_facts)
-    with pytest.raises(AIValidationError) as caught:
-        validate_interpretation(json.dumps(answer(context, text)), context)
-    assert (caught.value.stage, caught.value.code) == ("facts", "false_absence_claim")
-    assert text not in str(caught.value)
+    typed = validate_interpretation(json.dumps(answer(context, text)), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "false_absence_claim" in warnings
 
 
 @pytest.mark.parametrize(
@@ -311,7 +315,7 @@ def test_absence_preserves_finding_review_distinction(acceptance_context, text):
     result = validate_interpretation(
         json.dumps(answer(acceptance_context, text)), acceptance_context
     )
-    assert result.security_summary.text == text
+    assert result.summary_interpretation.text == text
 
 
 def test_accurate_bounded_absence_without_security_review_facts(phase_ten_scan):
@@ -326,7 +330,9 @@ def test_accurate_bounded_absence_without_security_review_facts(phase_ten_scan):
         "Untested behavior remains outside scope."
     )
     assert (
-        validate_interpretation(json.dumps(answer(context, text)), context).security_summary.text
+        validate_interpretation(
+            json.dumps(answer(context, text)), context
+        ).summary_interpretation.text
         == text
     )
 
@@ -336,28 +342,30 @@ def test_review_interest_without_structural_facts_still_contradicts_absence(phas
         phase_ten_scan("type Query { login: String }", mode=ScanMode.SAFE)[0]
     )
     assert not context.security_facts and context.operations[0].interest_score > 0
-    with pytest.raises(AIValidationError, match="false_absence_claim"):
-        validate_interpretation(
-            json.dumps(answer(context, "Nothing noteworthy was identified.")), context
-        )
+    typed = validate_interpretation(
+        json.dumps(answer(context, "Nothing noteworthy was identified.")), context
+    )
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "false_absence_claim" in warnings
 
 
-@pytest.mark.parametrize("section", ["operation_review", "limitations", "security_fact_reviews"])
+@pytest.mark.parametrize("section", ["operation_interpretations", "limitations", "review_insights"])
 def test_false_absence_guard_covers_other_prose(acceptance_context, section):
     context = acceptance_context
-    payload = answer(context, "Review candidates remain outside the executed checks.")
+    payload = answer(context)
     text = "No security facts were observed."
-    if section == "operation_review":
-        payload[section] = [{"operation": context.operations[0].operation, "explanation": text}]
+    if section == "operation_interpretations":
+        payload[section][0]["interpretation"] = text
     elif section == "limitations":
-        payload[section] = [{"text": text, "operations": []}]
+        payload[section] = [{"text": text, "references": reference_items([], [])}]
     else:
         payload[section] = [
             {
-                "security_fact_ref": context.security_facts[0].security_fact_ref,
+                "references": reference_items([o.operation for o in context.operations[:2]], []),
                 "interpretation": text,
                 "manual_follow_up": "Review manually.",
             }
         ]
-    with pytest.raises(AIValidationError, match="false_absence_claim"):
-        validate_interpretation(json.dumps(payload), context)
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "false_absence_claim" in warnings

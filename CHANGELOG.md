@@ -6,8 +6,16 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
-- Optional local AI now regenerates a complete interpretation after deterministic model-output
-  validation failures, with category-specific corrections and a hard five-attempt limit. It stops
+- AI output now separates application-owned facts from referenced interpretation: one entry per
+  supplied operation, up to three global review themes, and up to two limitations. JSON report
+  schema and AI contract advance to version 2; input privacy and the 12-operation cap are unchanged.
+  Safe per-attempt token telemetry distinguishes output-budget exhaustion from malformed content
+  without retaining rejected prose or changing the fixed generation budget.
+  Summary, theme and limitation references now share one typed array so generation-schema and
+  validation limits agree on three references total, rather than separate per-kind limits.
+- Optional local AI now regenerates a complete interpretation after hard structural model-output
+  validation failures, with cumulative distinct-category corrections and a hard ten-attempt limit.
+  It stops
   at the first valid result, shows progress and retains only safe attempt metadata. Provider errors
   are not retried; `--ai-timeout` applies per request. Scanning and reporting add no target traffic.
 - Compact execution and capability statuses share semantic console colors; GraphQL errors remain
@@ -19,19 +27,16 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Fixed
 
-- Local AI summary guidance avoids repeated disclaimers, and the assurance guard accepts the
-  calibrated denial “No overall security assurance can be inferred” while retaining all positive
-  assurance, grounding and summary-completion rejection checks.
-- Conditional manual-review questions no longer become false control-enforcement assertions;
-  hedged claims that successful execution implies enforcement remain rejected.
-- Optional AI interpretation rejects unsupported error-cause/control assertions and escalation of
-  review interest into risk or vulnerability claims. Explicit cited control facts remain scoped.
+- AI prose checks for unsupported assurance, absence, causal/control/review conclusions,
+  execution claims and clipped endings now produce advisory quality warnings instead of
+  discarding usable structured interpretations. Structural schema/reference/coverage and
+  provider-truncation failures still regenerate; semantic concerns never do.
+- All human AI output starts with the same explicit warning that interpretation may be incomplete
+  or inaccurate and requires manual validation. Deterministic facts remain authoritative;
+  quality flags are heuristic diagnostics, not Findings or proof that prose is false.
+- Canonical AI results retain safe, deduplicated quality-warning codes separately from hard
+  validation failures, as an additive field within contract version 2.
 - Documented UTF-8 native-command redirection for Windows PowerShell 5.1 encoding mismatches.
-- Optional AI interpretation rejects absence claims contradicted by supplied review facts or
-  Findings, while preserving the distinction between manual-review candidates and Findings.
-- Optional AI interpretation rejects unsupported overall security-assurance claims and visibly
-  incomplete summaries. Summaries request 2–4 short sentences with headroom below the retained
-  structural ceiling; rejected interpretation remains non-fatal to the deterministic scan.
 - Compact assessments show confirmed/probable GraphQL endpoint URLs separately from the supplied
   target, with consistent endpoint labels in pre-ACTIVE context.
 - Ctrl+C at any ACTIVE selection or confirmation now stops the entire scan interaction with
@@ -46,7 +51,8 @@ User-visible changes are recorded here. A prepared release entry does not imply 
   `--ai-timeout SECONDS` overrides for slower CPU-only systems, independently of target timeouts.
 - Local qwen3 structured output now constrains references to supplied operation/fact values,
   preventing bare operation names from failing strict reference validation. Internal diagnostics
-  distinguish parsing, schema, reference and execution-fact failures without exposing model text.
+  distinguish hard parsing/schema/reference failures from advisory execution-prose flags without
+  exposing rejected model text.
 - ACTIVE preparation supports graphql-core 3.3's immutable AST nodes while retaining 3.2
   compatibility, including alias multiplicity and shared authorization/depth transformations.
 

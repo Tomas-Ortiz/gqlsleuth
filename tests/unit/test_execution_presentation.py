@@ -15,9 +15,9 @@ from rich.console import Console
 from rich.style import Style
 from rich.table import Table
 
-from fixtures.ai_response import security_answer_fields
+from fixtures.ai_response import reference_items, security_answer_fields, set_operations
 from gqlsleuth.ai.context import build_ai_context, serialize_context
-from gqlsleuth.ai.models import AIAnalysisStatus, AIInterpretationResult
+from gqlsleuth.ai.models import AIAnalysisStatus, AIInterpretationResult, AIReferenceProjection
 from gqlsleuth.ai.prompt import execution_summary, validate_interpretation
 from gqlsleuth.application.active_execution import (
     execute_selected_mutations,
@@ -364,19 +364,23 @@ def ai_view(execution_views):
         "[bold]high-interest[/bold] and highly relevant; critical-interest, medium-interest, "
         "low-interest, informational-interest."
     )
-    interpretation = validate_interpretation(
-        json.dumps(
-            {
-                **security_answer_fields(context),
-                "scan_summary": {"text": execution_summary(context), "operations": []},
-                "operation_review": [{"operation": reference, "explanation": prose}],
-                "limitations": [{"operations": [], "text": "Runtime assessment remains limited."}],
-            }
-        ),
-        context,
-    )
+    payload = security_answer_fields(context)
+    set_operations(payload, [{"operation": reference, "interpretation": prose}])
+    payload["limitations"] = [
+        {"references": reference_items([], []), "text": "Runtime assessment remains limited."}
+    ]
+    interpretation = validate_interpretation(json.dumps(payload), context)
     return AIInterpretationResult(
-        AIAnalysisStatus.SUCCESS, "qwen3:8b", STAMP, 0.1, context.metadata, interpretation
+        AIAnalysisStatus.SUCCESS,
+        "qwen3:8b",
+        STAMP,
+        0.1,
+        context.metadata,
+        interpretation,
+        references=AIReferenceProjection(
+            operations=context.operations, security_facts=context.security_facts
+        ),
+        execution_summary=execution_summary(context),
     )
 
 
@@ -386,15 +390,15 @@ def test_ai_tables_preserve_stored_prose_and_validated_facts(execution_views, ai
     context = build_ai_context(active)
     result = ai_view
     interpretation = result.interpretation
-    prose = interpretation.operation_review[0].explanation
+    prose = interpretation.operation_interpretations[0].interpretation
     report = build_report(active, generated_at=STAMP, ai_interpretation=result)
     before = tuple(render_report(report, format) for format in ReportFormat)
     output = capture(render_ai, result, width=width, verbose=True)
     assert max(map(len, output.splitlines())) <= width
     assert "AI-Assisted Interpretation" in output
-    assert "Model-generated interpretation" in output
+    assert "AI-generated interpretation" in output
     assert "Execution Summary" in output and "Review Focus" not in output
-    assert "Operation Review" in output
+    assert "Operation Analysis" in output
     assert "Operation Explanations" not in output and "Manual Review Suggestions" not in output
     assert "Limitations" in output
     assert "HIGH" in output and "CRITICAL" in output
@@ -402,8 +406,8 @@ def test_ai_tables_preserve_stored_prose_and_validated_facts(execution_views, ai
     assert "highly" in output
     normalized = " ".join(output.split())
     assert "6 attempted" in normalized and "1 SUCCESS" in normalized
-    assert interpretation.scan_summary.text == execution_summary(context)
-    assert interpretation.operation_review[0].explanation == prose
+    assert result.execution_summary == execution_summary(context)
+    assert interpretation.operation_interpretations[0].interpretation == prose
     assert tuple(render_report(report, format) for format in ReportFormat) == before
     if width == 100:
         segments = []
@@ -417,7 +421,7 @@ def test_ai_tables_preserve_stored_prose_and_validated_facts(execution_views, ai
         console.print = collect
         render_ai(console, result, verbose=True)
         references = [segment for segment in segments if "endpoint_1" in segment.text]
-        assert len(references) == 1
+        assert len(references) >= len(context.operations)
         assert all(segment.style.color.name == "cyan" for segment in references)
 
 
@@ -466,12 +470,11 @@ def test_rendered_titles_and_tables_use_structural_styles(execution_views, ai_vi
         "Selected Mutations:",
         "Mutation Execution",
         "AI-Assisted Interpretation",
+        "AI Generation Metadata",
         "Execution Summary (validated facts)",
-        "Security Summary",
-        "Security Fact Reviews",
-        "Security Controls Observed",
-        "Cross-Capability Analysis",
-        "Operation Review",
+        "Interpretive Summary",
+        "Operation Analysis",
+        "Cross-Operation Review Themes",
         "Limitations",
     ]
     for table in tables:
@@ -493,12 +496,13 @@ def test_structural_console_spacing(execution_views, ai_view, width):
     output = capture(render_ai, ai_view, width=width, verbose=True)
     for title in (
         "Execution Summary",
-        "Operation Review",
+        "Operation Analysis",
         "Limitations",
     ):
         assert_separated(output, title)
-    assert "Model: qwen3:8b\nAI status: SUCCESS\n\nExecution Summary" in output
-    assert "Operation Review\n\n" in output
+    assert "Model: qwen3:8b\n\nAI Generation Metadata" in output
+    assert "AI status: SUCCESS\n\nExecution Summary" in output
+    assert "Operation Analysis\n\n" in output
     for rendered in (compact, output):
         assert "\n\n\n" not in rendered
         assert max(map(len, rendered.splitlines())) <= width

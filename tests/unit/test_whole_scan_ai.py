@@ -9,11 +9,15 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from fixtures.ai_response import security_answer_fields
+from fixtures.ai_response import reference_items, security_answer_fields
 from fixtures.whole_scan_ai import CANARIES, RAW, SDL, assemble
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import MAX_AI_OPERATIONS, MAX_CONTEXT_BYTES, AIAnalysisStatus, AIContext
-from gqlsleuth.ai.prompt import build_response_schema, execution_summary, validate_interpretation
+from gqlsleuth.ai.prompt import (
+    build_response_schema,
+    collect_interpretation_quality_warnings,
+    validate_interpretation,
+)
 from gqlsleuth.ai.security_context import ordered_security_context
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.infrastructure.http import HttpClient
@@ -30,26 +34,7 @@ def whole(phase_ten_scan):
 
 
 def answer(context):
-    payload = {
-        **security_answer_fields(context),
-        "scan_summary": {
-            "text": execution_summary(context),
-            "operations": [],
-            "security_facts": [],
-        },
-        "operation_review": [],
-        "limitations": [],
-    }
-    facts = context.security_facts
-    if facts:
-        payload["security_fact_reviews"] = [
-            {
-                "security_fact_ref": facts[0].security_fact_ref,
-                "interpretation": "The recorded policy result warrants scoped manual validation.",
-                "manual_follow_up": "Review the intended policy and retained evidence manually.",
-            }
-        ]
-    return payload
+    return security_answer_fields(context)
 
 
 @pytest.mark.parametrize(
@@ -65,9 +50,9 @@ def test_findings_cannot_be_denied_in_prose(whole, text):
     context = build_ai_context(whole)
     assert context.metadata.deterministic_findings > 0
     payload = answer(context)
-    payload["security_summary"]["text"] = text
-    with pytest.raises(ValueError, match="false_absence_claim"):
-        validate_interpretation(json.dumps(payload), context)
+    payload["summary_interpretation"]["text"] = text
+    typed = validate_interpretation(json.dumps(payload), context)
+    assert "false_absence_claim" in collect_interpretation_quality_warnings(typed, context)
 
 
 def test_all_supported_capabilities_read_named_semantic_fields(whole):
@@ -192,7 +177,6 @@ def test_oversized_findings_take_capacity_before_candidates_and_operations(whole
         "missing_ref",
         "extra",
         "oversized",
-        "same_capability",
         "not_a_control",
         "duplicate_review",
         "empty_summary_refs",
@@ -204,52 +188,59 @@ def test_invalid_security_reference_or_structure_rejects_entire_answer(whole, ch
     context = build_ai_context(whole)
     payload = answer(context)
     refs = [f.security_fact_ref for f in context.security_facts]
-    if change == "unknown_summary":
-        payload["security_summary"]["security_facts"] = ["SF99999"]
-    elif change == "unknown_review":
-        payload["security_fact_reviews"][0]["security_fact_ref"] = "SF99999"
-    elif change == "unknown_control":
-        payload["control_observations"] = [{"security_fact_ref": "SF99999", "text": "Scoped."}]
-    elif change in {"unknown_cross", "duplicate_cross", "one_cross", "same_capability"}:
-        selected = (
-            [refs[0], "SF99999"]
-            if change == "unknown_cross"
-            else [refs[0], refs[0]]
-            if change == "duplicate_cross"
-            else [refs[0]]
+    insight = {
+        "references": reference_items([], refs[:2]),
+        "interpretation": "May warrant joint review.",
+        "manual_follow_up": "Review manually.",
+    }
+    payload["review_insights"] = [insight]
+    if change in {"unknown_summary", "unknown_control"}:
+        payload["summary_interpretation"]["references"] = reference_items(
+            security_facts=["SF99999"]
         )
-        if change == "same_capability":
-            group = next(
-                [f.security_fact_ref for f in context.security_facts if f.capability == cap]
-                for cap in {f.capability for f in context.security_facts}
-                if sum(f.capability == cap for f in context.security_facts) >= 2
-            )
-            selected = group[:2]
-        payload["cross_capability_insights"] = [
-            {"security_facts": selected, "text": "May warrant joint review."}
-        ]
+    elif change in {"unknown_review", "unknown_cross"}:
+        insight["references"] = reference_items(security_facts=[refs[0], "SF99999"])
+    elif change == "duplicate_cross":
+        insight["references"] = reference_items(security_facts=[refs[0], refs[0]])
+    elif change == "one_cross":
+        insight["references"] = reference_items(security_facts=[refs[0]])
     elif change == "missing_ref":
-        del payload["security_fact_reviews"][0]["security_fact_ref"]
+        del insight["references"]
     elif change == "extra":
         payload["finding"] = "Invented vulnerability"
     elif change == "not_a_control":
-        payload["control_observations"] = [{"security_fact_ref": refs[0], "text": "Scoped."}]
+        fact = next(
+            f
+            for f in context.security_facts
+            if not f.control_observed and f.evaluation != "satisfied"
+        )
+        payload["summary_interpretation"] = {
+            "references": reference_items([], [fact.security_fact_ref]),
+            "text": "Authorization is enforced.",
+        }
     elif change == "duplicate_review":
-        payload["security_fact_reviews"] *= 2
+        payload["operation_interpretations"].append(payload["operation_interpretations"][0])
     elif change == "empty_summary_refs":
-        payload["security_summary"]["security_facts"] = []
+        payload["summary_interpretation"]["references"] = reference_items(security_facts=[])
     elif change in {"long_limitation", "unknown_limitation"}:
         payload["limitations"] = [
             {
                 "text": "x" * 501 if change == "long_limitation" else "Unknown scope.",
-                "operations": [],
-                "security_facts": [] if change == "long_limitation" else ["SF99999"],
+                "references": reference_items(
+                    [], [] if change == "long_limitation" else ["SF99999"]
+                ),
             }
         ]
     else:
-        payload["security_summary"]["text"] = "x" * 801
-    with pytest.raises((ValueError, ValidationError)):
-        validate_interpretation(json.dumps(payload), context)
+        payload["summary_interpretation"]["text"] = "x" * 801
+    if change == "not_a_control":
+        typed = validate_interpretation(json.dumps(payload), context)
+        assert "unsupported_control_claim" in collect_interpretation_quality_warnings(
+            typed, context
+        )
+    else:
+        with pytest.raises((ValueError, ValidationError)):
+            validate_interpretation(json.dumps(payload), context)
 
 
 def test_valid_correlation_and_scoped_control_are_only_interpretation(whole):
@@ -258,24 +249,31 @@ def test_valid_correlation_and_scoped_control_are_only_interpretation(whole):
     first = context.security_facts[0]
     second = next(f for f in context.security_facts if f.capability != first.capability)
     control = next(f for f in context.security_facts if f.control_observed)
-    payload["cross_capability_insights"] = [
+    payload["review_insights"] = [
         {
-            "security_facts": [first.security_fact_ref, second.security_fact_ref],
-            "text": "These observations may warrant joint manual review.",
+            "references": reference_items([], [first.security_fact_ref, second.security_fact_ref]),
+            "interpretation": "These observations may warrant joint manual review.",
+            "manual_follow_up": "Inspect their intended policy manually.",
         }
     ]
-    payload["control_observations"] = [
-        {
-            "security_fact_ref": control.security_fact_ref,
-            "text": "The exact bounded probe encountered a scoped control.",
-        }
-    ]
+    payload["summary_interpretation"] = {
+        "references": reference_items([], [control.security_fact_ref]),
+        "text": "The exact bounded probe encountered a scoped control.",
+    }
     output = validate_interpretation(json.dumps(payload), context)
-    assert len(output.cross_capability_insights) == 1
+    assert len(output.review_insights) == 1
     assert not hasattr(output, "findings") and not hasattr(output, "evidence")
+    # Same-capability themes are valid now; they are not claimed to be cross-capability.
+    same = next(
+        [f.security_fact_ref for f in context.security_facts if f.capability == cap]
+        for cap in {f.capability for f in context.security_facts}
+        if sum(f.capability == cap for f in context.security_facts) >= 2
+    )
+    payload["review_insights"][0]["references"] = reference_items(security_facts=same[:2])
+    assert validate_interpretation(json.dumps(payload), context).review_insights
 
 
-@pytest.mark.parametrize("section", ["control_observations", "cross_capability_insights"])
+@pytest.mark.parametrize("section", ["summary_interpretation", "review_insights"])
 @pytest.mark.parametrize(
     "text,code",
     [
@@ -286,54 +284,43 @@ def test_valid_correlation_and_scoped_control_are_only_interpretation(whole):
 def test_valid_security_references_do_not_authorize_false_prose(whole, section, text, code):
     context = build_ai_context(whole)
     payload = answer(context)
-    if section == "control_observations":
+    if section == "summary_interpretation":
         control = next(f for f in context.security_facts if f.control_observed)
-        entry = {"security_fact_ref": control.security_fact_ref}
+        payload[section] = {
+            "references": reference_items([], [control.security_fact_ref]),
+            "text": text,
+        }
     else:
-        first = context.security_facts[0]
-        second = next(f for f in context.security_facts if f.capability != first.capability)
-        entry = {"security_facts": [first.security_fact_ref, second.security_fact_ref]}
-    entry["text"] = text
-    payload[section] = [entry]
-    with pytest.raises(ValueError, match=code):
-        validate_interpretation(json.dumps(payload), context)
+        payload[section] = [
+            {
+                "references": reference_items(
+                    [], [f.security_fact_ref for f in context.security_facts[:2]]
+                ),
+                "interpretation": text,
+                "manual_follow_up": "Review manually.",
+            }
+        ]
+    typed = validate_interpretation(json.dumps(payload), context)
+    assert code in collect_interpretation_quality_warnings(typed, context)
 
 
-def test_generation_controls_are_restricted_to_supplied_control_facts(whole):
+def test_generation_reference_enums_and_no_generated_controls(whole):
     context = build_ai_context(whole)
     schema = build_response_schema(context)
     definitions = schema["$defs"]
     facts = [f.security_fact_ref for f in context.security_facts]
-    for name in ("AISecuritySummary", "AILimitation"):
-        assert definitions[name]["properties"]["security_facts"]["items"]["enum"] == facts
-    assert definitions["AISecurityFactReview"]["properties"]["security_fact_ref"]["enum"] == facts
-    assert definitions["AISecuritySummary"]["properties"]["security_facts"]["minItems"] == 1
-    expected = [
-        f.security_fact_ref
-        for f in context.security_facts
-        if f.control_observed or f.evaluation == "satisfied"
-    ]
-    assert expected
-    assert (
-        schema["$defs"]["AIControlObservation"]["properties"]["security_fact_ref"]["enum"]
-        == expected
-    )
-    assert schema["properties"]["cross_capability_insights"]["maxItems"] == 4
-    by_ref = {f.security_fact_ref: f.capability for f in context.security_facts}
-    alternatives = definitions["AICrossCapabilityInsight"]["properties"]["security_facts"]["oneOf"]
-    for alternative in alternatives:
-        assert alternative["minItems"] == alternative["maxItems"] == 2
-        # Ollama supports tuple-form items; prefixItems is not enforced by its converter.
-        assert "prefixItems" not in alternative
-        first, second = alternative["items"]
-        assert all(by_ref[a] != by_ref[b] for a in first["enum"] for b in second["enum"])
-    assert {r for option in alternatives for r in option["items"][0]["enum"]} == set(by_ref)
+    assert definitions["AISecurityFactReference"]["properties"]["ref"]["enum"] == facts
+    assert "control_observations" not in schema["properties"]
+    assert "cross_capability_insights" not in schema["properties"]
+    assert schema["properties"]["review_insights"]["maxItems"] == 3
 
 
 def test_human_ai_sections_escape_prose_and_preserve_deterministic_reports(whole):
     context = build_ai_context(whole)
     payload = answer(context)
-    payload["security_summary"]["text"] = '<script>alert("test")</script> Model interpretation.'
+    payload["summary_interpretation"]["text"] = (
+        '<script>alert("test")</script> Model interpretation.'
+    )
     client = OllamaClient(
         transport=httpx.MockTransport(
             lambda request: httpx.Response(
@@ -353,14 +340,13 @@ def test_human_ai_sections_escape_prose_and_preserve_deterministic_reports(whole
     raw = json.loads(render_report(after, ReportFormat.JSON))
     ai = raw.pop("ai_interpretation")
     assert raw == json.loads(render_report(before, ReportFormat.JSON))
-    assert "security_fact_reviews" in ai["interpretation"] and "security_facts" not in ai
+    assert "operation_interpretations" in ai["interpretation"] and "security_facts" not in ai
     for kind in (ReportFormat.HTML, ReportFormat.MARKDOWN):
         text = render_report(after, kind)
         for title in (
-            "Security Summary",
-            "Security Fact Reviews",
-            "Security Controls Observed",
-            "Cross-Capability Analysis",
+            "Interpretive Summary",
+            "Operation Analysis",
+            "Cross-Operation Review Themes",
         ):
             assert title in text.replace("\\-", "-")
         assert "<script>alert" not in text
@@ -505,7 +491,6 @@ def test_whole_scan_prompt_keeps_ordinary_totals_scoped(whole):
     assert context.counts["mutation_requests"] == 0
     assert any(f.capability == "file_upload" for f in context.security_facts)
     prompt = build_system_prompt(context)
-    assert "ZERO ordinary Phase 10 Mutations" in prompt
-    assert "Separately consented capability probes may have executed Mutations" in prompt
-    assert "NO_EVENT_BEFORE_TIMEOUT != authorization enforcement" in prompt
-    assert "Correlation is model interpretation" in prompt
+    assert "ordinary totals exclude specialized probes" in prompt
+    assert "subscription ACK or timeout does not establish authorization" in prompt
+    assert "No proven causality" in prompt

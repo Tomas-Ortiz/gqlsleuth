@@ -1087,7 +1087,7 @@ summaries, generation failures/manual-adjustment notes, execution statuses/error
 limitations, deterministic recommendations, and an authorized-use safety notice. Review candidates
 retain their existing Phase 7 order, categories, scores, reasons, and matched rules.
 
-JSON is canonical UTF-8, pretty printed with stable field names and `report_schema_version: 1`.
+JSON is canonical UTF-8, pretty printed with stable field names and `report_schema_version: 2`.
 The same context serializes deterministically, including exact GraphQL documents/variables and
 structured request/response evidence. Byte-valued bodies use explicit lossless base64 objects
 (`encoding` and `data`); enums, timestamps, and IDs use JSON-compatible values. No graphql-core or
@@ -1153,7 +1153,7 @@ The application flow is strictly one-way:
 Completed SafeExecutionScanResult | ActiveExecutionScanResult
     → application.ai_assistance.interpret_completed_scan
     → ai.context.build_ai_context → AIContext
-    → infrastructure.ollama.OllamaClient (at most five local POST /api/chat attempts)
+    → infrastructure.ollama.OllamaClient (at most ten local POST /api/chat attempts)
     → validated AIInterpretationResult
     → CLI and optional reports
 ```
@@ -1199,93 +1199,150 @@ The adapter uses Ollama's JSON-schema `format`, `stream: false`, and `think: fal
 zero, an 8192-token model context, and a 2048-token output cap. This follows the local
 [Ollama structured-output API](https://docs.ollama.com/capabilities/structured-outputs).
 The per-request schema constrains operation and security-fact reference fields to exact
-allowlisted values using enums; bare operation names are not accepted as substitutes for full
-endpoint/kind/name references. Control references are further restricted to supplied controls,
-and cross-capability generation uses pairs from different supplied capabilities. Sections without
-eligible references are constrained to empty arrays. This narrows generation
-without adding context or replacing independent post-response validation.
-Pydantic strictly validates final `message.content` into `AIInterpretation`: the canonical
-ordinary execution summary plus Security Summary, Security Fact Reviews, Security Controls
-Observed, Cross-Capability Analysis, Operation Review and Limitations. The Phase 31 roadmap entry
-specifies per-section bounds. Operation reviews combine supplied review interest, apparent role,
-recorded outcome and non-destructive follow-up; interest never becomes severity. Only supplied
-operation refs and locally generated `SF1`, `SF2`, ... references are accepted. Unknown/missing
-references, duplicates within a section, extra fields and invalid structures reject the entire
-response. Correlations require distinct facts from at least two capabilities. Control entries
-must reference an existing explicit control or satisfied policy.
+allowlisted enums. Bare names are not substitutes for endpoint/kind/name references. Independent
+post-response validation still rejects unknown references, duplicate references, extra fields
+and malformed structures. Deterministic facts remain application-owned; AI provides bounded,
+reference-linked interpretation.
 
-Security Summary (`security_summary.text`) requests 2–4 concise, complete sentences,
-with a requested total length of 180–350 characters. The hard Pydantic/JSON-schema ceiling remains
-800 characters: a safety bound, not a generation target. Sentence count and the requested length
-range are prompt guidance, not additional schema constraints. Post-response completion checks
-reject summaries reaching the ceiling, missing terminal punctuation (`.`, `!`, or `?`, allowing
-closing quotes/brackets), or ending in ellipses (`...` or `…`). This also rejects visibly incomplete
-summaries below the ceiling; rejected prose is not clipped, rewritten or repaired.
-Generation instructions favor one material observation and one scope limitation, without repeated
-disclaimers; field descriptions reinforce this preference. Fact/operation reviews normally select
-1–3 material entries and limitations 1–2 distinct entries, within the unchanged structural maxima.
-Limitations request 100–200 characters each with a natural ending below their unchanged 500-character
-ceiling. These are generation preferences, not new validation constraints. The base prompt also
-prohibits speculative error causes across sentence boundaries and distinguishes scanner safety
-skips from target protections.
+AI contract version 2 generates only:
 
-Model prose remains interpretation requiring manual validation and is not generally fact-checked.
-Narrow deterministic guards across prose sections reject unsupported overall security/safety
-assurance, including inferences from zero Findings, successful Queries/checks or limited observed
-controls. They also reject explicit absence claims that contradict supplied Findings, review
-candidates/review-interest operations or security facts. Zero deterministic Findings means only
-that the executed checks produced no deterministic Findings; review/security facts can still be
-present. A calibrated statement such as “No deterministic Findings were produced, but manual-review
-candidates remain” is permitted when supported. Review facts are not escalated into Findings.
-Additional narrow guards reject outcome-to-cause assertions, success-based security reassurance,
-and review-only risk/vulnerability conclusions. Generic GraphQL/HTTP errors, indeterminate results
-and network failures do not establish authorization, authentication, rate-limiting, input-validation,
-depth or abuse-control enforcement. Control assertions require explicitly cited control/satisfied-
-policy facts from the matching capability; an unrelated control cannot justify an operation's
-error cause. Unqualified runtime list-bounding absence cannot be inferred from a schema-only
-candidate. Scoped manual-review guidance and explicitly supported control interpretation remain
-permitted. Apparent functional roles should derive from names/categories, not execution success.
-These guards check specific assertion forms and supplied categories, not arbitrary natural-language
-truth, and do not establish that accepted prose is fact or proven causality.
-The assurance guard recognizes the calibrated passive denial “No overall security assurance can
-be inferred …”; this does not exempt a positive assurance claim elsewhere in the same response.
-The control guard also recognizes the conditional question “Manual review is needed to determine
-if the authentication policy is correctly enforced”, rather than treating it as proof of enforcement.
-The exception covers that bounded question form, not an appended assertion or a success/error cause.
-Generic outcome/control, false-absence and summary-completion checks still apply independently.
+- `summary_interpretation`: referenced interpretive summary, requesting 2-4 complete sentences
+  and 180-350 characters, with an 800-character hard safety ceiling.
+- `operation_interpretations`: exactly one entry for EVERY operation supplied in the bounded
+  context (0-12). Each has one exact `operation` reference, an `interpretation` (maximum 300
+  characters) and `manual_follow_up` (maximum 220). Both request one short complete sentence,
+  preferably under 100 characters. No top-three selection or per-operation inference occurs.
+- `review_insights`: zero to three global/cross-operation themes, each referencing two or three
+  distinct supplied operation/security-fact references. Interpretation is bounded at 350
+  characters and follow-up at 220. Different capability families are not required: a theme may
+  connect operations within a family, but no proven causality is inferred.
+- `limitations`: zero to two interpretive scope consequences, each normally 150-300 characters
+  and at most 500, with exact references for operation/fact-specific statements. Empty references
+  are allowed for context-wide limitations.
+
+Summary, insight and limitation entries use one `references` array, with a maximum of three
+items TOTAL. Each item is a strict discriminated object: `kind: operation` with an exact supplied
+operation `ref`, or `kind: security_fact` with an exact supplied `SF` ref. The outgoing schema
+encodes this combined `maxItems: 3`, unique items and per-kind reference enums; insights also
+encode `minItems: 2`. Typed validation enforces the same cardinality, and independent membership
+and duplicate checks remain. There are no separate operation/fact arrays whose independent
+bounds permit six references. Operation interpretations retain only their one primary operation
+reference; no additional supporting-reference field is generated.
+
+The response no longer generates `scan_summary`, `security_summary`, `security_fact_reviews`,
+`control_observations`, `cross_capability_insights` or `operation_review`. The application renders
+execution totals, classifications, scoped controls and per-operation metadata directly from
+canonical facts. It retains an exact allowlisted `AIReferenceProjection` for resolving references
+without reconstructing context from a result graph. This projection adds no fields to AI input.
+Canonical JSON reports use `report_schema_version: 2`; AI results include `ai_contract_version: 2`.
+Consumers must migrate to the new generated fields and application-owned reference projection.
+This format change does not itself change the package version.
+
+Exact operation coverage is independently checked as set equality with no duplicates. Missing or
+duplicate interpretations produce `incomplete_operation_interpretation_set`; unknown operations
+remain invalid. Array bounds in the request schema match the number actually supplied, including
+zero. Reference validation precedes the existing prose and execution guards.
+
+AI acceptance has two tiers. **Hard validation** enforces usable JSON, strict typed schema
+(including required/forbidden fields and hard string/array bounds), exact supplied references,
+distinct reference cardinality and exact operation coverage. Provider `done_reason=length` and
+incomplete/invalid provider envelopes remain hard failures. These failures alone may trigger
+bounded regeneration.
+
+**Advisory quality checks** reuse the existing narrow prose detectors for unsupported assurance,
+false absence, outcome/control/review conclusions, execution claims and visible completion.
+They produce stable, deduplicated static `quality_warnings` codes on the final accepted result:
+`unsupported_security_assurance`, `false_absence_claim`, `unsupported_outcome_inference`,
+`unsupported_control_claim`, `unsupported_review_conclusion`, `unsupported_execution_claim`,
+`incomplete_security_summary`, and `incomplete_prose`. Independent check families continue after
+a concern; collection is intentionally not exhaustive. Warnings never reject a structurally
+usable interpretation, change SUCCESS to INVALID_RESPONSE, hide prose or cause another inference.
+No new grammar parser, prose repair, rejected-text replay or context expansion is introduced.
+
+AI prose is best-effort analyst assistance and may be incomplete or inaccurate. Deterministic
+facts, Evidence and Findings remain authoritative. The prompt guides calibrated review language:
+zero Findings does not mean zero review/security facts, review categories do not establish risks
+or runtime content, and successful checks do not establish overall security. Detectors can flag
+wording inconsistent with these principles, but are not a general NLP fact checker or proof
+system. A quality flag means wording may deserve analyst review, not that it is definitely false,
+a vulnerability exists or the scanner created a Finding. Absence of flags does not establish
+correctness. AI availability must not depend on perfection of free-form prose.
+
+Hard prose ceilings remain safety bounds, not generation targets. Summary guidance is 2-4 concise
+complete sentences, normally 180-350 characters below its 800-character ceiling. Limitations
+normally target 150-300 characters below 500. Missing punctuation, ellipses or visible clipping
+within schema bounds produce advisory completion flags; hard schema minLength/maxLength and
+provider-level truncation remain fatal. Accepted prose is never clipped, repaired or rewritten.
 
 Ordinary Phase 9/10 execution totals are calculated from complete results before truncation;
 specialized probe outcomes remain separate security facts and coverage counts. A canonical
 summary distinguishes attempted requests, SUCCESS, each error classification, Query safety/limit
-skips, and unexecuted Mutation candidates. Its exact text is constrained in the per-request JSON
-schema and checked again after parsing; modified counts or paraphrases reject the whole response.
-The summary is labeled as validated facts. Other sections remain model-generated review
-interpretation, instructed to preserve per-operation classifications and never treat HTTP 200,
-GraphQL errors, skips, or mere attempts as successful execution.
+skips, and unexecuted Mutation candidates. This summary is computed once by the application and
+rendered as deterministic facts, not copied into the generated response schema. Its former
+exact-text model-response validation is unnecessary because the model no longer supplies it.
+Model interpretation must still preserve execution distinctions and never treat HTTP 200,
+GraphQL errors, skips or mere attempts as successful execution.
 
-The application owns bounded content regeneration (`MAX_AI_ATTEMPTS = 5`): one accepted
-interpretation maximum; one to five local inference attempts only when deterministic validation
+Canonical execution grounding compares narrow free-prose execution assertions with supplied
+operation facts and complete aggregate counts. Contradictions produce advisory
+`unsupported_execution_claim`, never regeneration. Application-rendered execution facts remain
+unchanged and authoritative regardless of prose. A scanner safety skip is not target denial;
+ordinary totals remain separate from specialized probes. This bounded lexical diagnostic is
+not general fact checking.
+
+The application owns bounded content regeneration (`MAX_AI_ATTEMPTS = 10`): one accepted
+interpretation maximum; one to ten local inference attempts only when hard structural validation
 rejects model output. Attempt 1 uses the base prompt. Further attempts append a concise static
-correction from `ai/regeneration.py`, keyed only by the normalized rejection code, plus the attempt
-number. Each regenerates the complete response with the SAME bounded context and schema. No
+correction from `ai/regeneration.py` for all distinct normalized rejection codes observed so far,
+in stable first-seen order, plus the attempt number. Repeated codes/shared correction text do not
+append duplicate paragraphs; chronological failure metadata still retains every rejection.
+Each regenerates the complete response with the SAME bounded context and schema. No
 rejected text, variables, Evidence, URLs, target responses or new context are replayed. Generation
 stops immediately on acceptance. No self-critique, chain-of-thought request or prose repair occurs.
 
-Retryable categories are structured JSON/schema/envelope failures, supplied-reference violations,
-execution-summary mismatch, assurance/false-absence/outcome/control/review-conclusion violations
-and incomplete summaries. Unknown categories, invalid local context/configuration, provider HTTP
+Retryable codes are `invalid_json`, `invalid_schema`, `invalid_response`,
+`unknown_operation_reference`, `invalid_security_references`, `missing_summary_references`,
+`incomplete_operation_interpretation_set`, `insufficient_insight_references`, and
+`output_token_limit_reached`. No semantic quality code participates in corrections or retries.
+Unknown categories, invalid local context/configuration, provider HTTP
 errors, missing models, connection failures, timeouts and transport failures stop without content
 regeneration. No transport retry policy is introduced. KeyboardInterrupt propagates to the CLI's
 scan cancellation path (exit 130), without starting another attempt or target stage.
 
 `AIInterpretationResult` retains model, status, timestamp, measured duration, context metadata,
 optional validated interpretation, normalized error code/message, `attempt_count` and ordered
-`validation_failures` containing only safe rejection codes. Context/configuration failure before
+`validation_failures` containing only hard rejection codes, separate from final-output
+`quality_warnings: tuple[str, ...] = ()`. Warnings contain static codes only, never snippets,
+URLs, target data or Evidence. This additive application-owned field remains within report/AI
+contract version 2; the generated contract shape is unchanged. SUCCESS means usable structured
+output with valid references and coverage, not factual correctness or permission to rely on prose
+without manual validation. Context/configuration failure before
 inference has zero attempts; provider failure records the attempted request. Only the final
 accepted interpretation is retained; exhausted validation leaves it null. Statuses are `SUCCESS`,
 `UNAVAILABLE`, `HTTP_ERROR`, and `INVALID_RESPONSE`; when disabled, no result is produced.
-Thinking/reasoning and other raw envelope metadata are ignored, never logged, displayed, or
-persisted. Malformed final content is rejected rather than extracting reasoning or partial JSON.
+Thinking/reasoning and raw envelope content are ignored, never logged, displayed, or
+persisted. Only the safe provider usage fields described below are retained. Malformed final content is rejected rather than extracting reasoning or partial JSON.
+
+Provider telemetry is separate from interpretation and scanner Evidence. Each attempt records:
+
+- Prompt tokens: Ollama `prompt_eval_count` (input processing, not context bytes).
+- Completion tokens: `eval_count` (generated output).
+- Completion token limit: configured `num_predict`, unchanged at 2048.
+- Completion tokens remaining: `max(limit - completion_tokens, 0)` when reported.
+- Provider done reason: normalized `stop`, `length`, or `unknown`; arbitrary provider text is
+  never retained.
+- Configured context token limit: `num_ctx`, currently 8192. Approximate context headroom is
+  `max(context_limit - prompt_tokens - completion_tokens, 0)` only when all inputs are known;
+  it is not a tokenizer guarantee or the remaining output budget.
+
+Missing/invalid counters remain null, never guessed as zero. Session metadata records totals
+(null if any contributing counter is unknown), maximum reported completion, output-limit hits,
+done-reason counts and accepted-attempt usage. Verbose console and reports expose these safe
+counters; compact console does not. Unknown runtime context limits remain unknown.
+`done_reason=length` is classified as `output_token_limit_reached` before generated JSON parsing,
+even when the partial content happens to be valid JSON. It uses the existing cumulative bounded
+regeneration with a conciseness correction, not a transport retry. The output limit never grows
+dynamically. Token telemetry contains no prompt, generated text, reasoning, headers or target data.
 
 The dedicated HTTPX adapter is independent from target `HttpClient`. It uses a fixed loopback
 destination, no redirects or environment proxies, one request per adapter call, no transport
@@ -1304,36 +1361,35 @@ deterministic scan or prevent report generation. No new Python dependencies are 
 Connection establishment failures (including connection timeouts) use `connection_failed`;
 interrupted reads/writes and other request failures use `transport_failed`, without inferring
 an OS or resource-exhaustion cause. Inference timeouts retain the separate `timeout` code.
-Post-response validation covers JSON parsing, strict typed schema validation, exact supplied
-references (including eligible controls and distinct capability pairs), canonical execution-fact
-validation, narrow prose assertion/factual-consistency checks, and summary completion. Internal
-errors use static stage/codes; `unsupported_security_assurance`, `false_absence_claim`,
-`unsupported_outcome_inference`, `unsupported_control_claim`, `unsupported_review_conclusion`, and
-`incomplete_security_summary` use the existing `facts` stage. Result error codes distinguish
-failures without retaining model content or Pydantic input dumps; default console wording remains
-content-free. The CLI shows initial generation and regeneration progress without alarming errors;
-verbose mode may show safe codes. After five rejected attempts it states that no valid
-interpretation was produced and deterministic scanning completed normally. Invalid output remains
-non-fatal, without prose rewriting/repair or any target retry/request.
+Post-response hard validation covers JSON parsing, strict typed schema, exact supplied
+references and operation coverage; normalized errors expose no model text or Pydantic input dumps.
+After acceptance, advisory quality checks assess narrow prose assertions, execution consistency
+and completion. Invalid hard output remains non-fatal to scanning; after ten rejected attempts
+no interpretation is retained. Provider failures stop immediately. Quality concerns never enter
+that rejection path or trigger an additional model request.
 
 For optional real-model acceptance, run `uv run python scripts/check_ollama.py` with an already
 running local Ollama and installed `qwen3:8b`. The script uses a synthetic fully mocked SAFE scan,
-makes one to five real local inferences per invocation and checks the structured/typed output,
-supplied references, canonical execution facts, narrow assurance/absence/causal-control guards,
-and summary completion contract. It verifies the deterministic scan/Evidence remain unchanged and
+makes one to ten real local inferences per invocation and checks the structured/typed output,
+supplied references and exact operation coverage, and records advisory prose/execution/completion
+quality flags separately from hard failures. It verifies the deterministic scan/Evidence remain unchanged and
 displays the accepted typed fixture interpretation and summary length/ceiling for manual inspection.
-Normal acceptance records attempt counts and safe validation codes only. An explicitly invoked
-synthetic-only diagnostic helper can inspect typed rejected prose locally without bypassing
-validation; it is not enabled by the acceptance command or normal scans. Rejected replies are not
-retained in results/reports, and malformed/schema-invalid replies are not dumped.
+Acceptance records attempt counts, safe validation codes and token counters, checks exact
+operation coverage, and displays only accepted typed prose. The fixture validation helper also
+rejects structurally invalid responses without printing them. No rejected model reply is retained or replayed.
 A socket/DNS guard permits only `127.0.0.1:11434`; there are no public target requests, model
 downloads or retained raw model replies. This acceptance check does not generally verify prose
 as factual. It is separate from deterministic pytest/CI.
 
 Reports receive the already-produced result and perform no inference themselves. Optional JSON
-`ai_interpretation` is an additive field under report schema version 1, absent without `--ai`.
-Markdown/HTML and CLI clearly label AI-Assisted Interpretation as model-generated interpretation,
-not evidence or vulnerability confirmation. HTML escapes model text. Deterministic sections,
+`ai_interpretation` remains optional, absent without `--ai`. Its new version-2 generated contract
+and application-owned references are explicitly identified by report schema version 2.
+Compact/verbose CLI and Markdown/HTML place the same centralized static AI_NOTICE before any
+AI-generated prose. It warns of incomplete/inaccurate/unsupported interpretation, requires manual
+validation against deterministic facts/evidence and disclaims Evidence/Findings/vulnerability
+confirmation. Compact output shows a quality-warning count; verbose and human reports list safe
+codes as heuristic flags outside deterministic Findings. Safety Notice remains the final human
+report section. HTML escapes model text. Deterministic sections,
 counts, evidence, recommendations, and Errors and Limitations are unchanged; AI failures stay
 in the separate AI section. Offline tests mock Ollama and capture exact requests to prove secret
 canary exclusion, bounded input, reference validation, execution isolation, and graceful fallback.
@@ -1446,7 +1502,7 @@ remains in its original workflow position. Application/domain modules remain ind
 Default output presents a compact GraphQL overview, distinct security-result counts, existing
 Findings, capped Manual Review, Query outcome aggregates, attempted Mutation statuses and relevant
 limitations. Response bodies and detailed capability sections move to grouped verbose output.
-Default AI shows Security Summary and at most three cross-capability insights; verbose and reports
+Default AI shows Interpretive Summary and at most three global insights; verbose and reports
 retain all validated AI sections. Report paths remain grouped by format. The Phase 32 roadmap
 entry defines the caps, ordering and human-report hierarchy. No scan, evidence, safety, AI-context,
 request or canonical JSON semantics change with verbosity.
@@ -2034,7 +2090,7 @@ Original deliverables:
 
 - Opt-in `--ai`, after the complete deterministic SAFE/ACTIVE workflow and before reports.
 - Fixed local Ollama adapter using installed `qwen3:8b`, originally one structured inference;
-  now at most five attempts after content validation failures, with one accepted interpretation.
+  now at most ten attempts after content validation failures, with one accepted interpretation.
 - Explicit allowlisted context, maximum 20 operations and 12,000 serialized UTF-8 bytes.
 - Strict typed output and supplied-operation reference validation across all sections.
 - Separate AI interpretation/status models, with no Evidence or Findings.
@@ -3500,44 +3556,43 @@ the original byte cap is deliberately not increased while prompt/schema grow. By
 payload bound, not an exact tokenizer measurement. Oversized context is reduced deterministically
 rather than sent; truncated model output is rejected and may trigger bounded regeneration (Section 22).
 
-Output retains the canonical ordinary execution summary and adds security_summary (requested:
-2–4 concise sentences, 180–350 characters total; hard Pydantic/schema ceiling: 800 chars),
-security_fact_reviews (8 entries, interpretation 450/manual follow-up 350 chars),
-control_observations (6 entries/400 chars), cross_capability_insights (4 entries/500 chars,
-2–4 distinct fact references across capabilities), operation_review (8 entries/600 chars), and
-limitations (8 entries/500 chars). Every reference must exist in the final bounded input;
-unknown/missing/duplicate references, extra fields or oversized output reject the whole response.
-Controls must reference supplied explicit controls/satisfied policies. Aggregate security counts
-are local metadata outside model prose; ordinary execution counts require exact canonical text.
-The summary ceiling is a safety bound, not the writing target. As detailed in Section 22,
-post-response validation checks JSON, typed structure, exact references, canonical execution facts,
-narrow prose assertion/factual consistency, and summary completion. Summaries reaching the ceiling,
-lacking terminal punctuation or ending in ellipses are rejected. Across prose sections, narrow
-deterministic guards reject unsupported overall security assurance and absence claims contradicting
-supplied Findings/review/security facts. Zero Findings does not mean zero review/security facts.
-Narrow causal/control and review-conclusion guards also reject generic outcomes being promoted to
-causes, enforcement or security conclusions without supporting typed references (see Section 22).
-Accepted prose and model correlations still require manual validation; these guards are not a
-general NLP fact checker and create no facts, Findings, severity, CWE, CVSS or proven causality.
+AI-014 replaces generated fact restatements with the version-2 referenced interpretation contract
+specified in Section 22. Application code renders execution totals, per-operation metadata and
+scoped control facts. The model generates only an interpretive summary (2-4 sentences,
+180-350-character guidance, 800-character ceiling), exactly one interpretation/follow-up for
+each supplied operation (300/220 characters, at most 12 operations), up to three global insights
+(350/220 characters, each with 2-3 distinct references), and up to two limitations (150-300-character
+guidance, 500-character ceiling). Context reduction and its privacy allowlist are unchanged.
+Exact operation coverage and strict schema/reference requirements remain hard gates. Provider
+output-limit termination remains hard and retryable. Existing prose/execution/completion checks
+are now advisory only: safe deduplicated quality_warnings accompany usable interpretations and
+never trigger regeneration. SUCCESS means structural usability, not factual correctness. AI prose
+may be inaccurate and requires manual validation against authoritative deterministic facts.
+A shared static warning precedes every human AI result. No general NLP proof system is introduced.
+The fixed 2048-token output budget and cumulative ten-attempt hard-failure limit are unchanged.
+See Section 22 for the hard/advisory boundary and quality-warning semantics.
 
 AI receives no credentials, tokens/claim values/signatures, object or neighbor IDs, business
 values, variables/documents, upload paths/names/bytes/hashes, federation SDL, target/WebSocket
 URLs, init/event/frame values, raw responses/errors, schema descriptions or Evidence UUIDs/objects.
 GraphQL names remain untrusted data. The local-only Ollama adapter uses
 stream=false, think=false, temperature=0, no transport retries, per-request finite timeout and no tools.
-The application allows at most five attempts only after model-content validation failure, with
+The application allows at most ten attempts only after hard structural validation failure, with
 safe category corrections and one accepted interpretation maximum (Section 22). Invalid
 projection, unavailable provider or invalid output is non-fatal to scanning and reporting.
-Invalid prose is not rewritten, repaired, replayed or retained in results. The local
+Hard-rejected output is not rewritten, repaired, replayed or retained in results.
+Structurally accepted prose is retained unchanged even when advisory flags are present. The local
 `scripts/check_ollama.py` acceptance path described in Section 22 exercises this same contract
 with mocked target requests and bounded loopback regeneration; it downloads no model and retains
 no raw model reply. No generic redaction is introduced.
 
 Shared `ai/sections.py` supplies only the existing AI section in console and human reports:
-validated execution facts, Security Summary, Security Fact Reviews, Security Controls Observed,
-Cross-Capability Analysis, Operation Review and Limitations. JSON persists validated interpretation
+application-owned execution facts and scoped controls, Interpretive Summary, Operation Analysis,
+Cross-Operation Review Themes and Limitations. JSON persists validated interpretation
 and safe context metadata under optional `ai_interpretation`; raw AI input/result graphs are not
-persisted there. Report schema version remains 1. Safety Notice stays final exactly once.
+persisted there. Report schema version is 2; only the bounded allowlisted reference projection
+and safe usage metadata/quality-warning codes accompany the interpretation. The additive warning
+field keeps report/AI version 2 unchanged. Safety Notice stays final exactly once.
 
 Offline `tests/fixtures/whole_scan_ai.py` composes real project-owned results with fake canaries;
 `tests/unit/test_whole_scan_ai.py` captures the exact mocked Ollama request and exercises all

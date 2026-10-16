@@ -11,7 +11,6 @@ from rich.console import Console
 
 from gqlsleuth.ai.context import build_ai_context
 from gqlsleuth.ai.models import AIAnalysisStatus, AIInterpretation, AIInterpretationResult
-from gqlsleuth.ai.prompt import execution_summary
 from gqlsleuth.application.active_execution import (
     execute_selected_mutations,
     prepare_active_mutations,
@@ -63,18 +62,7 @@ def main():
         whole, subscription_security=replace(subs, attempts=(attempt,), findings=())
     )
     context = build_ai_context(whole)
-    answer = AIInterpretation.model_validate(
-        {
-            **security_answer_fields(context),
-            "scan_summary": {
-                "text": execution_summary(context),
-                "operations": [],
-                "security_facts": [],
-            },
-            "operation_review": [],
-            "limitations": [],
-        }
-    )
+    answer = AIInterpretation.model_validate(security_answer_fields(context))
     ai = AIInterpretationResult(
         AIAnalysisStatus.SUCCESS, "qwen3:8b", datetime.now(UTC), 0, context.metadata, answer
     )

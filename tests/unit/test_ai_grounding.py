@@ -6,11 +6,11 @@ from copy import deepcopy
 import httpx
 import pytest
 
-from fixtures.ai_response import security_answer_fields
+from fixtures.ai_response import reference_items, security_answer_fields, set_operations
 from fixtures.whole_scan_ai import SDL, assemble
 from gqlsleuth.ai.context import build_ai_context
-from gqlsleuth.ai.models import AIAnalysisStatus, AISecurityFact, AIValidationError
-from gqlsleuth.ai.prompt import execution_summary, validate_interpretation
+from gqlsleuth.ai.models import AIAnalysisStatus, AISecurityFact
+from gqlsleuth.ai.prompt import collect_interpretation_quality_warnings, validate_interpretation
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.safe_execution import execute_generated_queries
 from gqlsleuth.domain.models import ScanMode
@@ -38,30 +38,45 @@ def completed(phase_ten_scan):
 
 
 def answer(context):
-    return {
-        **security_answer_fields(context),
-        "scan_summary": {"text": execution_summary(context), "operations": []},
-        "operation_review": [],
-        "limitations": [],
-    }
+    return security_answer_fields(context)
 
 
 @pytest.mark.parametrize(
     "name,text,code",
     [
-        ("profile", "GRAPHQL_ERROR indicates authorization failure.", "unsupported_control_claim"),
-        ("account", "HTTP_ERROR proves authentication enforcement.", "unsupported_control_claim"),
-        ("account", "HTTP failure confirms rate limiting.", "unsupported_control_claim"),
-        ("account", "The rejection demonstrates depth protection.", "unsupported_control_claim"),
-        ("account", "The error suggests input validation is working.", "unsupported_control_claim"),
+        (
+            "profile",
+            "GRAPHQL_ERROR indicates authorization failure.",
+            "unsupported_outcome_inference",
+        ),
+        (
+            "account",
+            "HTTP_ERROR proves authentication enforcement.",
+            "unsupported_outcome_inference",
+        ),
+        ("account", "HTTP failure confirms rate limiting.", "unsupported_outcome_inference"),
+        (
+            "account",
+            "The rejection demonstrates depth protection.",
+            "unsupported_outcome_inference",
+        ),
+        (
+            "account",
+            "The error suggests input validation is working.",
+            "unsupported_outcome_inference",
+        ),
         (
             "items",
             "Its success may suggest that authentication controls are in place, "
             "though further review is needed.",
-            "unsupported_control_claim",
+            "unsupported_outcome_inference",
         ),
-        ("profile", "INDETERMINATE proves abuse prevention.", "unsupported_control_claim"),
-        ("profile", "NETWORK_FAILURE was caused by authorization.", "unsupported_control_claim"),
+        ("profile", "INDETERMINATE proves abuse prevention.", "unsupported_outcome_inference"),
+        (
+            "profile",
+            "NETWORK_FAILURE was caused by authorization.",
+            "unsupported_outcome_inference",
+        ),
         (
             "profile",
             "The query returned a GraphQL error, indicating potential issues with query "
@@ -100,11 +115,11 @@ def test_ordinary_outcome_cannot_establish_cause_control_or_risk(completed, name
     assert context.counts["query_graphql_error"] == context.counts["query_http_error"] == 1
     payload = answer(context)
     operation = next(o for o in context.operations if o.name == name)
-    payload["operation_review"] = [{"operation": operation.operation, "explanation": text}]
-    with pytest.raises(AIValidationError) as caught:
-        validate_interpretation(json.dumps(payload), context)
-    assert (caught.value.stage, caught.value.code) == ("facts", code)
-    assert text not in str(caught.value)
+    set_operations(payload, [{"operation": operation.operation, "interpretation": text}])
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert code in warnings
+    assert text not in str(warnings)
 
 
 @pytest.mark.parametrize(
@@ -119,15 +134,13 @@ def test_schema_review_is_not_a_runtime_conclusion(completed, text):
     context = build_ai_context(completed)
     fact = next(f for f in context.security_facts if f.candidate_type == "list_bounding_review")
     payload = answer(context)
-    payload["security_fact_reviews"] = [
-        {
-            "security_fact_ref": fact.security_fact_ref,
-            "interpretation": text,
-            "manual_follow_up": "Review server-side limits manually.",
-        }
-    ]
-    with pytest.raises(AIValidationError, match="unsupported_review_conclusion"):
-        validate_interpretation(json.dumps(payload), context)
+    payload["summary_interpretation"] = {
+        "references": reference_items([], [fact.security_fact_ref]),
+        "text": text,
+    }
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_review_conclusion" in warnings
 
 
 @pytest.mark.parametrize(
@@ -145,16 +158,62 @@ def test_schema_review_is_not_a_runtime_conclusion(completed, text):
         "The supplied schema lacks list bounding; runtime controls may still exist.",
         "Successful execution does not suggest no immediate security concerns.",
         "The query was successful, indicating no immediate issues with query execution.",
+        "Based on the provided facts, manual review is required.",
+        "The provided facts do not establish input validation enforcement.",
+        "Manual review is needed to determine whether input validation is provided.",
+        "The provider supplies input validation information for manual review.",
+        "Providing input validation context does not establish enforcement.",
+        "Input validation information provided for manual review remains unverified.",
+        "The supplied input validation information provides context for manual review.",
+        "The scope was limited to the provided operations and security facts, with no coverage "
+        "for most capabilities such as authorization policy, sensitive input validation, "
+        "and others.",
     ],
 )
 def test_calibrated_manual_review_and_negated_inferences_remain_valid(completed, text):
     context = build_ai_context(completed)
     payload = answer(context)
-    payload["operation_review"] = [
-        {"operation": context.operations[0].operation, "explanation": text}
-    ]
+    # Positive SUCCESS prose must refer to the successful operation, not this fixture's
+    # first (GRAPHQL_ERROR) operation. The causal-language contract is unchanged.
+    operation = (
+        next(o for o in context.operations if o.name == "items")
+        if text.startswith("The query was successful")
+        else context.operations[0]
+    )
+    set_operations(payload, [{"operation": operation.operation, "interpretation": text}])
     result = validate_interpretation(json.dumps(payload), context)
-    assert result.operation_review[0].explanation == text
+    assert result.operation_interpretations[0].interpretation == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Protection is provided.",
+        "Authentication is enforced.",
+        "Authorization is enforced.",
+        "Input validation prevents malicious values.",
+        "Rate limiting protects the operation.",
+        "Rate limiting protection is present.",
+        "Access controls prevent unauthorized use.",
+        "Depth protection blocks deep requests.",
+        "Abuse controls are effective.",
+        "Security controls mitigate abuse.",
+        "The supplied facts prove input validation enforcement.",
+        "The supplied facts proved input validation enforcement.",
+        "Input validation enforcement is proven by these facts.",
+        "Manual review is needed to determine whether input validation is provided, "
+        "but protection is provided.",
+    ],
+)
+def test_asserted_control_effect_or_state_requires_scoped_evidence(completed, text):
+    context = build_ai_context(completed)
+    payload = answer(context)
+    set_operations(
+        payload, [{"operation": context.operations[0].operation, "interpretation": text}]
+    )
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_control_claim" in warnings
 
 
 @pytest.mark.parametrize(
@@ -171,11 +230,12 @@ def test_calibrated_manual_review_and_negated_inferences_remain_valid(completed,
 def test_conditional_review_does_not_exempt_an_unsupported_assertion(completed, text):
     context = build_ai_context(completed)
     payload = answer(context)
-    payload["operation_review"] = [
-        {"operation": context.operations[0].operation, "explanation": text}
-    ]
-    with pytest.raises(AIValidationError, match="unsupported_control_claim"):
-        validate_interpretation(json.dumps(payload), context)
+    set_operations(
+        payload, [{"operation": context.operations[0].operation, "interpretation": text}]
+    )
+    code = "unsupported_outcome_inference" if "success" in text else "unsupported_control_claim"
+    typed = validate_interpretation(json.dumps(payload), context)
+    assert code in collect_interpretation_quality_warnings(typed, context)
 
 
 def test_explicit_control_requires_matching_cited_capability(phase_ten_scan):
@@ -183,25 +243,30 @@ def test_explicit_control_requires_matching_cited_capability(phase_ten_scan):
     depth = next(f for f in context.security_facts if f.capability == "query_depth")
     assert depth.control_observed
     payload = answer(context)
-    payload["control_observations"] = [
-        {
-            "security_fact_ref": depth.security_fact_ref,
-            "text": "The supplied control indicates depth protection for this bounded probe only.",
-        }
-    ]
-    assert validate_interpretation(json.dumps(payload), context).control_observations
-    payload["control_observations"][0]["text"] = "The rejection proves authorization enforcement."
-    with pytest.raises(AIValidationError, match="unsupported_control_claim"):
-        validate_interpretation(json.dumps(payload), context)
-    payload["control_observations"] = []
-    payload["operation_review"] = [
-        {
-            "operation": context.operations[0].operation,
-            "explanation": "The error confirms depth protection.",
-        }
-    ]
-    with pytest.raises(AIValidationError, match="unsupported_control_claim"):
-        validate_interpretation(json.dumps(payload), context)
+    payload["summary_interpretation"] = {
+        "references": reference_items([], [depth.security_fact_ref]),
+        "text": "The supplied control indicates depth protection for this bounded probe only.",
+    }
+    assert validate_interpretation(json.dumps(payload), context).summary_interpretation
+    payload["summary_interpretation"]["text"] = "Depth protection blocks the supplied probe only."
+    assert validate_interpretation(json.dumps(payload), context).summary_interpretation
+    payload["summary_interpretation"]["text"] = "The rejection proves authorization enforcement."
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_outcome_inference" in warnings
+    payload["summary_interpretation"] = security_answer_fields(context)["summary_interpretation"]
+    set_operations(
+        payload,
+        [
+            {
+                "operation": context.operations[0].operation,
+                "interpretation": "The error confirms depth protection.",
+            }
+        ],
+    )
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_outcome_inference" in warnings
 
 
 def test_satisfied_typed_policy_supports_scoped_authorization_interpretation(completed):
@@ -216,47 +281,49 @@ def test_satisfied_typed_policy_supports_scoped_authorization_interpretation(com
     )
     context = context.model_copy(update={"security_facts": (*context.security_facts, fact)})
     payload = answer(context)
-    payload["control_observations"] = [
-        {
-            "security_fact_ref": fact.security_fact_ref,
-            "text": "The satisfied DENY policy indicates authorization enforcement "
-            "for this probe only.",
-        }
-    ]
-    assert validate_interpretation(json.dumps(payload), context).control_observations
+    payload["summary_interpretation"] = {
+        "references": reference_items([], [fact.security_fact_ref]),
+        "text": "The satisfied DENY policy indicates authorization enforcement "
+        "for this probe only.",
+    }
+    assert validate_interpretation(json.dumps(payload), context).summary_interpretation
 
 
-@pytest.mark.parametrize("section", ["security_summary", "security_fact_reviews", "limitations"])
+@pytest.mark.parametrize("section", ["summary_interpretation", "review_insights", "limitations"])
 def test_grounding_covers_all_prose_and_follow_up(completed, section):
     context = build_ai_context(completed)
     payload = answer(context)
     text = "The error proves authorization enforcement."
-    if section == "security_summary":
+    if section == "summary_interpretation":
         payload[section]["text"] = text
-    elif section == "security_fact_reviews":
+    elif section == "review_insights":
         payload[section] = [
             {
-                "security_fact_ref": context.security_facts[0].security_fact_ref,
+                "references": reference_items([o.operation for o in context.operations[:2]], []),
                 "interpretation": "Review manually.",
                 "manual_follow_up": text,
             }
         ]
     else:
-        payload[section] = [{"text": text, "operations": []}]
-    with pytest.raises(AIValidationError, match="unsupported_control_claim"):
-        validate_interpretation(json.dumps(payload), context)
+        payload[section] = [{"text": text, "references": reference_items([], [])}]
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_outcome_inference" in warnings
 
 
 def test_grounding_failure_is_nonfatal_after_bounded_regeneration(completed):
     before = deepcopy(completed)
     context = build_ai_context(completed)
     payload = answer(context)
-    payload["operation_review"] = [
-        {
-            "operation": context.operations[0].operation,
-            "explanation": "GRAPHQL_ERROR proves authorization enforcement.",
-        }
-    ]
+    set_operations(
+        payload,
+        [
+            {
+                "operation": context.operations[0].operation,
+                "interpretation": "GRAPHQL_ERROR proves authorization enforcement.",
+            }
+        ],
+    )
     requests = []
 
     def respond(request):
@@ -273,6 +340,86 @@ def test_grounding_failure_is_nonfatal_after_bounded_regeneration(completed):
     result = interpret_completed_scan(
         completed, client=OllamaClient(transport=httpx.MockTransport(respond))
     )
-    assert result.status is AIAnalysisStatus.INVALID_RESPONSE
-    assert result.error_code == "unsupported_control_claim" and result.interpretation is None
-    assert len(requests) == 5 and completed == before and completed.evidence == before.evidence
+    assert result.status is AIAnalysisStatus.SUCCESS
+    assert "unsupported_outcome_inference" in result.quality_warnings
+    assert result.validation_failures == () and result.interpretation is not None
+    assert len(requests) == 1 and completed == before and completed.evidence == before.evidence
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "GraphQL error occurred. This indicates authentication enforcement.",
+        "The request failed. This may indicate authorization controls blocked it.",
+        "The operation returned an error. This suggests input validation rejected the request.",
+        "The request succeeded. This indicates access controls are functioning.",
+        "The failure was likely caused by authorization controls.",
+        "The successful response indicates access control is functioning.",
+        "The GraphQL error occurred because rate limiting blocked the operation.",
+        "The query returned a GraphQL error. This may indicate an issue with query structure "
+        "or data access.",
+        "The query returned a GraphQL error, indicating an issue with query structure "
+        "or data access.",
+        "The request was skipped. This confirms authentication enforcement.",
+    ],
+)
+def test_adjacent_and_same_sentence_outcome_attribution_rejected(completed, text):
+    context = build_ai_context(completed)
+    payload = answer(context)
+    set_operations(
+        payload, [{"operation": context.operations[0].operation, "interpretation": text}]
+    )
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_outcome_inference" in warnings
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The GraphQL error does not establish whether authentication was involved.",
+        "Manual review is needed to determine whether authorization affected the outcome.",
+        "Manual review is needed to determine whether authentication affected the observed error.",
+        "The cause of the GraphQL error cannot be determined from the supplied facts.",
+        "The cause cannot be determined from the supplied facts.",
+        "GraphQL error occurred. This does not indicate authentication enforcement.",
+        "The provided facts describe an error. Manual review of input validation is required.",
+    ],
+)
+def test_calibrated_unknown_causes_remain_valid(completed, text):
+    context = build_ai_context(completed)
+    payload = answer(context)
+    set_operations(
+        payload, [{"operation": context.operations[0].operation, "interpretation": text}]
+    )
+    assert (
+        validate_interpretation(json.dumps(payload), context)
+        .operation_interpretations[0]
+        .interpretation
+        == text
+    )
+
+
+def test_adjacent_cause_requires_matching_explicit_reference(completed):
+    context = build_ai_context(completed)
+    fact = AISecurityFact(
+        security_fact_ref="SF2",
+        capability="authentication",
+        category="security_observation",
+        control_observed=True,
+    )
+    context = context.model_copy(update={"security_facts": (*context.security_facts, fact)})
+    payload = answer(context)
+    payload["summary_interpretation"] = {
+        "references": reference_items([], [fact.security_fact_ref]),
+        "text": "The request failed. This indicates authentication enforcement "
+        "for this probe only.",
+    }
+    assert validate_interpretation(json.dumps(payload), context).summary_interpretation
+    unrelated = fact.model_copy(update={"capability": context.security_facts[0].capability})
+    context = context.model_copy(
+        update={"security_facts": (*context.security_facts[:-1], unrelated)}
+    )
+    typed = validate_interpretation(json.dumps(payload), context)
+    warnings = collect_interpretation_quality_warnings(typed, context)
+    assert "unsupported_outcome_inference" in warnings

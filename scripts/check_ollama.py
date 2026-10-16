@@ -7,18 +7,19 @@ Requires an already running Ollama and installed model. No model downloads or pu
 import json
 import sys
 from copy import deepcopy
+from dataclasses import asdict
 from unittest.mock import patch
 
 import httpx
 from graphql import build_schema, introspection_from_schema
 
 from gqlsleuth.ai.models import (
+    AI_NOTICE,
     MAX_AI_ATTEMPTS,
     MAX_AI_SUMMARY_CHARACTERS,
     AIAnalysisStatus,
     AIContext,
     AIInterpretation,
-    AIValidationError,
 )
 from gqlsleuth.ai.prompt import validate_interpretation
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
@@ -86,18 +87,8 @@ def local_only(event: str, args: tuple[object, ...]) -> None:
 
 
 def validate_fixture_reply(text: str, context: AIContext) -> AIInterpretation:
-    """Expose only typed synthetic-fixture prose for manual triage; never bypass validation."""
-    try:
-        return validate_interpretation(text, context)
-    except AIValidationError as error:
-        if error.stage not in {"json", "schema"}:
-            # The real validator already passed the strict typed contract. This helper runs
-            # only on the fixed synthetic fixture, never on target scans or in the normal CLI.
-            typed = AIInterpretation.model_validate_json(text, strict=True)
-            print("Rejected fixture prose (NOT an accepted interpretation):")
-            print(json.dumps(typed.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            print(f"Rejected summary length: {len(typed.security_summary.text)}")
-        raise
+    """Validate the complete contract without printing or retaining rejected prose."""
+    return validate_interpretation(text, context)
 
 
 def main() -> None:
@@ -109,21 +100,32 @@ def main() -> None:
     result = interpret_completed_scan(scan, client=OllamaClient(transport=transport))
     assert scan == before and scan.evidence == before.evidence
     print(
-        "Deterministic scan/Evidence unchanged; target requests mocked; five-attempt guard active."
+        "Deterministic scan/Evidence unchanged; target requests mocked; ten-attempt guard active."
     )
     print(f"Ollama acceptance: {result.status.value}; inference requests: {transport.calls}")
     print(f"Validation failures: {result.validation_failures}")
+    print(f"Advisory quality warnings: {result.quality_warnings}")
+    print(json.dumps([asdict(attempt) for attempt in result.attempts], indent=2))
     assert transport.calls == result.attempt_count
     if result.status is not AIAnalysisStatus.SUCCESS:
         print(f"Controlled diagnostic: {result.error_code}")
         raise SystemExit(1)
     assert 1 <= transport.calls <= MAX_AI_ATTEMPTS and result.interpretation is not None
+    supplied = {operation.operation for operation in result.references.operations}
+    returned = [item.operation for item in result.interpretation.operation_interpretations]
+    assert set(returned) == supplied and len(returned) == len(supplied)
+    print(
+        f"Operation coverage: {len(returned)}/{len(supplied)}; omitted from context: "
+        f"{result.context_metadata.operations_omitted}"
+    )
     print("Typed interpretation and supplied references validated; no raw output retained.")
-    summary = result.interpretation.security_summary.text
+    summary = result.interpretation.summary_interpretation.text
     print(
         f"Summary: {len(summary)} characters; structural ceiling: {MAX_AI_SUMMARY_CHARACTERS}; "
-        "completion/assurance/absence/grounding checks passed; deterministic scan unchanged."
+        "hard structural checks passed; prose quality flags are advisory; "
+        "deterministic scan unchanged."
     )
+    print(AI_NOTICE)
     # This explicitly invoked fixture uses no target data; permit complete prose inspection.
     print(json.dumps(result.interpretation.model_dump(mode="json"), indent=2, ensure_ascii=True))
 

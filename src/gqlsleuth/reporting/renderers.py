@@ -114,9 +114,10 @@ def _brief(value: str) -> str:
     return value if len(value) <= 600 else value[:600] + "… (see JSON for full text)"
 
 
-def _markdown_text(value: str) -> str:
+def _markdown_text(value: str, truncate: bool = True) -> str:
     # Text is not Markdown authored by the target. Escape formatting and inline HTML.
-    text = html.escape(_brief(value), quote=False).replace("\n", " ").replace("\r", " ")
+    text = html.escape(_brief(value) if truncate else value, quote=False)
+    text = text.replace("\n", " ").replace("\r", " ")
     return re.sub(r"([\\`*_{}\[\]()#+.!|>~-])", r"\\\1", text)
 
 
