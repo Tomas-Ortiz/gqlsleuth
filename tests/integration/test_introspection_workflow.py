@@ -31,6 +31,7 @@ from gqlsleuth.domain.models import (
 from gqlsleuth.graphql.introspection import (
     FULL_INTROSPECTION_QUERY,
     MINIMAL_INTROSPECTION_QUERY,
+    REDUCED_INTROSPECTION_QUERY,
     IntrospectionStatus,
     SchemaRetrievalStatus,
 )
@@ -163,12 +164,16 @@ def test_full_retrieval_failure_preserves_the_enabled_minimal_probe() -> None:
 @pytest.mark.parametrize("message", ["Query depth limit exceeded.", "Resolver execution failed."])
 def test_enabled_probe_and_rejected_schema_remain_distinct_through_reports(message):
     requests = []
+    expected_queries = [MINIMAL_INTROSPECTION_QUERY, FULL_INTROSPECTION_QUERY]
+    if message == "Query depth limit exceeded.":
+        expected_queries.append(REDUCED_INTROSPECTION_QUERY)
 
     def handler(request):
         requests.append(request)
         if len(requests) == 1:
             return _httpx_schema_response(request, {"queryType": {"name": "Query"}})
-        assert len(requests) == 2, "No downstream operation may execute without a schema"
+        assert len(requests) <= len(expected_queries), "No operation may execute without a schema"
+        assert json.loads(request.content)["query"] == expected_queries[len(requests) - 1]
         return httpx.Response(200, json={"errors": [{"message": message}]})
 
     with HttpClient(transport=httpx.MockTransport(handler)) as client:
@@ -186,7 +191,7 @@ def test_enabled_probe_and_rejected_schema_remain_distinct_through_reports(messa
             analyze_schema_results(schema_scan, load_bundled_rules())
         )
         safe = execute_generated_queries(generated, client=client)
-    assert len(requests) == 2
+    assert len(requests) == len(expected_queries)
     assert not safe.executions and not generated.queries
     assert not generated.security_review.candidates
     assert safe.evidence == retained_evidence

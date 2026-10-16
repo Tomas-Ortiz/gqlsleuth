@@ -42,6 +42,7 @@ STATUS_STYLES = {
             "DISABLED",
             "AUTHORIZATION_DENIED",
             "POSSIBLE",
+            "PARTIAL",
         ),
         "yellow",
     ),

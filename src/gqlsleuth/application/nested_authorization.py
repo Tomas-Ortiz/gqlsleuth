@@ -179,6 +179,15 @@ def prepare_nested_authorization(result: DifferentialScanResult) -> NestedAuthor
                         path_fields(schema, base.operation_name, names) for schema in schemas
                     )
                     if any(item is None for item in fields):
+                        if any(
+                            item.endpoint == endpoint
+                            and item.schema_retrieval_status.value == "partial"
+                            for scan in schema_scans
+                            for item in scan.schemas
+                        ):
+                            raise SafeExecutionValidationError(
+                                "Partial schema coverage; missing nested fields are unknown."
+                            )
                         # A common root must be structurally compatible even for local visibility.
                         roots = [
                             schema_field(schema, schema.query_root, base.operation_name)
@@ -210,9 +219,9 @@ def prepare_nested_authorization(result: DifferentialScanResult) -> NestedAuthor
                         retained = schema_scans[present_index].introspection.introspections
                         response = next(
                             (
-                                item.full_response
+                                item.selected_schema_response
                                 for item in retained
-                                if item.endpoint == endpoint and item.full_response
+                                if item.endpoint == endpoint and item.selected_schema_response
                             ),
                             None,
                         )
@@ -260,9 +269,9 @@ def prepare_nested_authorization(result: DifferentialScanResult) -> NestedAuthor
                     for retained_schema_scan in schema_scans:
                         response = next(
                             (
-                                item.full_response
+                                item.selected_schema_response
                                 for item in retained_schema_scan.introspection.introspections
-                                if item.endpoint == endpoint and item.full_response
+                                if item.endpoint == endpoint and item.selected_schema_response
                             ),
                             None,
                         )

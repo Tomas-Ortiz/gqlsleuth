@@ -98,6 +98,11 @@ def differential_sections(report: DifferentialReportContext) -> tuple[ReportSect
                                 "Schema retrieval",
                                 (endpoint.schema_retrieval_status or "not_attempted").upper(),
                             ),
+                            *(
+                                (("Retrieval detail", endpoint.schema_retrieval_reason),)
+                                if endpoint.schema_retrieval_reason
+                                else ()
+                            ),
                             (
                                 "Query fields",
                                 str(endpoint.schema_summary.query_field_count)

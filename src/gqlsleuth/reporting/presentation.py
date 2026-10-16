@@ -103,6 +103,14 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             entries=tuple(
                 ReportEntry(
                     item.endpoint,
+                    paragraphs=(
+                        (
+                            "Partial retrieval: these counts describe retrieved content only; "
+                            "schema and operation coverage may be incomplete.",
+                        )
+                        if item.schema_retrieval_status == "partial"
+                        else ()
+                    ),
                     details=tuple(
                         (
                             _human_label(field.name),

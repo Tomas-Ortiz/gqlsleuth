@@ -142,9 +142,9 @@ def prepare_abuse_controls(
                 if item.endpoint == artifact.endpoint and item.success and item.schema is not None
             ]
             raw = [
-                item.full_response
+                item.selected_schema_response
                 for item in scan.introspection.introspections
-                if item.endpoint == artifact.endpoint and item.full_response is not None
+                if item.endpoint == artifact.endpoint and item.selected_schema_response is not None
             ]
             if len(schemas) != 1 or len(raw) != 1 or response.request_url != artifact.endpoint:
                 continue

@@ -279,10 +279,26 @@ def _compare_pair(a: ContextScanResult, b: ContextScanResult) -> ContextPairRevi
                 )
             )
             continue
+        partial = any(
+            item.endpoint == endpoint and item.schema_retrieval_status.value == "partial"
+            for scan in (schemas_a, schemas_b)
+            for item in scan.schemas
+        )
+        if partial:
+            limitations.append(
+                ComparisonLimitation(
+                    endpoint,
+                    "schema",
+                    "Partial schema coverage in at least one context; missing operations are "
+                    "unknown, not confirmed visibility differences.",
+                )
+            )
         for kind in (OperationKind.QUERY, OperationKind.MUTATION):
             names_a, names_b = _root_names(sa, kind), _root_names(sb, kind)
             for name in dict.fromkeys((*names_a, *names_b)):
                 if (name in names_a) != (name in names_b):
+                    if partial:
+                        continue
                     candidates.append(
                         DifferentialReviewCandidate(
                             DifferenceKind.OPERATION_VISIBILITY_DIFFERENCE,

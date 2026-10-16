@@ -1,5 +1,6 @@
 """Static introspection queries and deterministic response classification."""
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import cast
@@ -105,6 +106,130 @@ INTROSPECTION_DISABLED_MARKERS = (
     "cannot query field '__schema'",
 )
 
+# Three ofType relationships cover [String!]! without the full query's seven.
+# Descriptions are omitted; structural, default and deprecation facts are retained.
+REDUCED_INTROSPECTION_QUERY = """query {
+  __schema {
+    queryType { name }
+    mutationType { name }
+    subscriptionType { name }
+    types {
+      kind
+      name
+      fields(includeDeprecated: true) {
+        name
+        args { ...ReducedInput }
+        type { ...ReducedTypeRef }
+        isDeprecated
+        deprecationReason
+      }
+      interfaces { kind name }
+      possibleTypes { kind name }
+      inputFields { ...ReducedInput }
+      enumValues(includeDeprecated: true) { name isDeprecated deprecationReason }
+    }
+    directives { name locations args { ...ReducedInput } }
+  }
+}
+fragment ReducedInput on __InputValue {
+  name
+  type { ...ReducedTypeRef }
+  defaultValue
+}
+fragment ReducedTypeRef on __Type {
+  kind name
+  ofType {
+    kind name
+    ofType {
+      kind name
+      ofType { kind name }
+    }
+  }
+}"""
+
+
+class IntrospectionFallbackReason(StrEnum):
+    """Explicit request restriction, never an inference from a generic failure."""
+
+    DEPTH_LIMIT = "depth_limit"
+    COMPLEXITY_LIMIT = "complexity_limit"
+    COST_LIMIT = "cost_limit"
+
+
+_RESTRICTION_CODES = {
+    "QUERY_TOO_DEEP": IntrospectionFallbackReason.DEPTH_LIMIT,
+    "MAX_DEPTH_EXCEEDED": IntrospectionFallbackReason.DEPTH_LIMIT,
+    "QUERY_TOO_COMPLEX": IntrospectionFallbackReason.COMPLEXITY_LIMIT,
+    "COMPLEXITY_LIMIT_EXCEEDED": IntrospectionFallbackReason.COMPLEXITY_LIMIT,
+    "COST_LIMIT_EXCEEDED": IntrospectionFallbackReason.COST_LIMIT,
+}
+_DENIAL = re.compile(
+    r"\b(?:authentication (?:is )?required|authorization (?:was )?denied|"
+    r"unauthenticated|unauthorized|"
+    r"forbidden|access denied|permission denied)\b|cannot query field [\"']?__schema\b"
+)
+_RESTRICTIONS = tuple(
+    (
+        reason,
+        re.compile(
+            rf"\b(?:query {word}(?: limit)? (?:is )?exceeded|"
+            rf"(?:maximum|max) {'(?:query )?' if word == 'depth' else 'query '}{word}\b|"
+            rf"query (?:is )?too {adjective}|{word} limit exceeded)\b"
+        ),
+    )
+    for word, adjective, reason in (
+        ("depth", "deep", IntrospectionFallbackReason.DEPTH_LIMIT),
+        ("complexity", "complex", IntrospectionFallbackReason.COMPLEXITY_LIMIT),
+        ("cost", "costly", IntrospectionFallbackReason.COST_LIMIT),
+    )
+)
+
+
+def reduced_introspection_fallback_reason(
+    status_code: int, body: bytes
+) -> IntrospectionFallbackReason | None:
+    """Recognize explicit GraphQL request limits; denials/outages take precedence."""
+    if not (200 <= status_code < 300 or status_code in {400, 422}):
+        return None
+    document = response_json_object(body)
+    if document is None or _has_schema_object(document):
+        return None
+    errors = document.get("errors")
+    if not isinstance(errors, list):
+        return None
+    reasons = []
+    for error in errors:
+        if not isinstance(error, dict) or not isinstance(error.get("message"), str):
+            return None
+        message = " ".join(error["message"].casefold().split())
+        extensions = error.get("extensions")
+        code = extensions.get("code") if isinstance(extensions, dict) else None
+        code = code.upper() if isinstance(code, str) else ""
+        if (
+            _DENIAL.search(message)
+            or _DENIAL.search(message.replace("_", " "))
+            or re.search(r"\bintrospection\b.*\b(?:disabled|not allowed|forbidden)\b", message)
+            or any(marker in message for marker in INTROSPECTION_DISABLED_MARKERS)
+            or code
+            in {
+                "AUTHENTICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "UNAUTHENTICATED",
+                "UNAUTHORIZED",
+                "FORBIDDEN",
+                "INTROSPECTION_DISABLED",
+            }
+        ):
+            return None
+        reason = _RESTRICTION_CODES.get(code) or next(
+            (reason for reason, pattern in _RESTRICTIONS if pattern.search(message)), None
+        )
+        # Mixed unrelated errors do not establish a narrowly eligible rejection.
+        if reason is None:
+            return None
+        reasons.append(reason)
+    return reasons[0] if reasons else None
+
 
 class IntrospectionStatus(StrEnum):
     """Deterministic outcome of an introspection request."""
@@ -119,10 +244,11 @@ class IntrospectionStatus(StrEnum):
 
 
 class SchemaRetrievalStatus(StrEnum):
-    """Full request outcome, separate from demonstrated introspection support."""
+    """Schema source outcome, separate from demonstrated introspection support."""
 
     NOT_ATTEMPTED = "not_attempted"
     RETRIEVED = "retrieved"
+    PARTIAL = "partial"
     BLOCKED = "blocked"
     FAILED = "failed"
 

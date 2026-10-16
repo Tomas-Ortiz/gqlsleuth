@@ -182,6 +182,11 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
         limitations.append("Introspection was unavailable for at least one GraphQL endpoint.")
     if any(e.schema_retrieval_status in {"blocked", "failed"} for e in meaningful):
         limitations.append("Full schema retrieval was blocked or failed for at least one endpoint.")
+    if any(e.schema_retrieval_status == "partial" for e in meaningful):
+        limitations.append(
+            "Reduced schema retrieval was used for at least one endpoint; "
+            "operation and schema coverage may be incomplete."
+        )
     if not schemas:
         limitations.append("No parsed schema was available; operation coverage is limited.")
     transport_messages = {
@@ -201,7 +206,7 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
     }
     for issue in report.errors_and_limitations:
         # Group normalized codes only. Raw target error prose stays in technical details.
-        if issue.code in {"skipped_safety", "not_selected", "blocked_safety"}:
+        if issue.code in {"skipped_safety", "not_selected", "blocked_safety", "partial"}:
             continue
         if issue.code in transport_messages:
             limitations.append(transport_messages[issue.code])

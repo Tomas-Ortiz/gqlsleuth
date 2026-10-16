@@ -1,6 +1,6 @@
 """Coordinate discovery, GraphQL detection, and raw introspection retrieval."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from gqlsleuth.application.graphql_detection import (
     GraphQLDetectionResult,
@@ -12,10 +12,13 @@ from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType, Sca
 from gqlsleuth.graphql.introspection import (
     FULL_INTROSPECTION_QUERY,
     MINIMAL_INTROSPECTION_QUERY,
+    REDUCED_INTROSPECTION_QUERY,
+    IntrospectionFallbackReason,
     IntrospectionResponseClassification,
     IntrospectionStatus,
     SchemaRetrievalStatus,
     classify_introspection_response,
+    reduced_introspection_fallback_reason,
 )
 from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings, HttpRequest, HttpResponse
 
@@ -24,7 +27,7 @@ INTROSPECTION_SOURCE = "gqlsleuth.application.introspection"
 
 @dataclass(frozen=True)
 class EndpointIntrospectionResult:
-    """Minimal and full introspection outcomes for one GraphQL endpoint."""
+    """Retained minimal/full outcomes and optional reduced-source provenance."""
 
     endpoint: str
     status: IntrospectionStatus
@@ -36,6 +39,11 @@ class EndpointIntrospectionResult:
     full_error_type: str | None
     full_error_message: str | None
     reason: str
+    reduced_retrieval_attempted: bool = False
+    reduced_response: HttpResponse | None = None
+    reduced_error_type: str | None = None
+    reduced_error_message: str | None = None
+    fallback_reason: IntrospectionFallbackReason | None = None
 
     @property
     def minimal_result(self) -> IntrospectionResponseClassification:
@@ -64,12 +72,45 @@ class EndpointIntrospectionResult:
         )
 
     @property
+    def reduced_result(self) -> IntrospectionResponseClassification | None:
+        """Expose the one fallback outcome without changing the legacy full-stage status."""
+        if not self.reduced_retrieval_attempted:
+            return None
+        if self.reduced_response is not None:
+            return classify_introspection_response(
+                self.reduced_response.status_code, self.reduced_response.body
+            )
+        return IntrospectionResponseClassification(
+            IntrospectionStatus.NETWORK_FAILURE, self.reduced_error_message or self.reason
+        )
+
+    @property
+    def selected_schema_response(self) -> HttpResponse | None:
+        """Select retained schema bytes; parsing remains a separate local stage."""
+        if self.schema_retrieval_status is SchemaRetrievalStatus.PARTIAL:
+            return self.reduced_response
+        if self.status is IntrospectionStatus.ENABLED and not self.reduced_retrieval_attempted:
+            return self.full_response
+        return None
+
+    @property
+    def schema_retrieval_reason(self) -> str | None:
+        if self.reduced_retrieval_attempted:
+            return self.reason
+        return self.full_result.reason if self.full_result else None
+
+    @property
     def schema_retrieval_status(self) -> SchemaRetrievalStatus:
         full = self.full_result
         if full is None:
             return SchemaRetrievalStatus.NOT_ATTEMPTED
         if full.status is IntrospectionStatus.ENABLED:
             return SchemaRetrievalStatus.RETRIEVED
+        reduced = self.reduced_result
+        if reduced is not None:
+            if reduced.status is IntrospectionStatus.ENABLED:
+                return SchemaRetrievalStatus.PARTIAL
+            full = reduced
         if full.status in {
             IntrospectionStatus.DISABLED,
             IntrospectionStatus.AUTHENTICATION_REQUIRED,
@@ -192,7 +233,7 @@ def _introspect_endpoint(endpoint: str, client: HttpClient) -> EndpointIntrospec
         if full.status is IntrospectionStatus.ENABLED
         else f"Minimal probe enabled introspection; full retrieval result: {full.reason}"
     )
-    return EndpointIntrospectionResult(
+    result = EndpointIntrospectionResult(
         endpoint=endpoint,
         status=full.status,
         minimal_response=minimal_response,
@@ -203,6 +244,35 @@ def _introspect_endpoint(endpoint: str, client: HttpClient) -> EndpointIntrospec
         full_error_type=None,
         full_error_message=None,
         reason=reason,
+    )
+    fallback = reduced_introspection_fallback_reason(full_response.status_code, full_response.body)
+    if fallback is None:
+        return result
+    prefix = f"Minimal probe enabled introspection; full retrieval rejected by {fallback.value}. "
+    try:
+        reduced_response = _send_query(client, endpoint, REDUCED_INTROSPECTION_QUERY)
+    except HttpError as error:
+        return replace(
+            result,
+            reduced_retrieval_attempted=True,
+            fallback_reason=fallback,
+            reduced_error_type=type(error).__name__,
+            reduced_error_message=str(error),
+            reason=prefix + f"One reduced fallback failed with {type(error).__name__}.",
+        )
+    reduced = classify_introspection_response(reduced_response.status_code, reduced_response.body)
+    return replace(
+        result,
+        reduced_retrieval_attempted=True,
+        fallback_reason=fallback,
+        reduced_response=reduced_response,
+        reason=prefix
+        + (
+            "One reduced introspection fallback succeeded; schema retrieval PARTIAL. "
+            "Operation and schema coverage may be incomplete."
+            if reduced.status is IntrospectionStatus.ENABLED
+            else f"One reduced fallback did not retrieve a schema: {reduced.reason}"
+        ),
     )
 
 
@@ -224,6 +294,17 @@ def _introspection_evidence(
         f"Introspection status: {result.status.value}",
         f"Full retrieval attempted: {'yes' if result.full_retrieval_attempted else 'no'}",
     ]
+    if result.reduced_retrieval_attempted:
+        notes.extend(
+            (
+                f"Minimal introspection: {result.minimal_result.status.value}",
+                f"Full restriction: {result.fallback_reason}",
+                "Reduced fallback attempted: yes",
+                f"Schema retrieval: {result.schema_retrieval_status.value}",
+            )
+        )
+        if result.reduced_error_type:
+            notes.append(f"Reduced retrieval failure: {result.reduced_error_type}")
     if result.minimal_error_type is not None:
         notes.append(f"Minimal probe failure: {result.minimal_error_type}")
     if result.full_error_type is not None:
@@ -233,7 +314,11 @@ def _introspection_evidence(
         evidence_type=EvidenceType.INTROSPECTION_RESULT,
         target=detection.discovery.target,
         endpoint=result.endpoint,
-        summary=f"{result.status.value.upper()} — {result.reason}",
+        summary=(
+            f"{result.schema_retrieval_status.value.upper()} — {result.reason}"
+            if result.schema_retrieval_status is SchemaRetrievalStatus.PARTIAL
+            else f"{result.status.value.upper()} — {result.reason}"
+        ),
         source=INTROSPECTION_SOURCE,
         notes=tuple(notes),
     )

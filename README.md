@@ -121,10 +121,18 @@ read-only Query execution. It never executes Mutations or Subscriptions. A base 
 is also accepted; a direct GraphQL URL is tried before fallback endpoint discovery.
 `--mode safe` explicitly selects the same default.
 
-Introspection support and full schema retrieval are shown separately. An enabled minimal probe
-can coexist with `Schema retrieval: BLOCKED`, for example when a server rejects the full query
-with a depth limit. Details retain the server reason; without a valid schema, operation analysis
-cannot proceed. This observation is not a vulnerability finding.
+Introspection support and schema retrieval are shown separately. The normal full query remains
+the first choice. If introspection is enabled and the full query explicitly exceeds a query
+depth, complexity or cost limit, GQLSleuth sends one static reduced introspection query: at most
+three introspection requests per eligible endpoint. A successful fallback is labeled
+`Schema retrieval: PARTIAL`; analysis continues over retrieved content, with potentially
+incomplete operation/schema coverage. It does not establish that omitted operations are absent.
+Other rejections remain `BLOCKED` or `FAILED`; without a valid parsed schema, operation analysis
+cannot proceed. Retrieval outcomes are not vulnerability findings.
+
+This compatibility fallback does not bypass disabled introspection or authentication/authorization
+denials. There are no retries, iterative type crawling or Clairvoyance/error-oracle requests.
+SAFE execution limits and ACTIVE selection/confirmation controls remain unchanged.
 
 To try the workflow without any external target, run the [local demo](examples/README.md):
 

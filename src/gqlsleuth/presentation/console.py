@@ -246,6 +246,11 @@ def render_pre_active_context(
         ):
             rows.add_row(label, str(count) if count is not None else "Not available")
         console.print(rows)
+        if probe and probe.schema_retrieval_status.value == "partial":
+            console.print(
+                "Partial schema: counts describe retrieved content; coverage may be incomplete.",
+                style="gql.secondary",
+            )
     if not endpoints:
         console.print("No confirmed or probable GraphQL endpoints.", style="gql.secondary")
     if len(summaries) < len(endpoints):

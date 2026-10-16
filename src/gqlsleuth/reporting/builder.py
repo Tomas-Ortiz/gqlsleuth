@@ -104,7 +104,9 @@ def build_report(
         )
         schema = next((item for item in schema_scan.schemas if item.endpoint == url), None)
         analyzed = next((item for item in analysis.endpoints if item.endpoint == url), None)
-        retrieval = introspected.full_result if introspected else None
+        retrieval = (
+            (introspected.reduced_result or introspected.full_result) if introspected else None
+        )
         endpoints.append(
             EndpointReport(
                 endpoint=url,
@@ -123,7 +125,9 @@ def build_report(
                 if introspected
                 else None,
                 schema_retrieval_category=retrieval.status.value if retrieval else None,
-                schema_retrieval_reason=retrieval.reason if retrieval else None,
+                schema_retrieval_reason=introspected.schema_retrieval_reason
+                if introspected
+                else None,
                 schema_summary=schema.summary if schema else None,
                 analyzed_operation_count=len(analyzed.operations)
                 if analyzed and analyzed.success
@@ -340,13 +344,16 @@ def _issues(
                 )
             )
     for item in introspection.introspections:
-        if item.status.value != "enabled":
+        if item.schema_retrieval_status.value == "partial":
+            issues.append(ReportIssue("schema", item.endpoint, None, "partial", item.reason))
+        elif item.status.value != "enabled":
             issues.append(
                 ReportIssue("introspection", item.endpoint, None, item.status.value, item.reason)
             )
         for error_type, message in (
             (item.minimal_error_type, item.minimal_error_message),
             (item.full_error_type, item.full_error_message),
+            (item.reduced_error_type, item.reduced_error_message),
         ):
             if error_type:
                 issues.append(
@@ -474,7 +481,14 @@ def _recommendations(context: ReportContext) -> tuple[str, ...]:
         recommendations.append(
             "Review BLOCKED_SAFETY Mutations manually; do not execute them automatically."
         )
-    if any(item.stage in {"introspection", "schema"} for item in context.errors_and_limitations):
+    if any(item.code == "partial" for item in context.errors_and_limitations):
+        recommendations.append(
+            "Account for incomplete schema and operation coverage when reviewing reduced retrieval."
+        )
+    if any(
+        item.stage in {"introspection", "schema"} and item.code != "partial"
+        for item in context.errors_and_limitations
+    ):
         recommendations.append(
             "Investigate the recorded introspection or schema-parsing failures manually."
         )

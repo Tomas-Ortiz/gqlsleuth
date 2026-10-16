@@ -6,7 +6,7 @@ from gqlsleuth.application.introspection import IntrospectionScanResult, run_int
 from gqlsleuth.domain.exceptions import SchemaParsingError
 from gqlsleuth.domain.models import Evidence, EvidenceType, ScanMode
 from gqlsleuth.domain.schema import ParsedSchema, SchemaSummary
-from gqlsleuth.graphql.introspection import IntrospectionStatus
+from gqlsleuth.graphql.introspection import SchemaRetrievalStatus
 from gqlsleuth.graphql.schema_parser import parse_introspection_response
 from gqlsleuth.infrastructure.http import HttpClientSettings
 
@@ -22,6 +22,7 @@ class EndpointSchemaResult:
     schema: ParsedSchema | None
     error_type: str | None
     error_message: str | None
+    schema_retrieval_status: SchemaRetrievalStatus = SchemaRetrievalStatus.RETRIEVED
 
     @property
     def summary(self) -> SchemaSummary | None:
@@ -49,25 +50,23 @@ def run_schema_scan(
     mode: ScanMode = ScanMode.SAFE,
     http_settings: HttpClientSettings | None = None,
 ) -> SchemaScanResult:
-    """Run Phases 3–6, parsing retained full responses without new requests."""
+    """Run Phases 3–6, parsing selected retained responses without new parsing requests."""
     return parse_introspection_schemas(
         run_introspection_scan(target_url, mode=mode, http_settings=http_settings)
     )
 
 
 def parse_introspection_schemas(introspection: IntrospectionScanResult) -> SchemaScanResult:
-    """Parse successful enabled full responses while isolating endpoint failures."""
+    """Parse the selected retained schema response, without network or recovery requests."""
     results: list[EndpointSchemaResult] = []
     evidence: list[Evidence] = []
 
     for endpoint_result in introspection.introspections:
-        if (
-            endpoint_result.status is not IntrospectionStatus.ENABLED
-            or endpoint_result.full_response is None
-        ):
+        response = endpoint_result.selected_schema_response
+        if response is None:
             continue
         try:
-            schema = parse_introspection_response(endpoint_result.full_response.body)
+            schema = parse_introspection_response(response.body)
         except SchemaParsingError as error:
             results.append(
                 EndpointSchemaResult(
@@ -76,6 +75,7 @@ def parse_introspection_schemas(introspection: IntrospectionScanResult) -> Schem
                     schema=None,
                     error_type=type(error).__name__,
                     error_message=str(error),
+                    schema_retrieval_status=endpoint_result.schema_retrieval_status,
                 )
             )
             continue
@@ -86,6 +86,7 @@ def parse_introspection_schemas(introspection: IntrospectionScanResult) -> Schem
             schema=schema,
             error_type=None,
             error_message=None,
+            schema_retrieval_status=endpoint_result.schema_retrieval_status,
         )
         results.append(result)
         evidence.append(_schema_evidence(introspection, result))
@@ -126,5 +127,6 @@ def _schema_evidence(
             f"Enums: {summary.enum_type_count}",
             f"Interfaces: {summary.interface_type_count}",
             f"Unions: {summary.union_type_count}",
+            f"Schema retrieval: {result.schema_retrieval_status.value}",
         ),
     )

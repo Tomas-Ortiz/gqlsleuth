@@ -505,22 +505,49 @@ The full response is classified using the same rules. A full-retrieval transport
 failure becomes the endpoint's final status while the successful minimal response remains
 preserved.
 
-The endpoint's `minimal_result` and `full_result` expose separate deterministic classifications
-from these retained responses. `schema_retrieval_status` distinguishes `RETRIEVED`, `BLOCKED`
-(a server rejection), `FAILED` (transport or invalid response), and `NOT_ATTEMPTED`. Retrieval
-does not imply successful schema parsing; Phase 6 still validates the returned schema.
-Human console/reports use the minimal probe for introspection availability, so a full-query
-depth-limit rejection displays introspection `ENABLED` and schema retrieval `BLOCKED`, with the
-server reason in details. This is not a vulnerability or Finding. No fallback query is sent.
-Canonical JSON retains the legacy final-stage `introspection_status` and evidence unchanged,
-adding `minimal_introspection_status`, `schema_retrieval_status`, `schema_retrieval_category`
-and `schema_retrieval_reason` to each endpoint. The category uses the existing response
-classification (for example `endpoint_error`); the reason preserves its concise explanation.
+SCHEMA-001 permits exactly one static reduced query after an `ENABLED` minimal probe and an
+explicit GraphQL depth/complexity/cost rejection of the full query. A small pure matcher accepts
+bounded query-limit phrases and the codes `QUERY_TOO_DEEP`, `MAX_DEPTH_EXCEEDED`,
+`QUERY_TOO_COMPLEX`, `COMPLEXITY_LIMIT_EXCEEDED` and `COST_LIMIT_EXCEEDED`. Only HTTP 2xx,
+400 or 422 responses are eligible; every returned error must identify a recognized restriction.
+Authentication/authorization/disabled-introspection denials take precedence, including mixed
+errors. Generic errors, 401/403, 429, 5xx, malformed responses and transport failures never
+trigger the fallback. Parsing or later analysis failures cannot trigger it either.
 
-Phase 5 retains the existing `HttpResponse` objects for both requests, including the raw full
+The eligible endpoint budget is three introspection requests: minimal, full, reduced. There are
+no retries, adaptive variants, per-type requests, `__type` crawling, iteration or concurrency.
+This is compatibility with a demonstrated enabled introspection service, not a disabled-
+introspection/auth/authz bypass or Clairvoyance/error-oracle recovery.
+
+`REDUCED_INTROSPECTION_QUERY` is anonymous and omits descriptions. It retains roots, named
+types, fields/arguments, defaults, input fields, enum names, interfaces/possible types and minimal
+directive structure. Field/enum deprecation facts remain available to deterministic review.
+Its TypeRef has three `ofType` relationships instead of seven (supporting `[String!]!`);
+expanded selection depth is nine rather than thirteen. It is never adapted to a response.
+
+The endpoint retains minimal, full and reduced responses/errors independently. `minimal_result`,
+`full_result` and `reduced_result` classify each retained stage locally. The legacy `status`
+still describes the minimal/full path, even when fallback succeeds. `fallback_reason` holds only
+the normalized restriction category; the rejected full response is never discarded.
+`schema_retrieval_status` distinguishes `RETRIEVED` (full), `PARTIAL` (reduced source selected),
+`BLOCKED` (rejection without a selected response), `FAILED` (transport/invalid response) and
+`NOT_ATTEMPTED`. Retrieval does not prove successful parsing; Phase 6 validates the source.
+`selected_schema_response` supplies exactly the retained full or reduced response to consumers.
+
+Human console/reports use the minimal probe for availability. Successful fallback displays
+introspection `ENABLED` and retrieval `PARTIAL`, with an incomplete-coverage limitation and
+concise provenance in details. It is not a vulnerability or Finding. Counts describe retrieved
+content, not complete server coverage. Canonical JSON retains legacy `introspection_status`
+alongside `minimal_introspection_status`, `schema_retrieval_status`, `schema_retrieval_category`
+and `schema_retrieval_reason`. Report schema v2 is unchanged: `partial` is an additive value in
+the existing status field, not a new report structure. The category classifies the final retrieval
+attempt; the reason explains the fallback when attempted. Safety Notice remains final once.
+
+Phase 5 retains the existing `HttpResponse` objects for all attempted stages, including the raw full
 introspection JSON body. It does not convert that JSON into schema models, extract operations,
 or add `graphql-core`; those responsibilities begin in Phase 6. Each processed endpoint creates
-`INTROSPECTION_RESULT` evidence, and enabled introspection is not labeled as a vulnerability.
+`INTROSPECTION_RESULT` evidence, with additional fallback/status notes when applicable; no new
+Evidence type or fabricated request evidence is introduced.
 
 ## 13. Schema parsing
 
@@ -548,11 +575,27 @@ The parser should model:
 
 The internal representation must be independent from the raw introspection JSON so it can later support additional schema sources.
 
-The initial Phase 6 implementation consumes only `ENABLED` Phase 5 results that retain a full
-introspection response. It sends no HTTP requests. The response JSON `data` object is passed to
+Phase 6 consumes Phase 5's selected retained full or reduced response. It sends no HTTP requests.
+Both use the same parser without normalization: graphql-core already accepts omitted descriptions.
+The response JSON `data` object is passed to
 `graphql-core` for client-schema construction and schema validation, then mapped into immutable
 GQLSleuth-owned models. Neither raw introspection dictionaries nor `graphql-core` objects are
 exposed as the project representation.
+
+`EndpointSchemaResult.schema_retrieval_status` preserves full/partial provenance without copying
+the introspection graph. Missing application structure or type references deeper than the static
+query can represent produce controlled parse failures; no types/fields are guessed. A valid
+partial schema enters the existing analysis, generation, SAFE execution and structural capability
+gates. No execution authority or request budget beyond the one retrieval fallback is changed.
+Named contexts retain independent retrievals. Differential root/nested visibility comparisons
+do not treat missing partial-schema elements as absent; they report a scope limitation instead.
+Observed execution outcomes for common known Queries remain comparable.
+
+AI receives only `AISchemaSummary.schema_retrieval` (`retrieved` or `partial`) as extra safe
+input metadata. Partial counts describe retrieved content, and omissions do not establish absence.
+Raw restriction text/responses/URLs are excluded. AI output contract v2, best-effort hard/advisory
+validation, quality warnings, regeneration, token limits and 12-operation/12,000-byte caps are
+unchanged.
 
 The Phase 6 representation includes named object, input-object, scalar, enum, interface, and
 union types; fields; arguments; input fields; enum values; directives; descriptions;

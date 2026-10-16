@@ -219,6 +219,7 @@ class AISchemaSummary(AIModel):
     queries: int
     mutations: int
     subscriptions: int
+    schema_retrieval: Literal["retrieved", "partial"] = "retrieved"
 
 
 class AIContextMetadata(AIModel):

@@ -48,6 +48,8 @@ Grounding for ALL prose:
   Do not deny supplied observations or infer control effectiveness from successful checks.
 - Preserve uncertainty about identity, ownership, tenancy and intended business policy. Schema
   bounds do not prove runtime enforcement. Policy expectations are operator supplied.
+- A schema_retrieval of partial means incomplete coverage: counts describe retrieved content;
+  omitted operations/types are unknown, not evidence that they do not exist.
 - No invented causes, severity/CVSS/CWE, automatic testing, destructive guidance, brute force,
   flooding, evasion or credential theft. Named-context/differential AI is unsupported.
 

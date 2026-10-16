@@ -122,6 +122,9 @@ def build_ai_context(result: SafeExecutionScanResult | ActiveExecutionScanResult
                     queries=summary.query_field_count,
                     mutations=summary.mutation_field_count,
                     subscriptions=summary.subscription_field_count,
+                    schema_retrieval="partial"
+                    if item.schema_retrieval_status.value == "partial"
+                    else "retrieved",
                 )
             )
     schemas_total = len(schemas)
@@ -129,7 +132,7 @@ def build_ai_context(result: SafeExecutionScanResult | ActiveExecutionScanResult
     counts = {
         "schema_parsing_failures": sum(not item.success for item in schema_scan.schemas),
         "introspection_unavailable": sum(
-            item.status.value != "enabled" for item in introspection.introspections
+            item.minimal_result.status.value != "enabled" for item in introspection.introspections
         ),
         "query_generation_failures": sum(
             not item.success for item in safe.query_generation.queries

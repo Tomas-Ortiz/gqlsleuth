@@ -6,6 +6,10 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- Schema retrieval now makes one reduced introspection fallback when introspection is enabled
+  but the standard full query is explicitly rejected by a query depth/complexity/cost limit.
+  Successful fallbacks are labeled PARTIAL and continue through deterministic analysis without
+  implying complete schema coverage. Other failures do not trigger the fallback.
 - AI output now separates application-owned facts from referenced interpretation: one entry per
   supplied operation, up to three global review themes, and up to two limitations. JSON report
   schema and AI contract advance to version 2; input privacy and the 12-operation cap are unchanged.
@@ -43,8 +47,8 @@ User-visible changes are recorded here. A prepared release entry does not imply 
   exit code 130, instead of continuing into later capabilities.
 - ACTIVE scans show compact endpoint/schema context before candidate selection, while keeping
   final Findings and control conclusions in the completed assessment.
-- Introspection presentation distinguishes an enabled minimal probe from blocked or failed full
-  schema retrieval, retaining the server reason and existing evidence without extra requests.
+- Introspection presentation distinguishes an enabled minimal probe from the schema retrieval
+  outcome, retaining the server reason and existing evidence.
 - Local Ollama failures now distinguish initial connection failures from interrupted requests,
   without guessing why the service became unavailable or failing the deterministic scan.
 - Local AI inference now defaults to a ten-minute wait and supports finite positive
