@@ -1,6 +1,7 @@
 """Explicit abuse signals and status-only consistency; no body/timing/threshold inference."""
 
 import json
+import re
 from dataclasses import dataclass
 
 from gqlsleuth.domain.abuse_controls import (
@@ -30,6 +31,48 @@ _MESSAGES = {
     ("temporarily", "locked"): AbuseControlKind.LOCKOUT,
     ("captcha", "required"): AbuseControlKind.CHALLENGE,
 }
+
+# These codes describe request processing, not failed authentication/business decisions.
+_STRUCTURAL_CODES = frozenset({"GRAPHQL_PARSE_FAILED", "GRAPHQL_VALIDATION_FAILED"})
+_APPLICATION_CODES = frozenset(
+    {
+        "UNAUTHENTICATED",
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "INVALID_CREDENTIALS",
+        "AUTHENTICATION_FAILED",
+        "ACCESS_DENIED",
+        "ACCOUNT_DISABLED",
+        "INVALID_TOKEN",
+        "SESSION_EXPIRED",
+    }
+)
+_APPLICATION_MESSAGES = frozenset(
+    normalize_terms(message)
+    for message in (
+        "Invalid credentials",
+        "Authentication failed",
+        "Incorrect username or password",
+        "Account disabled",
+        "Login failed",
+        "Access denied",
+        "Invalid token",
+        "Session expired",
+        "Unauthorized",
+        "Forbidden",
+    )
+)
+# A structural message wins even if a server attaches an authentication code.
+# Unknown messages/codes are not evidence of meaningful application handling.
+_STRUCTURAL_MESSAGE = re.compile(
+    r"^(?:syntax error\b|graphql (?:parse|validation) error\b|cannot query field\b|"
+    r"unknown (?:field|argument|type)\b|variable\s+['\"]?\$|"
+    r"must provide (?:operation name|an operation)\b|unknown operation named\b)"
+    r"|^(?:field|argument)\b.*\brequired\b.*\b(?:not provided|missing)\b"
+    r"|\bmissing (?:\d+ )?required (?:positional|keyword-only) arguments?\b"
+    r"|\bunexpected keyword argument\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +119,22 @@ def _signal(status: int, document: dict[str, object] | None) -> AbuseControlSign
     return None
 
 
+def _application_error(error: object) -> bool:
+    """Require an explicit application outcome; never infer it from GRAPHQL_ERROR alone."""
+    if not isinstance(error, dict) or not isinstance(error.get("message"), str):
+        return False
+    message = " ".join(error["message"].split())
+    extensions = error.get("extensions")
+    code = extensions.get("code") if isinstance(extensions, dict) else None
+    normalized_code = "_".join(normalize_terms(code)).upper() if isinstance(code, str) else ""
+    if normalized_code in _STRUCTURAL_CODES or _STRUCTURAL_MESSAGE.search(message):
+        return False
+    # BAD_USER_INPUT and unknown codes are not intrinsically structural or application-level.
+    return (
+        normalized_code in _APPLICATION_CODES or normalize_terms(message) in _APPLICATION_MESSAGES
+    )
+
+
 def _usable(document: dict[str, object] | None, status: QueryExecutionStatus) -> bool:
     if not document:
         return False
@@ -86,16 +145,13 @@ def _usable(document: dict[str, object] | None, status: QueryExecutionStatus) ->
         return (
             isinstance(errors, list)
             and bool(errors)
-            and all(
-                isinstance(error, dict) and isinstance(error.get("message"), str)
-                for error in errors
-            )
+            and all(_application_error(error) for error in errors)
         )
     return status is QueryExecutionStatus.HTTP_ERROR
 
 
 def eligible_baseline(status: QueryExecutionStatus, http_status: int, body: bytes) -> bool:
-    """Exclude outages, malformed responses and already-signalled controls without traffic."""
+    """Require meaningful retained outcomes, excluding structural/ambiguous errors locally."""
     if not (200 <= http_status < 300 or http_status in {400, 401, 403}):
         return False
     if status is QueryExecutionStatus.HTTP_ERROR and http_status not in {401, 403}:

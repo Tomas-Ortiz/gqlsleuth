@@ -8,7 +8,7 @@ import httpx
 import pytest
 from rich.console import Console
 
-from fixtures.phase27_target import SDL, response_for
+from fixtures.phase27_target import INELIGIBLE_ERRORS, SDL, SIGNATURE_ERROR, response_for
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.application import abuse_controls as application
 from gqlsleuth.application.active_execution import (
@@ -422,3 +422,115 @@ def test_reporting_console_ai_and_evidence_are_additive_and_local(active, wire, 
     assert "rate_limiting_abuse_controls" not in json.loads(
         render_report(build_report(active), ReportFormat.JSON)
     )
+
+
+def login_baseline(active, body, http_status=200):
+    """Exercise ordinary execution/evidence construction with a retained target outcome."""
+    with HttpClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(http_status, json=body))
+    ) as client:
+        return execute_selected_mutations(
+            active.preview, selected_indices=active.selected_indices, confirmed=True, client=client
+        )
+
+
+@pytest.mark.parametrize("message,code", INELIGIBLE_ERRORS)
+def test_unusable_login_has_no_candidate_repeat_evidence_or_finding(active, wire, message, code):
+    body = {"errors": [{"message": message, "extensions": {"code": code}}]}
+    altered = login_baseline(active, body)
+    execution = next(item for item in altered.executions if item.attempted)
+    assert execution.status is Status.GRAPHQL_ERROR  # Ordinary Phase 10 result is untouched.
+    assert json.loads(execution.response.body) == body
+    workflow = application.AbuseControlSession(altered, enabled=True, http_settings=settings())
+    assert [item.operation.name for item in workflow.preview.candidates] == ["search"]
+    result = workflow.execute(preview=workflow.preview, confirmed=True)
+    assert result.attempted_request_count == 0
+    assert not result.evidence and not result.findings and not wire[0]
+
+
+@pytest.mark.parametrize(
+    "http_status,body,status",
+    [
+        (200, {"data": {"login": "fake-fixture-token"}}, Status.SUCCESS),
+        (200, {"errors": [{"message": "Invalid credentials"}]}, Status.GRAPHQL_ERROR),
+        (401, {"detail": "Unauthorized"}, Status.HTTP_ERROR),
+        (403, {"detail": "Forbidden"}, Status.HTTP_ERROR),
+    ],
+)
+def test_meaningful_mutation_baselines_keep_exact_replay_and_finding_gate(
+    active, wire, http_status, body, status
+):
+    altered = login_baseline(active, body, http_status)
+    workflow = session(altered, "mutation")
+    assert workflow.preview.selected.baseline_status is status
+    wire[1]["override"] = {i: (http_status, body) for i in range(1, 4)}
+    result = workflow.execute(preview=workflow.preview, confirmed=True)
+    assert len(wire[0]) == result.attempted_request_count == 3
+    assert len(result.findings) == 1 and len(result.evidence) == 3
+    assert all(
+        json.loads(request.content)
+        == {
+            "query": workflow.preview.selected.query,
+            "variables": workflow.preview.selected.variables,
+        }
+        for request in wire[0]
+    )
+
+
+@pytest.mark.parametrize("during", [False, True])
+def test_canonical_revalidation_rejects_newly_ineligible_baseline(
+    active, wire, monkeypatch, during
+):
+    workflow = session(active, "mutation")
+    altered = login_baseline(active, {"errors": [{"message": SIGNATURE_ERROR}]})
+    # Keep the plan's evidence identity/status unchanged so eligibility, not a new ID,
+    # must invalidate a now-structural retained response at the next canonical check.
+    altered = replace(
+        altered,
+        execution_evidence=tuple(
+            new.model_copy(update={"evidence_id": old.evidence_id})
+            for new, old in zip(altered.execution_evidence, active.execution_evidence, strict=True)
+        ),
+    )
+    original = application._request
+    if during:
+
+        def request(*args):
+            item = original(*args)
+            workflow._scan = altered
+            return item
+
+        monkeypatch.setattr(application, "_request", request)
+    else:
+        workflow._scan = altered
+    result = workflow.execute(preview=workflow.preview, confirmed=True)
+    assert len(wire[0]) == result.attempted_request_count == int(during)
+    assert not result.findings and result.policy_result.value == "unresolved"
+
+
+def test_unusable_repeat_stops_even_when_http_and_execution_status_are_unchanged(active, wire):
+    workflow = session(active, "mutation")
+    wire[1]["override"][2] = (200, {"errors": [{"message": SIGNATURE_ERROR}]})
+    result = workflow.execute(preview=workflow.preview, confirmed=True)
+    assert len(wire[0]) == result.attempted_request_count == 2
+    assert result.attempts[-1].repeat_status is Status.GRAPHQL_ERROR
+    assert result.attempts[-1].outcome is AbuseControlOutcome.INDETERMINATE
+    assert not result.findings and result.policy_result.value == "unresolved"
+
+
+def test_cross_origin_baseline_remains_ineligible(active, wire):
+    safe = active.safe_execution
+    execution = safe.executions[0]
+    changed = replace(
+        safe,
+        executions=(
+            replace(
+                execution,
+                response=execution.response.model_copy(
+                    update={"final_url": "https://other.example/graphql"}
+                ),
+            ),
+        ),
+    )
+    assert not application.prepare_abuse_controls(changed, enabled=True).candidates
+    assert not wire[0]

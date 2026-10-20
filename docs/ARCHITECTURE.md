@@ -3225,8 +3225,16 @@ It matches the exact retained request and response provenance, native schema/var
 metadata, parsed root, source EvidenceType and application source. It reuses existing artifact,
 Query side-effect, destructive-Mutation and Phase 20 document validators. No operations are
 generated for this stage. Unexecuted or unsafe Mutations never qualify. Usable SUCCESS,
-GRAPHQL_ERROR (including invalid-login outcomes), and structured HTTP 401/403 error baselines
-can qualify. Missing/malformed responses, transport errors, outages, cross-origin baselines and
+application/authentication/business GRAPHQL_ERROR outcomes (including invalid-login outcomes),
+and structured HTTP 401/403 error baselines can qualify. GRAPHQL_ERROR alone is insufficient:
+every error must have a recognized application/authentication extension code or a narrow exact
+normalized message such as invalid credentials, access denied or session expired. Explicit
+GraphQL parse/validation codes and structural messages (including variable/argument validation,
+operation selection and resolver invocation/signature errors) take precedence. BAD_USER_INPUT
+alone proves neither category; a meaningful message may still qualify. Unknown/ambiguous errors
+are conservatively ineligible. This small deterministic filter does not infer credential validity
+or authentication policy and does not change ordinary execution classification.
+Missing/malformed responses, transport errors, outages, cross-origin baselines and
 already-observed control signals are ineligible. Baseline selection sends zero requests.
 
 Immutable domain models compose OperationAnalysis and retain exact request material, source
@@ -3263,7 +3271,9 @@ alone, timing, body sizes/hashes and returned business data are never detection 
 
 Repeat outcomes are CONTROL_SIGNAL_OBSERVED, NO_CONTROL_SIGNAL, INDETERMINATE or NETWORK_FAILURE.
 Without an explicit signal, a usable response must preserve the baseline HTTP status and execution
-classification to count as NO_CONTROL_SIGNAL. A material status/shape change is indeterminate.
+classification to count as NO_CONTROL_SIGNAL, and GraphQL errors must still meet the same
+meaningful-application-outcome check. Structural/ambiguous errors or a material status/shape
+change are indeterminate, even when the HTTP/execution classifications match the baseline.
 The first signal satisfies the policy and stops; ambiguity or transport failure stops unresolved.
 Only a full consistent fixed sequence without a signal violates the operator expectation and
 creates ABUSE_CONTROL_POLICY_VIOLATION. Findings reference the baseline, all actual attempts,

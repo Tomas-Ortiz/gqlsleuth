@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from fixtures.phase27_target import INELIGIBLE_ERRORS
 from gqlsleuth.domain.execution import QueryExecutionStatus as Status
 from gqlsleuth.graphql.abuse_controls import classify_abuse_response, eligible_baseline
 
@@ -31,9 +32,11 @@ def classify(body, status=200, baseline=Status.GRAPHQL_ERROR, baseline_http=200)
     ],
 )
 def test_exact_extension_signals(code, kind):
-    result = classify({"errors": [{"message": "Fixture", "extensions": {"code": code}}]})
+    body = {"errors": [{"message": "Fixture", "extensions": {"code": code}}]}
+    result = classify(body)
     assert result.outcome.value == "control_signal_observed"
     assert result.signal.kind.value == kind and result.signal.source == "graphql_code"
+    assert not eligible_baseline(Status.GRAPHQL_ERROR, 200, json.dumps(body).encode())
 
 
 @pytest.mark.parametrize(
@@ -49,8 +52,10 @@ def test_exact_extension_signals(code, kind):
     ],
 )
 def test_exact_message_fallback(message, kind):
-    result = classify({"errors": [{"message": message}]})
+    body = {"errors": [{"message": message}]}
+    result = classify(body)
     assert result.signal.kind.value == kind and result.signal.source == "graphql_message"
+    assert not eligible_baseline(Status.GRAPHQL_ERROR, 200, json.dumps(body).encode())
 
 
 @pytest.mark.parametrize(
@@ -73,7 +78,12 @@ def test_exact_message_fallback(message, kind):
 )
 def test_no_substring_or_generic_error_signals(text):
     result = classify({"errors": [{"message": text, "extensions": {"code": text}}]})
-    assert result.outcome.value == "no_control_signal" and result.signal is None
+    assert result.signal is None
+    assert result.outcome.value == (
+        "no_control_signal"
+        if text in {"Invalid credentials", "unauthorized", "forbidden"}
+        else "indeterminate"
+    )
 
 
 def test_http429_without_graphql_and_retry_after_not_required():
@@ -86,10 +96,7 @@ def test_http429_without_graphql_and_retry_after_not_required():
 
 
 def test_status_only_no_raw_business_or_error_comparison():
-    assert (
-        classify({"errors": [{"message": "A completely different business error"}]}).outcome.value
-        == "no_control_signal"
-    )
+    assert classify({"errors": [{"message": "Access denied"}]}).outcome.value == "no_control_signal"
     assert (
         classify(
             {"data": {"search": [{"id": "999", "balance": 42}]}}, baseline=Status.SUCCESS
@@ -118,7 +125,7 @@ def test_material_status_changes_are_unresolved(status, body):
     [
         (Status.SUCCESS, 200, {"data": None}, True),
         (Status.GRAPHQL_ERROR, 200, {"errors": [{"message": "Invalid credentials"}]}, True),
-        (Status.GRAPHQL_ERROR, 400, {"errors": [{"message": "Invalid input"}]}, True),
+        (Status.GRAPHQL_ERROR, 400, {"errors": [{"message": "Invalid input"}]}, False),
         (Status.HTTP_ERROR, 401, {"detail": "Unauthorized"}, True),
         (Status.HTTP_ERROR, 403, {"detail": "Forbidden"}, True),
         (Status.HTTP_ERROR, 500, {"detail": "Unavailable"}, False),
@@ -150,3 +157,67 @@ def test_malformed_and_extension_code_precedence():
         classify({"data": {"message": "rate limit exceeded"}}, baseline=Status.SUCCESS).signal
         is None
     )
+
+
+@pytest.mark.parametrize("message,code", INELIGIBLE_ERRORS)
+def test_structural_or_ambiguous_errors_are_not_usable_baselines_or_repeats(message, code):
+    error = {"message": message}
+    if code:
+        error["extensions"] = {"code": code}
+    body = {"errors": [error]}
+    for http_status in (200, 400, 401, 403):
+        assert not eligible_baseline(Status.GRAPHQL_ERROR, http_status, json.dumps(body).encode())
+    result = classify(body)
+    assert result.outcome.value == "indeterminate" and result.signal is None
+
+
+@pytest.mark.parametrize(
+    "message,code",
+    [
+        ("Invalid credentials", None),
+        ("Invalid credentials", "BAD_USER_INPUT"),
+        ("Authentication failed", None),
+        ("Incorrect username or password", None),
+        ("Account disabled", None),
+        ("Login failed", None),
+        ("Access denied", None),
+        ("Invalid token", None),
+        ("Session expired", None),
+        ("  INVALID   CREDENTIALS. ", None),
+        ("Credenciales incorrectas", "UNAUTHENTICATED"),
+        ("Non-English application outcome", "FORBIDDEN"),
+        ("Authentication outcome", "invalidCredentials"),
+    ],
+)
+def test_meaningful_application_errors_remain_eligible(message, code):
+    body = {"errors": [{"message": message, "extensions": {"code": code}}]}
+    assert eligible_baseline(Status.GRAPHQL_ERROR, 200, json.dumps(body).encode())
+    assert classify(body).outcome.value == "no_control_signal"
+
+
+def test_mixed_structural_errors_win_over_application_errors_and_partial_data():
+    body = {
+        "data": {"login": None},
+        "errors": [
+            {"message": "Invalid credentials"},
+            {"message": 'Variable "$username" was not provided.'},
+        ],
+    }
+    assert not eligible_baseline(Status.GRAPHQL_ERROR, 200, json.dumps(body).encode())
+    assert classify(body).outcome.value == "indeterminate"
+
+
+def test_explicit_control_signal_still_stops_even_with_an_unusable_error():
+    body = {
+        "errors": [
+            {"message": "Syntax Error: bad document"},
+            {"message": "Fixture", "extensions": {"code": "RATE_LIMITED"}},
+        ]
+    }
+    assert not eligible_baseline(Status.GRAPHQL_ERROR, 200, json.dumps(body).encode())
+    assert classify(body).outcome.value == "control_signal_observed"
+
+
+@pytest.mark.parametrize("body", [b"not JSON", b"[]", b'{"errors":[{"message":null}]}'])
+def test_malformed_baseline_cannot_be_treated_as_graphql_application_error(body):
+    assert not eligible_baseline(Status.GRAPHQL_ERROR, 200, body)

@@ -20,6 +20,35 @@ type Mutation {
 }
 """
 INTROSPECTION = introspection_from_schema(build_schema(SDL))
+SIGNATURE_ERROR = "mutate() missing 2 required positional arguments: 'username' and 'password'"
+
+# Retained ordinary responses only: none should authorize Phase 27 repeat traffic.
+INELIGIBLE_ERRORS = (
+    ("Request rejected", "GRAPHQL_PARSE_FAILED"),
+    ("Request rejected", "GRAPHQL_VALIDATION_FAILED"),
+    ("Syntax Error: Unexpected Name 'query'.", None),
+    ('Cannot query field "unknown" on type "Query".', None),
+    ('Unknown argument "extra" on field "Mutation.login".', None),
+    (
+        'Field "login" argument "username" of type "String!" is required, but it was not provided.',
+        None,
+    ),
+    ('Variable "$username" of required type "String!" was not provided.', None),
+    (
+        'Variable "$count" got invalid value "text"; Int cannot represent non-integer value.',
+        "BAD_USER_INPUT",
+    ),
+    ('Variable "$count" of type "String" used in position expecting type "Int".', None),
+    ("Must provide operation name if query contains multiple operations.", None),
+    ('Unknown operation named "other".', None),
+    (SIGNATURE_ERROR, None),
+    ("mutate() missing required positional argument: 'username'", None),
+    ("mutate() got an unexpected keyword argument 'extra'", None),
+    ("Invalid credentials", "GRAPHQL_VALIDATION_FAILED"),
+    (SIGNATURE_ERROR, "UNAUTHENTICATED"),
+    ("Unclassified resolver failure", None),
+    ("Invalid input", "BAD_USER_INPUT"),
+)
 
 
 def response_for(method, payload, *, scenario="none", attempt=0):
@@ -47,6 +76,8 @@ def response_for(method, payload, *, scenario="none", attempt=0):
     if scenario == "server-error" and attempt == 2:
         return 500, {"error": "Fixture failure"}
     if root == "login":
+        if scenario == "signature":
+            return 200, {"errors": [{"message": SIGNATURE_ERROR}]}
         return 200, {"errors": [{"message": "Invalid credentials"}]}
     return 200, {"data": {root: [{"id": "1"}] if root == "search" else True}}
 

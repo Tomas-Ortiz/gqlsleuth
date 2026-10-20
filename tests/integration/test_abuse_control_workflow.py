@@ -20,9 +20,10 @@ SECRET = "PHASE27_CLI_HEADER_CANARY"
 
 
 @pytest.fixture
-def controlled(monkeypatch):
+def controlled(monkeypatch, request):
     requests = []
     counts = Counter()
+    scenario = getattr(request, "param", "none")
 
     def factory(**kwargs):
         def handler(request):
@@ -32,7 +33,7 @@ def controlled(monkeypatch):
                 operation = parse(payload["query"]).definitions[0]
                 assert isinstance(operation, OperationDefinitionNode)
                 counts[operation.selection_set.selections[0].name.value] += 1
-            status, body = response_for(request.method, payload)
+            status, body = response_for(request.method, payload, scenario=scenario)
             return httpx.Response(status, json=body)
 
         return httpx.MockTransport(handler)
@@ -214,3 +215,28 @@ def test_help_exposes_only_fixed_budget_flag():
     assert "--repeat-count" not in plain_cli_output(
         result.output
     ) and "--rate-limit-count" not in plain_cli_output(result.output)
+
+
+@pytest.mark.parametrize("controlled", ["signature"], indirect=True)
+def test_signature_failure_is_not_offered_for_repetition_and_reports_remain_valid(
+    controlled, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(cli, "_interactive_stdin", lambda: True)
+    result = CliRunner().invoke(
+        cli.app,
+        ["scan", TARGET, *OPTIONS, "-f", "json,markdown,html", "-o", str(tmp_path)],
+        input="2\ny\n\n",  # Execute generic login once, then skip the remaining Query candidate.
+    )
+    assert result.exit_code == 0, (result.exception, result.output)
+    assert controlled[1]["login"] == 1 and controlled[1]["search"] == 1
+    assert "Execute rate limiting / abuse-control validation?" not in result.output
+    report = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    review = report["rate_limiting_abuse_controls"]
+    assert [item["operation"]["name"] for item in review["candidates"]] == ["search"]
+    assert review["attempted_request_count"] == 0
+    assert not review["findings"] and not review["attempts"]
+    assert not any(e["evidence_type"] == "abuse_control_probe" for e in report["evidence"])
+    for suffix in ("md", "html"):
+        text = next(tmp_path.glob("*." + suffix)).read_text(encoding="utf-8")
+        assert text.count("Safety Notice") == 1
+        assert "Rate Limiting" in text[: text.index("Safety Notice")]
