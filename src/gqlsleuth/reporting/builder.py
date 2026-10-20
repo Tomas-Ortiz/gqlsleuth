@@ -128,6 +128,9 @@ def build_report(
                 schema_retrieval_reason=introspected.schema_retrieval_reason
                 if introspected
                 else None,
+                schema_retrieval_summary=introspected.schema_retrieval_summary
+                if introspected
+                else None,
                 schema_summary=schema.summary if schema else None,
                 analyzed_operation_count=len(analyzed.operations)
                 if analyzed and analyzed.success

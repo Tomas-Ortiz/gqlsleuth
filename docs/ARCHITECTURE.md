@@ -511,7 +511,7 @@ bounded query-limit phrases and the codes `QUERY_TOO_DEEP`, `MAX_DEPTH_EXCEEDED`
 `QUERY_TOO_COMPLEX`, `COMPLEXITY_LIMIT_EXCEEDED` and `COST_LIMIT_EXCEEDED`. Only HTTP 2xx,
 400 or 422 responses are eligible; every returned error must identify a recognized restriction.
 Authentication/authorization/disabled-introspection denials take precedence, including mixed
-errors. Generic errors, 401/403, 429, 5xx, malformed responses and transport failures never
+errors. Generic errors, 401/403, 413, 429, 5xx, malformed responses and transport failures never
 trigger the fallback. Parsing or later analysis failures cannot trigger it either.
 
 The eligible endpoint budget is three introspection requests: minimal, full, reduced. There are
@@ -536,12 +536,21 @@ the normalized restriction category; the rejected full response is never discard
 
 Human console/reports use the minimal probe for availability. Successful fallback displays
 introspection `ENABLED` and retrieval `PARTIAL`, with an incomplete-coverage limitation and
-concise provenance in details. It is not a vulnerability or Finding. Counts describe retrieved
+concise provenance in compact output and details. A rejected fallback displays `BLOCKED` and
+explicitly identifies the one reduced attempt, rejection and lack of a selected schema. When
+full retrieval fails without an eligible fallback, output says the reduced fallback was not
+attempted (including the full HTTP status when available). Normal full success has no fallback
+message. These summaries derive from retained stage outcomes, without raw response text.
+It is not a vulnerability or Finding. Counts describe retrieved
 content, not complete server coverage. Canonical JSON retains legacy `introspection_status`
 alongside `minimal_introspection_status`, `schema_retrieval_status`, `schema_retrieval_category`
-and `schema_retrieval_reason`. Report schema v2 is unchanged: `partial` is an additive value in
+and `schema_retrieval_reason`. An additive optional `schema_retrieval_summary` projects the concise
+retrieval path for human presentation; it is null for normal full success or no full attempt.
+Report schema v2 is unchanged: `partial` is an additive value in
 the existing status field, not a new report structure. The category classifies the final retrieval
-attempt; the reason explains the fallback when attempted. Safety Notice remains final once.
+attempt; the reason explains the fallback when attempted, or explicitly records non-attempt
+after unsuccessful full retrieval. Bounded target failure reasons remain in details.
+Safety Notice remains final once.
 
 Phase 5 retains the existing `HttpResponse` objects for all attempted stages, including the raw full
 introspection JSON body. It does not convert that JSON into schema models, extract operations,

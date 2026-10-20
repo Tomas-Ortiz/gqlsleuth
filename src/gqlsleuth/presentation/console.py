@@ -246,6 +246,8 @@ def render_pre_active_context(
         ):
             rows.add_row(label, str(count) if count is not None else "Not available")
         console.print(rows)
+        if probe and probe.schema_retrieval_summary:
+            console.print(probe.schema_retrieval_summary, style="gql.secondary", markup=False)
         if probe and probe.schema_retrieval_status.value == "partial":
             console.print(
                 "Partial schema: counts describe retrieved content; coverage may be incomplete.",
@@ -331,7 +333,7 @@ def render_scan(
                 Text.assemble("Schema retrieval: ", _status(tested.schema_retrieval_status.value))
             )
             if verbose or tested.status.value != "enabled":
-                console.print(tested.reason, markup=False)
+                console.print(tested.schema_retrieval_reason or tested.reason, markup=False)
         else:
             console.print("Introspection: not attempted", style="gql.secondary")
         schema = schemas.get(detected.candidate_url)

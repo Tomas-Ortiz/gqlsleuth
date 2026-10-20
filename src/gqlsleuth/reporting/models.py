@@ -51,6 +51,7 @@ class EndpointReport:
     schema_retrieval_status: str | None = None
     schema_retrieval_category: str | None = None
     schema_retrieval_reason: str | None = None
+    schema_retrieval_summary: str | None = None
 
     @property
     def observed_introspection_status(self) -> str | None:

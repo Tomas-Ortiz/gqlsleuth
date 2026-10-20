@@ -94,10 +94,38 @@ class EndpointIntrospectionResult:
         return None
 
     @property
+    def schema_retrieval_summary(self) -> str | None:
+        """Describe exceptional retrieval paths without exposing target response text."""
+        full = self.full_result
+        if full is None or full.status is IntrospectionStatus.ENABLED:
+            return None
+        if not self.reduced_retrieval_attempted:
+            status = f" (HTTP {self.full_response.status_code})" if self.full_response else ""
+            return f"Full retrieval unsuccessful{status}; reduced fallback not attempted."
+        restriction = (
+            self.fallback_reason.value.replace("_", " ")
+            if self.fallback_reason
+            else "query restriction"
+        )
+        prefix = f"Full retrieval rejected by {restriction}; one reduced fallback attempted"
+        if self.schema_retrieval_status is SchemaRetrievalStatus.PARTIAL:
+            return prefix + " and succeeded; coverage may be incomplete."
+        outcome = (
+            "was also rejected"
+            if self.schema_retrieval_status is SchemaRetrievalStatus.BLOCKED
+            else "failed"
+        )
+        return prefix + f" and {outcome}; no schema selected."
+
+    @property
     def schema_retrieval_reason(self) -> str | None:
         if self.reduced_retrieval_attempted:
             return self.reason
-        return self.full_result.reason if self.full_result else None
+        full = self.full_result
+        if full is None:
+            return None
+        summary = self.schema_retrieval_summary
+        return f"{summary} {full.reason}" if summary else full.reason
 
     @property
     def schema_retrieval_status(self) -> SchemaRetrievalStatus:
@@ -295,6 +323,7 @@ def _introspection_evidence(
         f"Full retrieval attempted: {'yes' if result.full_retrieval_attempted else 'no'}",
     ]
     if result.reduced_retrieval_attempted:
+        reduced = result.reduced_result
         notes.extend(
             (
                 f"Minimal introspection: {result.minimal_result.status.value}",
@@ -303,6 +332,8 @@ def _introspection_evidence(
                 f"Schema retrieval: {result.schema_retrieval_status.value}",
             )
         )
+        if reduced is not None:
+            notes.append(f"Reduced retrieval outcome: {reduced.status.value}")
         if result.reduced_error_type:
             notes.append(f"Reduced retrieval failure: {result.reduced_error_type}")
     if result.minimal_error_type is not None:

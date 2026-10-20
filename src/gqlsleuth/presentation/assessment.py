@@ -159,6 +159,14 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
         ("Mutations", str(sum(s.mutation_field_count for s in schemas))),
         ("Subscriptions", str(sum(s.subscription_field_count for s in schemas))),
     )
+    overview += tuple(
+        (
+            "Retrieval path" if len(meaningful) == 1 else f"Retrieval path: {endpoint.endpoint}",
+            endpoint.schema_retrieval_summary,
+        )
+        for endpoint in meaningful
+        if endpoint.schema_retrieval_summary
+    )
     for surface, label in (
         ("federation_surface", "Federation"),
         ("file_upload_surface", "Upload surface"),

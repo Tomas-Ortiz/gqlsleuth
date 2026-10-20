@@ -108,11 +108,33 @@ def test_safe_extension_codes(code):
         {"errors": [{"message": "Request rejected", "extensions": {"code": code}}]}
     ).encode()
     assert reduced_introspection_fallback_reason(200, body) is not None
+    queries = []
+
+    def handler(request):
+        query = json.loads(request.content)["query"]
+        queries.append(query)
+        if query == MINIMAL_INTROSPECTION_QUERY:
+            return httpx.Response(200, json={"data": {"__schema": {}}})
+        if query == FULL_INTROSPECTION_QUERY:
+            return httpx.Response(422, content=body)
+        assert query == REDUCED_INTROSPECTION_QUERY
+        return httpx.Response(200, json=introspection_body())
+
+    with HttpClient(transport=httpx.MockTransport(handler)) as client:
+        result = _introspect_endpoint(TARGET, client)
+    assert queries == [
+        MINIMAL_INTROSPECTION_QUERY,
+        FULL_INTROSPECTION_QUERY,
+        REDUCED_INTROSPECTION_QUERY,
+    ]
+    assert result.schema_retrieval_status is SchemaRetrievalStatus.PARTIAL
+    assert result.selected_schema_response is result.reduced_response
 
 
 NON_ELIGIBLE = [
     (401, {"errors": [{"message": "Query too deep"}]}),
     (403, {"errors": [{"message": "Query too deep"}]}),
+    (413, {"errors": [{"message": "Query depth limit exceeded."}]}),
     (500, {"errors": [{"message": "Query too deep"}]}),
     (503, {"errors": [{"message": "Unavailable"}]}),
     (429, {"errors": [{"message": "Query too deep"}]}),
@@ -127,6 +149,8 @@ NON_ELIGIBLE = [
     (200, {"errors": [{"message": "Maximum cost for the order is invalid"}]}),
     (200, {"errors": [{"message": "Depth must be a valid business input"}]}),
     (200, {"errors": [{"message": "Query too deep"}, {"message": "Unauthorized"}]}),
+    (200, {"errors": [{"message": "Query too deep"}, {"message": "Authorization denied"}]}),
+    (200, {"errors": [{"message": "Query too deep"}, {"message": "Introspection disabled"}]}),
     (200, {"errors": [{"message": "Query too deep", "extensions": {"code": "FORBIDDEN"}}]}),
     (200, {"errors": [{"message": "Query too deep"}, {"message": "Resolver failed"}]}),
     (200, {"errors": [{"extensions": {"code": "QUERY_TOO_DEEP"}}]}),
@@ -176,6 +200,12 @@ def test_non_eligible_failures_do_not_fall_back(stage, status, body):
     )
     assert not result.reduced_retrieval_attempted
     assert result.selected_schema_response is None
+    if stage == "full":
+        assert "reduced fallback not attempted" in result.schema_retrieval_summary
+        assert f"HTTP {status}" in result.schema_retrieval_summary
+        assert "reduced fallback not attempted" in result.schema_retrieval_reason
+    else:
+        assert result.schema_retrieval_summary is None
 
 
 @pytest.mark.parametrize(
@@ -202,6 +232,10 @@ def test_transport_failure_is_bounded(failure, stage, count):
     assert result.schema_retrieval_status is (
         SchemaRetrievalStatus.NOT_ATTEMPTED if stage == "minimal" else SchemaRetrievalStatus.FAILED
     )
+    if stage == "reduced":
+        assert "one reduced fallback attempted and failed" in result.schema_retrieval_summary
+    elif stage == "full":
+        assert "reduced fallback not attempted" in result.schema_retrieval_summary
 
 
 @pytest.mark.parametrize(
@@ -299,7 +333,15 @@ def test_unrepresentable_or_missing_root_fails_without_guessed_structure(sdl):
         parse_introspection_response(json.dumps(body).encode())
 
 
-def scan_fixture(monkeypatch, *, fallback=True, mode=ScanMode.SAFE, sdl=SDL):
+def scan_fixture(
+    monkeypatch,
+    *,
+    fallback=True,
+    mode=ScanMode.SAFE,
+    sdl=SDL,
+    full_status=200,
+    reduced_outcome="success",
+):
     requests = []
     configurations = []
 
@@ -313,9 +355,18 @@ def scan_fixture(monkeypatch, *, fallback=True, mode=ScanMode.SAFE, sdl=SDL):
         assert not query.lstrip().startswith(("mutation", "subscription"))
         if query == FULL_INTROSPECTION_QUERY and fallback:
             return httpx.Response(
-                200,
+                full_status,
                 json={"errors": [{"message": "Query depth limit exceeded. PRIVATE_ERROR_CANARY"}]},
             )
+        if query == REDUCED_INTROSPECTION_QUERY:
+            if reduced_outcome == "blocked":
+                return httpx.Response(
+                    200, json={"errors": [{"message": "Query depth limit exceeded."}]}
+                )
+            if reduced_outcome == "invalid":
+                return httpx.Response(200, content=b"invalid JSON")
+            if reduced_outcome == "transport":
+                raise httpx.ReadTimeout("offline", request=request)
         if "__schema" in query:
             return httpx.Response(200, json=introspection_body(query, sdl))
         field = parse(query).definitions[0].selection_set.selections[0].name.value
@@ -336,6 +387,105 @@ def scan_fixture(monkeypatch, *, fallback=True, mode=ScanMode.SAFE, sdl=SDL):
     assert all(c["trust_env"] is False for c in configurations)
     assert all(r.extensions["timeout"]["read"] == 17 for r in requests if r.method == "POST")
     return safe, requests
+
+
+@pytest.mark.parametrize("mode", [ScanMode.SAFE, ScanMode.ACTIVE])
+@pytest.mark.parametrize(
+    "fallback,full_status,reduced_outcome,status,category,count,provenance",
+    [
+        (False, 200, "success", "retrieved", "enabled", 2, None),
+        (True, 200, "success", "partial", "enabled", 3, "attempted and succeeded"),
+        (True, 200, "blocked", "blocked", "endpoint_error", 3, "attempted and was also rejected"),
+        (True, 200, "invalid", "failed", "invalid_response", 3, "attempted and failed"),
+        (True, 200, "transport", "failed", "network_failure", 3, "attempted and failed"),
+        (True, 413, "success", "blocked", "endpoint_error", 2, "reduced fallback not attempted"),
+    ],
+)
+def test_final_retrieval_path_survives_evidence_console_and_report_projection(
+    monkeypatch, mode, fallback, full_status, reduced_outcome, status, category, count, provenance
+):
+    safe, requests = scan_fixture(
+        monkeypatch,
+        mode=mode,
+        fallback=fallback,
+        full_status=full_status,
+        reduced_outcome=reduced_outcome,
+    )
+    original_count = len(requests)
+    schema_scan = safe.query_generation.operation_analysis.schema_scan
+    introspection = schema_scan.introspection
+    endpoint = introspection.introspections[0]
+    queries = [
+        json.loads(r.content)["query"]
+        for r in requests
+        if r.method == "POST" and "__schema" in json.loads(r.content)["query"]
+    ]
+    assert queries == [MINIMAL_INTROSPECTION_QUERY, FULL_INTROSPECTION_QUERY] + (
+        [REDUCED_INTROSPECTION_QUERY] if count == 3 else []
+    )
+    assert endpoint.minimal_result.status is IntrospectionStatus.ENABLED
+    assert endpoint.full_response is not None
+    assert endpoint.status.value == ("endpoint_error" if fallback else "enabled")
+    assert endpoint.schema_retrieval_status.value == status
+    if status in {"blocked", "failed"}:
+        assert endpoint.selected_schema_response is None
+        assert schema_scan.schemas == ()
+        assert safe.executions == ()
+    elif status == "partial":
+        assert endpoint.selected_schema_response is endpoint.reduced_response
+        assert schema_scan.schemas[0].success
+    else:
+        assert endpoint.selected_schema_response is endpoint.full_response
+    evidence = introspection.introspection_evidence[0]
+    assert evidence.evidence_type is EvidenceType.INTROSPECTION_RESULT
+    if count == 3:
+        assert endpoint.fallback_reason.value == "depth_limit"
+        assert endpoint.reduced_result.status.value == category
+        assert "Query depth limit exceeded." in endpoint.full_result.reason
+        assert "Full restriction: depth_limit" in evidence.notes
+        assert "Reduced fallback attempted: yes" in evidence.notes
+        assert f"Reduced retrieval outcome: {category}" in evidence.notes
+        assert f"Schema retrieval: {status}" in evidence.notes
+    report = build_report(safe)
+    canonical = json.loads(render_report(report, ReportFormat.JSON))
+    assert canonical["report_schema_version"] == 2
+    projected = canonical["endpoints"][0]
+    assert projected["schema_retrieval_status"] == status
+    assert projected["schema_retrieval_category"] == category
+    assert projected["schema_retrieval_reason"] == endpoint.schema_retrieval_reason
+    assert projected["schema_retrieval_summary"] == endpoint.schema_retrieval_summary
+    assert report.evidence == safe.evidence
+    for width in (60, 120):
+        for renderer in (render_pre_active_context, render_completed_assessment):
+            output = StringIO()
+            renderer(Console(file=output, theme=CONSOLE_THEME, width=width), safe)
+            text = " ".join(output.getvalue().split())
+            if renderer is render_pre_active_context and mode is ScanMode.SAFE:
+                assert not text
+                continue
+            if provenance:
+                assert provenance in text
+                assert "Full retrieval" in text
+            else:
+                assert "fallback" not in text.lower()
+            assert "PRIVATE_ERROR_CANARY" not in text
+            assert "SCHEMA001_FAKE_SECRET" not in text
+            assert "__schema" not in text
+    for format in (ReportFormat.MARKDOWN, ReportFormat.HTML):
+        rendered = render_report(report, format)
+        if provenance:
+            assert provenance in rendered
+        else:
+            assert "fallback" not in rendered.lower()
+        if status == "blocked" and count == 3:
+            assert "Query depth limit exceeded" in rendered
+            assert "no schema selected" in rendered
+        if status == "partial":
+            assert "PARTIAL" in rendered and "coverage may be incomplete" in rendered
+        assert "SCHEMA001_FAKE_SECRET" not in rendered
+        assert rendered.count("Safety Notice") == 1
+        assert rendered.rfind("Safety Notice") > rendered.rfind("Introspection")
+    assert len(requests) == original_count
 
 
 @pytest.mark.parametrize("fallback", [False, True])

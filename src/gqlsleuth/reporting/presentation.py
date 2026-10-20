@@ -92,7 +92,7 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                         if item.schema_retrieval_status
                         else ()
                     ),
-                    paragraphs=(item.introspection_reason or "",),
+                    paragraphs=(item.schema_retrieval_reason or item.introspection_reason or "",),
                 )
                 for item in report.endpoints
                 if item.introspection_status
