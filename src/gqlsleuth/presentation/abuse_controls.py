@@ -8,6 +8,7 @@ from rich.text import Text
 
 from gqlsleuth.domain.abuse_controls import AbuseControlResult
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.priorities import priority_label
 from gqlsleuth.presentation.statuses import status_text, style_status_terms
 
@@ -18,37 +19,41 @@ def render_abuse_controls(
     _section(console, "Rate Limiting & Abuse Controls")
     console.print(Text(result.operator_policy))
     candidates = (result.selected,) if result.selected else result.candidates
-    for position, candidate in enumerate(candidates):
-        if position:
-            console.print()
-        console.print(
-            Text(
-                f"[{candidate.index}] {candidate.operation.kind.value.title()} "
-                f"{candidate.operation.name} — {candidate.endpoint}",
-                style="cyan",
-            )
-        )
-        console.print(priority_label(candidate.operation.priority))
-        console.print(
-            Text(
-                "Categories: "
-                + ", ".join(c.value.replace("_", " ") for c in candidate.operation.categories)
-            )
-        )
-        console.print(
-            style_status_terms(
-                f"Existing baseline: {candidate.baseline_status.value.upper()} / "
-                f"HTTP {candidate.baseline_http_status}. "
-                f"Planned repeats: {candidate.planned_attempts}."
-            )
-        )
-        if candidate.mutation_warning:
-            console.print(Text(candidate.mutation_warning, style="gql.warning"))
-        if result.selected and (preview or verbose):
-            _document(console, candidate.query)
+    groups = ((None, candidates),) if preview else endpoint_groups(candidates, lambda c: c.endpoint)
+    for endpoint, entries in groups:
+        if endpoint:
+            console.print(Text("Endpoint: " + endpoint, style="gql.metadata"))
+        for position, candidate in enumerate(entries):
+            if position:
+                console.print()
             console.print(
-                Text("Variables: " + json.dumps(candidate.variables, sort_keys=True, indent=2))
+                Text(
+                    f"[{candidate.index}] {candidate.operation.kind.value.title()} "
+                    f"{candidate.operation.name}" + (f" — {candidate.endpoint}" if preview else ""),
+                    style="cyan",
+                )
             )
+            console.print(priority_label(candidate.operation.priority))
+            console.print(
+                Text(
+                    "Categories: "
+                    + ", ".join(c.value.replace("_", " ") for c in candidate.operation.categories)
+                )
+            )
+            console.print(
+                style_status_terms(
+                    f"Existing baseline: {candidate.baseline_status.value.upper()} / "
+                    f"HTTP {candidate.baseline_http_status}. "
+                    f"Planned repeats: {candidate.planned_attempts}."
+                )
+            )
+            if candidate.mutation_warning:
+                console.print(Text(candidate.mutation_warning, style="gql.warning"))
+            if result.selected and (preview or verbose):
+                _document(console, candidate.query)
+                console.print(
+                    Text("Variables: " + json.dumps(candidate.variables, sort_keys=True, indent=2))
+                )
     if preview:
         console.print("Sequential exact repeats only; no concurrency, retries or threshold search.")
     else:

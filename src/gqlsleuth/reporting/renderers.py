@@ -14,6 +14,7 @@ from pydantic import BaseModel, JsonValue
 
 from gqlsleuth.domain.exceptions import ReportingError
 from gqlsleuth.reporting.differential import differential_sections
+from gqlsleuth.reporting.endpoint_context import group_endpoint_context
 from gqlsleuth.reporting.models import DifferentialReportContext, ReportContext, ReportFormat
 from gqlsleuth.reporting.presentation import human_sections
 
@@ -51,7 +52,9 @@ def render_report(context: ReportContext | DifferentialReportContext, format: Re
             if isinstance(context, DifferentialReportContext)
             else human_sections(context)
         )
-        return environment.get_template(name).render(sections=sections)
+        return environment.get_template(name).render(
+            sections=tuple(group_endpoint_context(section) for section in sections)
+        )
     except (TemplateError, OSError, TypeError, ValueError, RecursionError) as error:
         raise ReportingError(
             f"Could not render {format} report: {type(error).__name__}."

@@ -24,6 +24,7 @@ def subscription_sections(result: SubscriptionSecurityResult) -> tuple[ReportSec
             ReportEntry(
                 "Selected Subscription: " + plan.candidate.field.name,
                 details=(
+                    ("Endpoint", plan.candidate.endpoint),
                     ("WebSocket endpoint", plan.ws_url),
                     ("Policy", plan.policy.value.upper()),
                     ("Offered protocols", ", ".join(plan.offered_protocols)),
@@ -41,7 +42,8 @@ def subscription_sections(result: SubscriptionSecurityResult) -> tuple[ReportSec
         entries.append(
             ReportEntry(
                 "WebSocket observation",
-                details=(
+                details=((("Endpoint", result.plan.candidate.endpoint),) if result.plan else ())
+                + (
                     ("Protocol", str(attempt.negotiated_protocol)),
                     ("Connected", str(attempt.connected)),
                     ("ACK", str(attempt.acknowledged)),

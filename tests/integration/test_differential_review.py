@@ -331,6 +331,8 @@ def test_candidate_summary_shared_by_console_and_human_reports(controlled, multi
             assert row[2] in output
         if multiple_endpoints:
             assert "Endpoint" in output and other_endpoint in output
+            assert output.count("Endpoint: " + TARGET) == 1
+            assert output.count(other_endpoint) == 1
         else:
             assert f"Target endpoint: {TARGET}" in output
             assert output.count(TARGET) == 1
@@ -341,14 +343,24 @@ def test_candidate_summary_shared_by_console_and_human_reports(controlled, multi
         rendered = render_report(report, format)
         if format is ReportFormat.HTML:
             summary = rendered.split("<h2>Authorization Differential Review</h2>")[1]
-            summary = summary.split("</section>")[0]
-            candidate_table = re.findall(r"<table>.*?</table>", summary, re.S)[-1]
-            rows = re.findall(r"<tr>(.*?)</tr>", candidate_table, re.S)[1:]
+            summary = summary.split("<h2>Context:")[0]
+            tables = re.findall(r"<table>.*?</table>", summary, re.S)[1:]
+            rows = [row for t in tables for row in re.findall(r"<tr>(.*?)</tr>", t, re.S)[1:]]
             cells = tuple(
                 tuple(unescape(value) for value in re.findall(r"<td>(.*?)</td>", row))
                 for row in rows
             )
-            assert cells == table.rows
+            expected = (
+                tuple(
+                    row[:-1]
+                    for endpoint in table.endpoints
+                    for row in table.rows
+                    if row[-1] == endpoint
+                )
+                if multiple_endpoints
+                else table.rows
+            )
+            assert cells == expected
             assert "<h2>Context: empleado</h2>" in rendered
             assert "<h2>empleado ↔ soporte</h2>" in rendered
         else:
@@ -356,12 +368,16 @@ def test_candidate_summary_shared_by_console_and_human_reports(controlled, multi
             summary = summary.split("\n## ")[0]
             assert "| Contexts | Difference | Operation / observed states |" in summary
             for row in table.rows:
-                assert "| " + " | ".join(row) + " |" in unescape(summary).replace("\\", "")
+                cells = row[:-1] if multiple_endpoints else row
+                assert "| " + " | ".join(cells) + " |" in unescape(summary).replace("\\", "")
             assert "## Context: empleado" in rendered
             assert "## empleado ↔ soporte" in rendered
             assert all(line == line.rstrip() for line in summary.splitlines())
         if not multiple_endpoints:
             assert unescape(summary).replace("\\", "").count(TARGET) == 1
+        else:
+            for endpoint in table.endpoints:
+                assert unescape(summary).replace("\\", "").count(endpoint) == 1
     assert result == before and len(controlled[0]) == request_count
 
 

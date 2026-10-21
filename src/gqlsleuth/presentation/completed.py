@@ -17,10 +17,12 @@ from gqlsleuth.presentation.assessment import (
 )
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.console import _section, _table
+from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.priorities import style_priority_terms
 from gqlsleuth.presentation.statuses import status_text, style_status_terms
 from gqlsleuth.reporting.assessment import grouped_technical_sections
 from gqlsleuth.reporting.builder import build_report
+from gqlsleuth.reporting.endpoint_context import group_endpoint_context
 from gqlsleuth.reporting.presentation import ReportSection, technical_sections
 
 
@@ -43,24 +45,24 @@ def _items(
     if not items:
         return
     _section(console, title)
-    table = _table("Result / review", "Operation")
-    multiple = len({i.endpoint for i in items if i.endpoint}) > 1
-    for item in items if cap is None else items[:cap]:
-        prefix = ""
-        if item.state in {"VIOLATION", "UNRESOLVED"}:
-            prefix += item.capability + " — "
-        table.add_row(
-            Text.assemble(
-                status_text(item.state) if title == "Manual Review" else "",
-                ": " if title == "Manual Review" else "",
-                style_priority_terms(prefix + item.label),
-            ),
-            Text(
-                item.operation + ("\n" + item.endpoint if multiple and item.endpoint else ""),
-                style="gql.metadata",
-            ),
-        )
-    console.print(table)
+    visible = items if cap is None else items[:cap]
+    for endpoint, entries in endpoint_groups(visible, lambda item: item.endpoint):
+        if endpoint:
+            console.print(Text("Endpoint: " + endpoint, style="gql.metadata"))
+        table = _table("Result / review", "Operation")
+        for item in entries:
+            prefix = ""
+            if item.state in {"VIOLATION", "UNRESOLVED"}:
+                prefix += item.capability + " — "
+            table.add_row(
+                Text.assemble(
+                    status_text(item.state) if title == "Manual Review" else "",
+                    ": " if title == "Manual Review" else "",
+                    style_priority_terms(prefix + item.label),
+                ),
+                Text(item.operation, style="gql.metadata"),
+            )
+        console.print(table)
     if cap is not None and len(items) > cap:
         console.print(
             f"{len(items) - cap} additional {title.lower()} items not shown; "
@@ -130,7 +132,11 @@ def render_completed_assessment(
 
 def _render_technical(console: Console, section: ReportSection) -> None:
     """Reuse report capability projections and the existing bounded response representation."""
-    _section(console, section.title)
+    section = group_endpoint_context(section)
+    if section.title:
+        _section(console, section.title)
+    if section.endpoint:
+        console.print(Text("Endpoint: " + section.endpoint, style="gql.metadata"))
     for paragraph in section.paragraphs:
         console.print(Text(capability_wording(paragraph)))
     _rows(console, section.rows)

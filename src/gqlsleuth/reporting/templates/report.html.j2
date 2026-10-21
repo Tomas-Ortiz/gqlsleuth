@@ -35,7 +35,12 @@
 <summary>{{ section.title }}</summary>
 {% else %}
   <section>
+{% if section.title %}
     <h{{ level }}>{{ section.title }}</h{{ level }}>
+{% endif %}
+{% endif %}
+{% if section.endpoint %}
+    <p><strong>Endpoint:</strong> {{ section.endpoint }}</p>
 {% endif %}
 {% for paragraph in section.paragraphs %}
     <p>{{ paragraph | brief }}</p>

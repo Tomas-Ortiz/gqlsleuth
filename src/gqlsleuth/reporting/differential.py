@@ -80,8 +80,9 @@ def differential_sections(report: DifferentialReportContext) -> tuple[ReportSect
             for endpoint in scan.endpoints:
                 entries.append(
                     ReportEntry(
-                        endpoint.endpoint,
+                        "GraphQL surface",
                         details=(
+                            ("Endpoint", endpoint.endpoint),
                             (
                                 "GraphQL confidence",
                                 endpoint.confidence.value.upper()

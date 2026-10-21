@@ -1,6 +1,7 @@
 """Human-only assessment hierarchy. Canonical report models/JSON stay untouched."""
 
 from gqlsleuth.presentation.assessment import build_assessment
+from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.reporting.models import ReportContext
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection, technical_sections
 
@@ -135,9 +136,18 @@ def assessment_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                     "Review interest and structural candidates are not vulnerability "
                     "severity or Findings.",
                 ),
-                table_headers=("Kind", "Capability", "Operation", "Review"),
-                table_rows=tuple(
-                    (i.state, i.capability, i.operation, i.label) for i in summary.manual_review
+                children=tuple(
+                    ReportSection(
+                        "",
+                        endpoint=endpoint,
+                        table_headers=("Kind", "Capability", "Operation", "Review"),
+                        table_rows=tuple(
+                            (i.state, i.capability, i.operation, i.label) for i in items
+                        ),
+                    )
+                    for endpoint, items in endpoint_groups(
+                        summary.manual_review, lambda item: item.endpoint
+                    )
                 ),
             )
         )

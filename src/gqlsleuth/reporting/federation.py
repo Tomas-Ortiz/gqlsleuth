@@ -11,8 +11,9 @@ def federation_sections(result: FederationSecurityResult) -> tuple[ReportSection
     for candidate in result.candidates:
         entries.append(
             ReportEntry(
-                candidate.endpoint,
+                "Federation surface",
                 details=(
+                    ("Endpoint", candidate.endpoint),
                     ("Service available", str(candidate.service_available)),
                     ("Entities available", str(candidate.entities_available)),
                     ("Entity types", ", ".join(candidate.possible_types) or "None"),
@@ -29,7 +30,10 @@ def federation_sections(result: FederationSecurityResult) -> tuple[ReportSection
                     entries.append(
                         ReportEntry(
                             "Selected " + plan.probe.value,
-                            details=(("Policy", plan.expected.value.upper()),),
+                            details=(
+                                ("Endpoint", candidate.endpoint),
+                                ("Policy", plan.expected.value.upper()),
+                            ),
                             request_blocks=(
                                 ("graphql", plan.query),
                                 ("json", json.dumps(plan.variables, sort_keys=True, indent=2)),
@@ -38,6 +42,7 @@ def federation_sections(result: FederationSecurityResult) -> tuple[ReportSection
                     )
     for attempt in result.attempts:
         details = [
+            ("Endpoint", attempt.endpoint or ""),
             ("Policy", attempt.expected.value.upper()),
             ("Outcome", attempt.outcome.value.upper()),
             (

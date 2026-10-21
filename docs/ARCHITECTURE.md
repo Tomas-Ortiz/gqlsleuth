@@ -3707,6 +3707,13 @@ Security Findings, followed by validation/review and full AI interpretation when
 technical groups. HTML uses native closed `details`; Markdown uses nested headings. Safety Notice
 is final exactly once. Named-context differential presentation remains pairwise.
 
+Human console and Markdown/HTML sections show shared endpoint context once per group,
+rather than on every child item. Multiple endpoints use first-seen group order and retain
+item order within each group; differential context labels and exceptional endpoint references
+remain explicit. Shared human-only projections handle this grouping without removing endpoint
+fields from canonical JSON, domain records or Evidence. Interactive ACTIVE consent previews
+retain explicit target context before selection and confirmation.
+
 Canonical JSON/model/evidence relationships and Phase 31 AIContext, prompts, validation, serialized
 Ollama request and inference count are unchanged. No new networking or dependencies. Exact selected
 ACTIVE requests remain visible before each separate default-NO consent, even without verbose.

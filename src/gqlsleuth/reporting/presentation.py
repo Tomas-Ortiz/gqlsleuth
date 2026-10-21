@@ -42,6 +42,7 @@ class ReportSection:
     table_rows: tuple[tuple[str, ...], ...] = ()
     children: tuple["ReportSection", ...] = ()
     collapsed: bool = False
+    endpoint: str | None = None
 
 
 def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
@@ -225,7 +226,9 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 "Errors and Limitations",
                 entries=tuple(
                     ReportEntry(
-                        f"{item.stage}: {item.operation_name or item.endpoint}",
+                        f"{item.stage}: {item.operation_name}"
+                        if item.operation_name
+                        else item.stage,
                         details=(
                             ("Endpoint", item.endpoint),
                             (
@@ -458,12 +461,17 @@ def security_review_section(
                 if review.analyzed_endpoints
                 else "Structural review was not performed: no parsed schema.",
             )
-        )
-        + tuple(
-            item.endpoint + ": " + capability_wording(item.reason) for item in review.limitations
         ),
         rows=(("Structural review candidates", str(len(review.candidates))),),
-        entries=entries,
+        entries=entries
+        + tuple(
+            ReportEntry(
+                "Limitation",
+                details=(("Endpoint", item.endpoint),),
+                paragraphs=(capability_wording(item.reason),),
+            )
+            for item in review.limitations
+        ),
     )
 
 

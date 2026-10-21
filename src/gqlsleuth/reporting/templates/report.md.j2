@@ -1,8 +1,14 @@
 # GQLSleuth Assessment
 
 {% macro render_section(section, level=2) %}
+{% if section.title %}
 {{ "#" * level }} {{ section.title }}
 
+{% endif %}
+{% if section.endpoint %}
+Endpoint: {{ section.endpoint | markdown_text }}
+
+{% endif %}
 {% for paragraph in section.paragraphs %}
 {{ paragraph | markdown_text }}
 

@@ -43,6 +43,7 @@ def abuse_control_sections(result: AbuseControlResult) -> tuple[ReportSection, .
             ReportEntry(
                 f"Attempt {attempt.attempt_index}",
                 details=(
+                    ("Endpoint", attempt.operation.endpoint),
                     ("Outcome", attempt.outcome.value.upper()),
                     ("Execution status", attempt.repeat_status.value.upper()),
                     (
@@ -102,6 +103,7 @@ def abuse_control_sections(result: AbuseControlResult) -> tuple[ReportSection, .
                     ReportEntry(
                         "Rate limiting / abuse-control weakness",
                         details=(
+                            ("Endpoint", item.operation.endpoint),
                             ("Operation", f"{item.operation.kind.value} {item.operation.name}"),
                             (
                                 "Planned / completed",

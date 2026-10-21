@@ -34,6 +34,7 @@ from gqlsleuth.domain.security_review import (
 from gqlsleuth.infrastructure.http import HttpResponse
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.differential import present_differential
+from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.object_lookup import (
     FOLLOW_UP_NOTICE,
     ObjectLookupFollowUpHint,
@@ -866,17 +867,20 @@ def render_differential(
             "Completed" if context.scan else f"Failed: {context.error_code}",
         )
     _render_table(console, summary)
-    table = _table(*candidates.headers)
     rows = candidates.rows if verbose else candidates.rows[:10]
     shown = len(rows)
-    for row in rows:
-        table.add_row(
-            *(
-                Text(value, style="gql.metadata" if index in (0, 3) else "")
-                for index, value in enumerate(row)
+    multiple = len(candidates.endpoints) > 1
+    for endpoint, entries in endpoint_groups(rows, lambda row: row[-1] if multiple else None):
+        if endpoint:
+            console.print(Text("Endpoint: " + endpoint, style="gql.metadata"))
+        table = _table(*(candidates.headers[:-1] if multiple else candidates.headers))
+        for row in entries:
+            table.add_row(
+                *(
+                    Text(value, style="gql.metadata" if index == 0 else "")
+                    for index, value in enumerate(row[:-1] if multiple else row)
+                )
             )
-        )
-    if shown:
         _render_table(console, table)
     if not verbose and sum(len(pair.candidates) for pair in result.pairs) > shown:
         console.print("Additional candidates available with --verbose or in reports.")
@@ -945,43 +949,50 @@ def render_security_review(
     console.print(f"{len(candidates)} structural review candidate(s).")
     console.print(SECURITY_REVIEW_NOTICE, markup=False, style="gql.secondary")
     visible = candidates if verbose else candidates[:10]
-    table = _table("Type", "Subject", "Review")
-    for item in visible:
-        table.add_row(
-            candidate_label(item.candidate_type),
-            Text(item.subject),
-            Text(candidate_summary(item)),
-        )
-    if visible:
-        _render_table(console, table)
+    visible_limits = limitations if verbose else limitations[:3]
+    endpoints = dict.fromkeys(
+        [item.endpoint for item in visible] + [item.endpoint for item in visible_limits]
+    )
+    for group_endpoint in endpoints:
+        entries = tuple(item for item in visible if item.endpoint == group_endpoint)
+        console.print(Text("Endpoint: " + group_endpoint, style="gql.metadata"))
+        table = _table("Type", "Subject", "Review")
+        for item in entries:
+            table.add_row(
+                candidate_label(item.candidate_type),
+                Text(item.subject),
+                Text(candidate_summary(item)),
+            )
+        if entries:
+            _render_table(console, table)
+        if verbose:
+            for item in entries:
+                console.print()
+                console.print(Text(item.subject, style="gql.metadata"))
+                console.print(capability_wording(item.deterministic_reason), markup=False)
+                if item.related_operation:
+                    console.print(priority_label(item.related_operation.priority))
+                    console.print(
+                        "Categories: "
+                        + ", ".join(
+                            category.value for category in item.related_operation.categories
+                        ),
+                        markup=False,
+                    )
+                for fact in candidate_facts(item):
+                    console.print(fact, markup=False)
+                console.print(
+                    "Manual review: " + capability_wording(item.review_guidance), markup=False
+                )
+                for hint in follow_ups:
+                    if hint.endpoint == item.endpoint and item.subject == f"query {hint.operation}":
+                        console.print("Suggested follow-up:", style="gql.section")
+                        for label, command in follow_up_commands(hint):
+                            console.print(Text(f"  {label}:"))
+                            console.print(Text(f"    {command}", style="gql.metadata"))
+                        console.print(Text(FOLLOW_UP_NOTICE), style="gql.secondary")
+        for limitation in visible_limits:
+            if limitation.endpoint == group_endpoint:
+                console.print(Text(capability_wording(limitation.reason)), style="gql.secondary")
     if len(candidates) > len(visible):
         console.print("Additional structural candidates are available with --verbose or reports.")
-    if verbose:
-        for item in visible:
-            console.print()
-            console.print(Text(item.endpoint + " / " + item.subject, style="gql.metadata"))
-            console.print(capability_wording(item.deterministic_reason), markup=False)
-            if item.related_operation:
-                console.print(priority_label(item.related_operation.priority))
-                console.print(
-                    "Categories: "
-                    + ", ".join(category.value for category in item.related_operation.categories),
-                    markup=False,
-                )
-            for fact in candidate_facts(item):
-                console.print(fact, markup=False)
-            console.print(
-                "Manual review: " + capability_wording(item.review_guidance), markup=False
-            )
-            for hint in follow_ups:
-                if hint.endpoint == item.endpoint and item.subject == f"query {hint.operation}":
-                    console.print("Suggested follow-up:", style="gql.section")
-                    for label, command in follow_up_commands(hint):
-                        console.print(Text(f"  {label}:"))
-                        console.print(Text(f"    {command}", style="gql.metadata"))
-                    console.print(Text(FOLLOW_UP_NOTICE), style="gql.secondary")
-    for limitation in limitations[:3] if not verbose else limitations:
-        console.print(
-            Text(limitation.endpoint + ": " + capability_wording(limitation.reason)),
-            style="gql.secondary",
-        )

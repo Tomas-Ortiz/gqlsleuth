@@ -27,7 +27,8 @@ def authentication_sections(result: AuthenticationSecurityResult) -> tuple[Repor
         entries.append(
             ReportEntry(
                 PROBE_LABELS[execution.probe_type],
-                details=(
+                details=((("Endpoint", selected.endpoint),) if selected else ())
+                + (
                     ("Observed", outcome_label(evidence.outcome) if evidence else "NOT_ATTEMPTED"),
                     (
                         "Policy",

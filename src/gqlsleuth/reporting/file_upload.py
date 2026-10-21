@@ -43,6 +43,7 @@ def file_upload_sections(result: FileUploadSecurityResult) -> tuple[ReportSectio
             ReportEntry(
                 attempt.probe.value.replace("_", " ").title(),
                 details=(
+                    ("Endpoint", attempt.endpoint or ""),
                     ("Expected", attempt.expected.value.upper()),
                     ("Outcome", attempt.outcome.value.upper()),
                     ("Evaluation", attempt.evaluation.value.upper()),
@@ -80,6 +81,7 @@ def file_upload_sections(result: FileUploadSecurityResult) -> tuple[ReportSectio
                         "File upload validation weakness",
                         paragraphs=(f.reason, f.limitation),
                         details=(
+                            ("Endpoint", f.operation.endpoint),
                             ("Operation", f.operation.name),
                             ("Upload path", ".".join(f.case.path)),
                             ("Probe", f.probe.value),

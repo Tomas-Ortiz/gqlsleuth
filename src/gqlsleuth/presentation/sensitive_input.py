@@ -13,6 +13,7 @@ from gqlsleuth.domain.sensitive_input import (
     SensitiveInputValidationResult,
 )
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.statuses import style_status_terms
 
 
@@ -31,45 +32,51 @@ def render_sensitive_review(
     console.print(
         f"{len(candidates)} schema-derived review candidate(s); zero additional requests."
     )
-    table = Table(box=None, padding=(0, 1))
-    for title in ("Mutation", "Input field", "Type", "Review category"):
-        table.add_column(title)
-    for item in candidates if verbose else candidates[:10]:
-        table.add_row(
-            item.operation,
-            f"{item.argument}.{item.field}",
-            item.input_type,
-            item.category.value.replace("_", " "),
-        )
-    console.print(table)
-    if verbose:
-        for item in candidates:
-            console.print()
-            console.print(
-                Text(
-                    f"{item.endpoint} / mutation {item.operation} / {item.argument}.{item.field}",
-                    style="gql.metadata",
-                )
+    visible = candidates if verbose else candidates[:10]
+    for endpoint, items in endpoint_groups(visible, lambda item: item.endpoint):
+        if endpoint:
+            console.print(Text("Endpoint: " + endpoint, style="gql.metadata"))
+        table = Table(box=None, padding=(0, 1))
+        for title in ("Mutation", "Input field", "Type", "Review category"):
+            table.add_column(title)
+        for item in items:
+            table.add_row(
+                item.operation,
+                f"{item.argument}.{item.field}",
+                item.input_type,
+                item.category.value.replace("_", " "),
             )
-            console.print(Text(item.reason))
-            for fact in item.supporting_facts:
-                console.print(Text(fact))
-            if item.case_template:
-                console.print("Suggested follow-up: --mode active --sensitive-input-review")
+        console.print(table)
+        if verbose:
+            for item in items:
+                console.print()
                 console.print(
-                    Text(f'  --sensitive-input-case "{item.case_template}"', style="gql.metadata")
+                    Text(
+                        f"mutation {item.operation} / {item.argument}.{item.field}",
+                        style="gql.metadata",
+                    )
                 )
-                if item.target_template:
+                console.print(Text(item.reason))
+                for fact in item.supporting_facts:
+                    console.print(Text(fact))
+                if item.case_template:
+                    console.print("Suggested follow-up: --mode active --sensitive-input-review")
                     console.print(
                         Text(
-                            f'  --sensitive-input-target "{item.target_template}"',
-                            style="gql.metadata",
+                            f'  --sensitive-input-case "{item.case_template}"', style="gql.metadata"
                         )
                     )
-                console.print(
-                    "Supply the exact value and target; schema hints do not establish "
-                    "valid runtime values."
-                )
+                    if item.target_template:
+                        console.print(
+                            Text(
+                                f'  --sensitive-input-target "{item.target_template}"',
+                                style="gql.metadata",
+                            )
+                        )
+                    console.print(
+                        "Supply the exact value and target; schema hints do not establish "
+                        "valid runtime values."
+                    )
     console.print(Text(SENSITIVE_REVIEW_NOTICE))
 
 
