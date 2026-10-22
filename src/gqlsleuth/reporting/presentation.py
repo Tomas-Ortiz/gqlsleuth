@@ -126,11 +126,12 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             ),
         ),
         ReportSection(
-            "Security Review Candidates",
+            "Operation Review Candidates",
             paragraphs=(
                 "Priority indicates manual-review interest, not vulnerability severity. "
                 "The existing operation-analysis order and rule matches are preserved.",
-            ),
+            )
+            + (("None recorded.",) if not report.review_candidates else ()),
             entries=tuple(
                 ReportEntry(
                     f"{item.kind.value.title()} {item.name}",
@@ -673,6 +674,8 @@ def _mutation_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ()) 
 
 
 def _human_label(value: str) -> str:
+    if value == "security_review_candidate_count":
+        return "Operation review candidate count"
     label = value.replace("_", " ").capitalize()
     return label.replace("Graphql", "GraphQL").replace("graphql", "GraphQL")
 

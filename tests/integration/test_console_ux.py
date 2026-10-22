@@ -206,7 +206,7 @@ def test_compact_and_verbose_leave_results_requests_and_all_report_formats_ident
     assert compact.exit_code == verbose.exit_code == long_verbose.exit_code == 0
     assert "Why:" not in compact.stdout
     assert "query {" not in compact.stdout
-    assert "Manual review candidates" in compact.stdout
+    assert "Prioritized review items" in compact.stdout
     assert "Use --verbose for technical details" in compact.stdout
     assert "Interest score" in verbose.stdout and "Generated Queries" in verbose.stdout
     assert "canonical JSON report" in verbose.stdout

@@ -364,7 +364,7 @@ def test_safe_named_review_and_disabled_no_chaining(controlled, monkeypatch, tmp
         )
         assert result.exit_code == 0, (result.exception, result.output)
         assert (
-            "Sensitive Input Review" if "--auth-context" in options else "Manual Review"
+            "Sensitive Input Review" if "--auth-context" in options else "Prioritized Review"
         ) in result.output
         assert "Sensitive Input Validation" not in result.output
     for file in tmp_path.iterdir():

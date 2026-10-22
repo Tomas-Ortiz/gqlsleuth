@@ -12,6 +12,8 @@ from gqlsleuth.presentation.assessment import (
     DEFAULT_MAX_FINDINGS,
     DEFAULT_MAX_LIMITATIONS,
     DEFAULT_MAX_MANUAL_REVIEW_ITEMS,
+    PRIORITIZED_REVIEW_NOTICE,
+    PRIORITIZED_REVIEW_TITLE,
     AssessmentItem,
     build_assessment,
 )
@@ -47,6 +49,8 @@ def _items(
     if not items:
         return
     _section(console, title)
+    if title == PRIORITIZED_REVIEW_TITLE:
+        console.print(PRIORITIZED_REVIEW_NOTICE, style="gql.secondary")
     visible = items if cap is None else items[:cap]
     for endpoint, entries in endpoint_groups(visible, lambda item: item.endpoint):
         if endpoint:
@@ -58,8 +62,8 @@ def _items(
                 prefix += item.capability + " — "
             table.add_row(
                 Text.assemble(
-                    status_text(item.state) if title == "Manual Review" else "",
-                    ": " if title == "Manual Review" else "",
+                    status_text(item.state) if title == PRIORITIZED_REVIEW_TITLE else "",
+                    ": " if title == PRIORITIZED_REVIEW_TITLE else "",
                     style_priority_terms(prefix + item.label),
                 ),
                 Text(item.operation, style="gql.metadata"),
@@ -101,7 +105,7 @@ def render_completed_assessment(
     )
     _items(
         console,
-        "Manual Review",
+        PRIORITIZED_REVIEW_TITLE,
         view.manual_review,
         MAX_HUMAN_INVENTORY_ITEMS if verbose else DEFAULT_MAX_MANUAL_REVIEW_ITEMS,
     )

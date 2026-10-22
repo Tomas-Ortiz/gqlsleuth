@@ -62,6 +62,7 @@ def test_summary_counts_only_existing_facts_in_explicit_order(whole):
     assert summary.unresolved_checks == 0
     assert [item.state for item in summary.manual_review[:3]] == ["VIOLATION"] * 3
     assert all(item.state == "REVIEW" for item in summary.manual_review[3:])
+    assert summary.review_candidate_count == len(summary.manual_review) - 3
     caps = [name for name, _ in summary.capabilities]
     assert caps == [name for name in CAPABILITY_ORDER if name in caps]
     assert ("Query Multiplicity", "OBSERVED") in summary.capabilities
@@ -266,7 +267,7 @@ def test_caps_report_exact_omissions_and_verbose_is_bounded(whole):
         ),
     )
     view = build_assessment(build_report(expanded))
-    assert f"Showing 8 of {len(view.manual_review)} manual review items" in capture(expanded)
+    assert f"Showing 8 of {len(view.manual_review)} prioritized review items" in capture(expanded)
 
 
 @pytest.mark.parametrize("format", [ReportFormat.MARKDOWN, ReportFormat.HTML])

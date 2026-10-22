@@ -463,7 +463,7 @@ def test_rendered_titles_and_tables_use_structural_styles(execution_views, ai_vi
     render_active_execution(console, active)
     render_ai(console, ai_view, verbose=True)
     assert titles == [
-        "Security Review",
+        "Operation Review Candidates",
         "Generated Queries",
         "Query Execution",
         "Active Mutation candidates:",
@@ -487,7 +487,7 @@ def test_rendered_titles_and_tables_use_structural_styles(execution_views, ai_vi
 def test_structural_console_spacing(execution_views, ai_view, width):
     safe, active = execution_views
     compact = capture(render_scan, safe, width=width)
-    for title in ("Security Review", "Generated Queries", "Query Execution"):
+    for title in ("Operation Review Candidates", "Generated Queries", "Query Execution"):
         assert_separated(compact, title)
     assert re.search(r"\n\n +Operation +Outcome", compact)
     assert len(compact.splitlines()) < 65

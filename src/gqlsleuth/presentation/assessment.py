@@ -15,6 +15,13 @@ DEFAULT_MAX_MANUAL_REVIEW_ITEMS = 8
 DEFAULT_MAX_LIMITATIONS = 5
 DEFAULT_MAX_AI_INSIGHTS = 3
 
+PRIORITIZED_REVIEW_TITLE = "Prioritized Review"
+PRIORITIZED_REVIEW_NOTICE = (
+    "The review-item count covers structural/sensitive-input candidates and CRITICAL/HIGH-interest "
+    "operations not already represented elsewhere. This curated view also includes policy "
+    "violations and attempted unresolved checks; detailed candidate sets may overlap."
+)
+
 CAPABILITY_ORDER = (
     "Authentication & Tokens",
     "Object Authorization",
@@ -71,7 +78,7 @@ class AssessmentPresentationSummary:
             ("Additional policy violations", str(self.additional_policy_violations)),
             ("Scoped controls observed", str(self.scoped_controls_observed)),
             ("Unresolved checks", str(self.unresolved_checks)),
-            ("Manual review candidates", str(self.review_candidate_count)),
+            ("Prioritized review items", str(self.review_candidate_count)),
         )
 
 
@@ -224,7 +231,7 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
         )
     if any(e.state == "UNRESOLVED" for e in events):
         limitations.append(
-            "Some security checks remain unresolved; see Manual Review and technical details."
+            "Some security checks remain unresolved; see Prioritized Review and technical details."
         )
     for result in (
         report.multiplicity,

@@ -193,7 +193,12 @@ The assessment separates conclusions from observations and missing information:
 | Additional policy violations | Observed contradictions of operator-supplied policy that are intentionally not represented as Findings. Violations already represented by a Finding are not counted again here. |
 | Scoped controls observed | Enforcement observed for the exact tested request/case. Not a global security guarantee. |
 | Unresolved checks | Enabled checks whose retained outcomes cannot establish expected behavior, such as ambiguous errors, unusable baselines or timeouts. |
-| Manual Review | Structural/operation review candidates and relevant unresolved or policy observations requiring tester analysis. |
+| Prioritized Review | Curated analyst view: structural/sensitive-input review, unrepresented CRITICAL/HIGH-interest operations, policy violations and attempted unresolved checks. Its review-item count covers the review candidates, not the additional violation/unresolved rows. |
+| Operation Review Candidates | Complete set of operations with positive deterministic review-interest scores. |
+| Structural review candidates | Schema-derived review candidates, independent of operation-interest scoring. |
+
+These candidate sets may overlap; their counts are not additive. Human display limits do not
+change their membership or the prioritized review-item count.
 
 **Review interest is not vulnerability severity.** CRITICAL/HIGH/MEDIUM/LOW/INFORMATIONAL
 priorities rank manual-review interest, not exploitability. Introspection being enabled or an

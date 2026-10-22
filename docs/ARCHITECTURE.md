@@ -1561,7 +1561,7 @@ renderers still own exact pre-send consent previews; every independent default-N
 remains in its original workflow position. Application/domain modules remain independent of Rich.
 
 Default output presents a compact GraphQL overview, distinct security-result counts, existing
-Findings, capped Manual Review, Query outcome aggregates, attempted Mutation statuses and relevant
+Findings, capped Prioritized Review, Query outcome aggregates, attempted Mutation statuses and relevant
 limitations. Response bodies and detailed capability sections move to grouped verbose output.
 Default AI shows Interpretive Summary and at most three global insights; verbose and reports
 retain all validated AI sections. Report paths remain grouped by format. The Phase 32 roadmap
@@ -3701,12 +3701,19 @@ schema review candidates. No severity, grade, score or global protection conclus
 Capability order is explicit: Authentication & Tokens, Object Authorization, IDOR / BOLA, Mutation
 Authorization, Sensitive Inputs, Rate Limiting & Abuse Controls, File Upload Security, Federation
 Security, Subscriptions & WebSocket, Query Multiplicity, Query Depth, Sequential Object Discovery.
-Within each source, retained result order is preserved. Structural candidates appear in Manual
-Review. Default caps are 10 Findings, 8 Manual Review items, 5 limitations and 3 AI insights;
-omissions are counted explicitly. Verbose summary collections are capped at 20 items. Manual Review prioritizes
+Within each source, retained result order is preserved. Structural candidates appear in Prioritized
+Review. Default caps are 10 Findings, 8 Prioritized Review items, 5 limitations and 3 AI insights;
+omissions are counted explicitly. Verbose summary collections are capped at 20 items. Prioritized Review prioritizes
 additional policy violations, unresolved attempted checks, structural candidates, then ordinary
 CRITICAL/HIGH-interest operations not already represented more strongly. Findings preserve
 workflow/source order rather than receiving a new severity ranking.
+
+The human metric **Prioritized review items** counts structural/sensitive-input items plus
+unrepresented CRITICAL/HIGH-interest operations; it excludes policy-violation and attempted
+unresolved rows also shown in that view. **Operation Review Candidates** contains the complete
+positive-score operation set, while **Structural review candidates** counts the separate
+schema-derived set. These collections can overlap and their counts are not additive. Human
+labels do not rename canonical `security_review_candidate_count` or change report schema version 2.
 
 Verbose output and human reports group Discovery & Schema, Attack Surface, Operations & Execution,
 Authentication & Authorization, GraphQL Runtime Controls, Specialized Surfaces and Evidence /

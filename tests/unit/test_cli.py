@@ -311,7 +311,7 @@ def test_scan_command_runs_safe_execution_workflow() -> None:
     assert "GraphQL endpoints 1 confirmed / probable" in output
     assert "Introspection ENABLED: 1" in output
     assert "Queries 2 Mutations 1 Subscriptions 0" in output
-    assert "Manual Review" in output and "resetPassword" in output
+    assert "Prioritized Review" in output and "resetPassword" in output
     assert "HIGH review interest" in output
     assert "query { exportUsers }" not in output
     assert "Deterministic test terminology" not in output

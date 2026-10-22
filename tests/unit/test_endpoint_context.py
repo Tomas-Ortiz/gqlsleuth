@@ -54,7 +54,7 @@ def views(phase_ten_scan, monkeypatch):
 @pytest.mark.parametrize(
     "title",
     [
-        "Security Review Candidates",
+        "Operation Review Candidates",
         "GraphQL Security Review",
         "Generated Queries",
         "Safe Query Execution",
@@ -167,7 +167,9 @@ def test_compact_manual_review_uses_visible_endpoint_groups(width):
         for name, endpoint in (("first", ENDPOINT), ("other", OTHER), ("last", ENDPOINT))
     )
     output = StringIO()
-    _items(Console(file=output, width=width, theme=CONSOLE_THEME), "Manual Review", items, None)
+    _items(
+        Console(file=output, width=width, theme=CONSOLE_THEME), "Prioritized Review", items, None
+    )
     text = " ".join(output.getvalue().split())
     assert text.count(ENDPOINT) == text.count(OTHER) == 1
     assert text.index(ENDPOINT) < text.index("first") < text.index("last") < text.index(OTHER)

@@ -420,7 +420,7 @@ def _render_schema(console: Console, result: EndpointSchemaResult, *, verbose: b
 def _render_analysis(
     console: Console, result: EndpointOperationAnalysisResult, *, verbose: bool
 ) -> None:
-    _section(console, "Security Review")
+    _section(console, "Operation Review Candidates")
     if not result.success:
         render_error(
             console, result.error_message or "Unknown analysis error.", label="Analysis FAILED"
@@ -428,7 +428,8 @@ def _render_analysis(
         return
     candidates = result.review_candidates
     console.print(
-        f"{len(result.operations)} root operation(s); {len(candidates)} review candidate(s)."
+        f"{len(result.operations)} root operation(s); "
+        f"{len(candidates)} operation review candidate(s)."
     )
     if not candidates:
         console.print(
@@ -447,7 +448,7 @@ def _render_analysis(
     _render_table(console, table)
     if len(visible) < len(candidates):
         console.print(
-            f"... {len(candidates) - len(visible)} additional review candidate(s); "
+            f"... {len(candidates) - len(visible)} additional operation review candidate(s); "
             "use --verbose or a report for details.",
             style="gql.secondary",
         )

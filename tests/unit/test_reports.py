@@ -204,7 +204,7 @@ MAJOR_SECTIONS = [
     "GraphQL Discovery and Confirmation",
     "Introspection",
     "Schema Summary",
-    "Security Review Candidates",
+    "Operation Review Candidates",
     "Generated Queries",
     "Safe Query Execution",
     "Evidence Summary",
@@ -261,7 +261,7 @@ def test_active_human_reports_show_executed_mutation_documents(report_results, f
 def test_human_sections_do_not_repeat_rule_or_mutation_reasons(report_results):
     active = build_report(report_results[1])
     sections = {section.title: section for section in technical_sections(active)}
-    review_entry = sections["Security Review Candidates"].entries[0]
+    review_entry = sections["Operation Review Candidates"].entries[0]
     review_candidate = active.review_candidates[0]
     assert len(review_entry.paragraphs) == len(review_candidate.matched_rules)
     assert all(reason not in review_entry.paragraphs for reason in review_candidate.reasons)

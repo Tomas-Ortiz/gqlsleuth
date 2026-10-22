@@ -1,6 +1,10 @@
 """Human-only assessment hierarchy. Canonical report models/JSON stay untouched."""
 
-from gqlsleuth.presentation.assessment import build_assessment
+from gqlsleuth.presentation.assessment import (
+    PRIORITIZED_REVIEW_NOTICE,
+    PRIORITIZED_REVIEW_TITLE,
+    build_assessment,
+)
 from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.reporting.models import ReportContext
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection, technical_sections
@@ -19,7 +23,7 @@ TECHNICAL_GROUPS = (
     (
         "Attack Surface",
         (
-            "Security Review Candidates",
+            "Operation Review Candidates",
             "GraphQL Security Review",
             "Sensitive Input Review",
             "Generated Queries",
@@ -131,8 +135,9 @@ def assessment_sections(report: ReportContext) -> tuple[ReportSection, ...]:
     if summary.manual_review:
         sections.append(
             ReportSection(
-                "Manual Review",
+                PRIORITIZED_REVIEW_TITLE,
                 paragraphs=(
+                    PRIORITIZED_REVIEW_NOTICE,
                     "Review interest and structural candidates are not vulnerability "
                     "severity or Findings.",
                 ),
