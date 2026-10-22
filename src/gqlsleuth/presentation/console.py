@@ -706,7 +706,7 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
         console.print(
             f"AI assistance {result.status.value}: {result.error_message}",
             markup=False,
-            style="gql.warning",
+            style="gql.secondary" if result.status is AIAnalysisStatus.NOT_RUN else "gql.warning",
         )
         console.print("Deterministic scan completed normally.")
         return

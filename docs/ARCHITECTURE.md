@@ -1214,6 +1214,7 @@ The application flow is strictly one-way:
 Completed SafeExecutionScanResult | ActiveExecutionScanResult
     → application.ai_assistance.interpret_completed_scan
     → ai.context.build_ai_context → AIContext
+    → deterministic context eligibility (otherwise NOT_RUN, zero provider calls)
     → infrastructure.ollama.OllamaClient (at most ten local POST /api/chat attempts)
     → validated AIInterpretationResult
     → CLI and optional reports
@@ -1225,6 +1226,13 @@ decisions, operation selection, confirmation, safety gates, request limits/order
 scores/priorities, execution classifications, or any later scanner action. The deterministic
 engine remains authoritative. AI requests create no scanner Evidence or Findings.
 
+Eligibility is checked before constructing/calling the provider, using the final bounded input:
+at least one usable schema summary, analyzed operation or retained security/review fact must
+exist. Endpoint confirmation or failure counts alone do not qualify. No Findings are required.
+An insufficient-context skip uses `AIAnalysisStatus.NOT_RUN`, the existing error-code/message
+slots for a neutral reason, zero attempts and no interpretation or quality warnings. It is
+distinct from disabled AI and provider failures, and does not change report schema version 2.
+
 `AIContext` is an explicit allowlist built directly from named project-owned result fields. It
 includes mode, confirmation state, aggregate numeric schema/failure/request counts, anonymous
 endpoint labels, root names, operation kind/name/base return-type name, existing Phase 7
@@ -1233,6 +1241,12 @@ classifications, and Mutation safety/selection/attempt/decision states. Query an
 operations with the same field name remain independent. Phase 31 additionally projects typed
 security facts and capability coverage from retained single-context results through Phase 30
 (see the dedicated roadmap entry). No differential/named-context AI is enabled.
+
+Each security fact additionally retains an optional opaque endpoint alias, using the same
+alias map as operations and schema summaries. Together with its existing kind/name this gives
+exact operation identity across endpoints and Query/Mutation roots. Endpoint-wide facts retain
+no operation name; global facts retain no endpoint. Missing source identity is not guessed from
+names and cannot support an operation-scoped control assertion. No URL is added to AI input.
 
 It excludes URLs, all headers/authentication values, exact variables, raw request/response bodies,
 arbitrary errors/reasons/stack traces, Evidence objects/payloads, raw introspection, full parsed
@@ -1249,6 +1263,21 @@ is retained within operations; at most ten schema summaries remain. Valid GraphQ
 limited to 128 characters and paths to eight names. Metadata records complete numeric Finding/
 policy totals, total/included/omitted security facts and operations, schema counts, exact byte
 size and truncation. There is no second inference for omitted data.
+
+`AISchemaSummary.schema_retrieval` (`retrieved` / `partial`) describes deterministic schema
+retrieval independently of `operations_total`, `operations_included`, `operations_omitted`
+and `context_truncated`. A fully retrieved schema with 19 analyzed operations, 12 supplied
+and 7 omitted remains fully retrieved. The omissions bound AI interpretation only.
+
+The existing nonfatal advisory boundary also checks bounded control-absence assertion forms,
+partial-schema claims contradicting supplied full-retrieval metadata, and operation/fact
+reference scope. Unsupported control absence uses `unsupported_control_claim`; schema/scope
+contradictions use `unsupported_review_conclusion`. Control/outcome checks cannot borrow
+another operation's fact. Endpoint-wide control facts can support scoped global interpretation
+but do not establish a control for a referenced operation. Calibrated uncertainty and genuinely
+partial schemas remain valid. These are narrow heuristic checks, not general prose verification:
+warnings retain the interpretation unchanged and neither retry nor repair it. The AI-014 hard
+structural/reference errors, advisory split, retry budget and static notice remain unchanged.
 
 The stable system prompt treats all target-derived strings as untrusted data and instructs the
 model to ignore embedded instructions, use only supplied facts, distinguish interest from

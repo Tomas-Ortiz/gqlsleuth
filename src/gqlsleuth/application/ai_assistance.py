@@ -55,6 +55,19 @@ def interpret_completed_scan(
             error_code="invalid_context",
             error_message="Could not build a safe bounded AI context.",
         )
+    if not (context.schemas or context.operations or context.security_facts):
+        return AIInterpretationResult(
+            AIAnalysisStatus.NOT_RUN,
+            DEFAULT_AI_MODEL,
+            generated_at,
+            perf_counter() - started,
+            context.metadata,
+            error_code="insufficient_deterministic_context",
+            error_message=(
+                "AI interpretation was not run because insufficient deterministic facts "
+                "were available."
+            ),
+        )
     try:
         provider = client or OllamaClient(timeout_seconds=timeout_seconds)
     except ValueError:

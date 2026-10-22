@@ -41,6 +41,7 @@ AI_NOTICE = (
 
 
 class AIAnalysisStatus(StrEnum):
+    NOT_RUN = "not_run"
     SUCCESS = "success"
     UNAVAILABLE = "unavailable"
     HTTP_ERROR = "http_error"
@@ -123,6 +124,10 @@ class AITokenMetadata(AIModel):
 
 class AISecurityFact(AIModel):
     """Explicit semantic fields only: no free-form target text or Evidence containers."""
+
+    # Opaque endpoint identity; never a target URL. With kind/name this scopes an
+    # operation fact; without name the fact remains endpoint-wide (or global).
+    endpoint: Annotated[str, Field(pattern=r"^endpoint_[1-9][0-9]*$", strict=True)] | None = None
 
     security_fact_ref: FactReference = "SF1"
     capability: AICapability

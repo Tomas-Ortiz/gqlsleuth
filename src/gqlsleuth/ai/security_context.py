@@ -1,6 +1,6 @@
 """Explicit semantic projections of completed capabilities; never classify or serialize Evidence."""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from gqlsleuth.ai.identifiers import identifier as name
 from gqlsleuth.ai.identifiers import identifier_path as path
@@ -44,10 +44,24 @@ def category(evaluation: object, outcome: object = None) -> Category:
 
 
 def ordered_security_context(
-    safe: SafeExecutionScanResult, active: ActiveExecutionScanResult | None
+    safe: SafeExecutionScanResult,
+    active: ActiveExecutionScanResult | None,
+    endpoints: dict[str, str] | None = None,
 ) -> tuple[list[Fact], tuple[AICapabilityCoverage, ...]]:
-    facts = list(_local(safe))
-    facts.extend(_object_policy(safe))
+    if endpoints is None:
+        endpoints = {
+            item.endpoint: f"endpoint_{i}"
+            for i, item in enumerate(safe.query_generation.operation_analysis.endpoints, 1)
+        }
+
+    def endpoint_alias(endpoint: str | None) -> str | None:
+        if endpoint is None:
+            return None
+        assert endpoints is not None
+        return endpoints.setdefault(endpoint, f"endpoint_{len(endpoints) + 1}")
+
+    facts = list(_local(safe, endpoint_alias))
+    facts.extend(_object_policy(safe, endpoint_alias))
     coverage = []
     review = safe.query_generation.security_review
     coverage.append(
@@ -81,20 +95,20 @@ def ordered_security_context(
         )
     )
     if active:
-        facts.extend(_bounded_queries(active))
-        facts.extend(_mutation_policies(active))
+        facts.extend(_bounded_queries(active, endpoint_alias))
+        facts.extend(_mutation_policies(active, endpoint_alias))
         if active.idor_bola_detection:
-            facts.extend(_idor(active.idor_bola_detection))
+            facts.extend(_idor(active.idor_bola_detection, endpoint_alias))
         if active.authentication_token_security:
-            facts.extend(_authentication(active.authentication_token_security))
+            facts.extend(_authentication(active.authentication_token_security, endpoint_alias))
         if active.rate_limiting_abuse_controls:
-            facts.extend(_abuse(active.rate_limiting_abuse_controls))
+            facts.extend(_abuse(active.rate_limiting_abuse_controls, endpoint_alias))
         if active.file_upload_security:
-            facts.extend(_upload(active.file_upload_security))
+            facts.extend(_upload(active.file_upload_security, endpoint_alias))
         if active.federation_security:
-            facts.extend(_federation(active.federation_security))
+            facts.extend(_federation(active.federation_security, endpoint_alias))
         if active.subscription_security:
-            facts.extend(_subscriptions(active.subscription_security))
+            facts.extend(_subscriptions(active.subscription_security, endpoint_alias))
     # Explicit capability/result associations; no reflection over scanner objects.
     multiplicity = active.multiplicity if active else None
     depth = active.query_depth if active else None
@@ -206,11 +220,14 @@ def _tier(fact: Fact) -> int:
     return 4 if fact.category is Category.REVIEW_CANDIDATE else 3
 
 
-def _local(safe: SafeExecutionScanResult) -> Iterable[Fact]:
+def _local(
+    safe: SafeExecutionScanResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     review = safe.query_generation.security_review
     for item in review.candidates if review else ():
         op = item.related_operation
         yield Fact(
+            endpoint=endpoint_alias(item.endpoint),
             capability=Capability.STRUCTURAL_REVIEW,
             category=Category.REVIEW_CANDIDATE,
             candidate_type=item.candidate_type,
@@ -220,6 +237,7 @@ def _local(safe: SafeExecutionScanResult) -> Iterable[Fact]:
         )
     for sensitive in safe.query_generation.sensitive_input_review:
         yield Fact(
+            endpoint=endpoint_alias(sensitive.endpoint),
             capability=Capability.SENSITIVE_INPUT_REVIEW,
             category=Category.REVIEW_CANDIDATE,
             name=name(sensitive.operation),
@@ -231,12 +249,15 @@ def _local(safe: SafeExecutionScanResult) -> Iterable[Fact]:
         )
 
 
-def _object_policy(safe: SafeExecutionScanResult) -> Iterable[Fact]:
+def _object_policy(
+    safe: SafeExecutionScanResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     obj = safe.object_authorization_review
     for item in obj.executions if obj else ():
         evidence = item.evidence
         if evidence:
             yield Fact(
+                endpoint=endpoint_alias(evidence.endpoint),
                 capability=Capability.OBJECT_AUTHORIZATION,
                 category=category(None, item.outcome),
                 name=name(evidence.root_operation),
@@ -247,7 +268,9 @@ def _object_policy(safe: SafeExecutionScanResult) -> Iterable[Fact]:
             )
     policy = safe.authorization_policy_validation
     for evaluation in policy.evaluations if policy else ():
+        probe = next((p for p in obj.probes if p.case == evaluation.case), None) if obj else None
         yield Fact(
+            endpoint=endpoint_alias(probe.endpoint) if probe else None,
             capability=Capability.AUTHORIZATION_POLICY,
             category=category(evaluation.status),
             name=name(evaluation.case.operation),
@@ -260,10 +283,13 @@ def _object_policy(safe: SafeExecutionScanResult) -> Iterable[Fact]:
         )
 
 
-def _bounded_queries(active: ActiveExecutionScanResult) -> Iterable[Fact]:
+def _bounded_queries(
+    active: ActiveExecutionScanResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     multi = active.multiplicity
     for e in multi.evidence if multi else ():
         yield Fact(
+            endpoint=endpoint_alias(e.endpoint),
             capability=Capability.MULTIPLICITY,
             category=category(None, e.observation),
             name=name(e.representative_operation),
@@ -276,6 +302,7 @@ def _bounded_queries(active: ActiveExecutionScanResult) -> Iterable[Fact]:
     depth = active.query_depth
     for d in depth.evidence if depth else ():
         yield Fact(
+            endpoint=endpoint_alias(d.endpoint),
             capability=Capability.QUERY_DEPTH,
             category=category(None, d.observation),
             name=name(d.representative_operation),
@@ -299,6 +326,7 @@ def _bounded_queries(active: ActiveExecutionScanResult) -> Iterable[Fact]:
         for item in seq.executions:
             if item.attempted:
                 yield Fact(
+                    endpoint=endpoint_alias(item.probe.endpoint),
                     capability=Capability.SEQUENTIAL_DISCOVERY,
                     category=category(None, item.outcome),
                     name=name(item.probe.seed.operation),
@@ -309,7 +337,9 @@ def _bounded_queries(active: ActiveExecutionScanResult) -> Iterable[Fact]:
                 )
 
 
-def _mutation_policies(active: ActiveExecutionScanResult) -> Iterable[Fact]:
+def _mutation_policies(
+    active: ActiveExecutionScanResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     mutation = active.mutation_authorization
     if mutation and mutation.evaluation:
         case = (
@@ -317,6 +347,7 @@ def _mutation_policies(active: ActiveExecutionScanResult) -> Iterable[Fact]:
         )
         e = mutation.evaluation
         yield Fact(
+            endpoint=endpoint_alias(mutation.probe.endpoint) if mutation.probe else None,
             capability=Capability.MUTATION_AUTHORIZATION,
             category=category(e.status),
             name=name(case.operation) if case else None,
@@ -331,6 +362,7 @@ def _mutation_policies(active: ActiveExecutionScanResult) -> Iterable[Fact]:
     if sensitive and sensitive.evaluation:
         evaluation = sensitive.evaluation
         yield Fact(
+            endpoint=endpoint_alias(sensitive.probe.endpoint) if sensitive.probe else None,
             capability=Capability.SENSITIVE_INPUT_VALIDATION,
             category=category(evaluation.status),
             name=name(sensitive.case.operation),
@@ -344,9 +376,12 @@ def _mutation_policies(active: ActiveExecutionScanResult) -> Iterable[Fact]:
         )
 
 
-def _idor(result: IdorDetectionResult) -> Iterable[Fact]:
+def _idor(
+    result: IdorDetectionResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     for finding in result.findings:
         yield Fact(
+            endpoint=endpoint_alias(finding.endpoint),
             capability=Capability.IDOR_BOLA,
             category=Category.FINDING,
             name=name(finding.operation),
@@ -360,6 +395,7 @@ def _idor(result: IdorDetectionResult) -> Iterable[Fact]:
     linked = {f.evidence_id for f in result.findings}
     for item in result.executions:
         yield Fact(
+            endpoint=endpoint_alias(item.probe.endpoint),
             capability=Capability.IDOR_BOLA,
             category=Category.SECURITY_OBSERVATION
             if item.evidence and item.evidence.evidence_id in linked
@@ -375,7 +411,9 @@ def _idor(result: IdorDetectionResult) -> Iterable[Fact]:
         )
 
 
-def _authentication(result: AuthenticationSecurityResult) -> Iterable[Fact]:
+def _authentication(
+    result: AuthenticationSecurityResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     review = result.token_review
     # Project only safe metadata; arbitrary strings fail closed at typed literals.
     token = AITokenMetadata.model_validate(
@@ -393,6 +431,7 @@ def _authentication(result: AuthenticationSecurityResult) -> Iterable[Fact]:
     linked = {f.probe_evidence_id for f in result.findings}
     for finding in result.findings:
         yield Fact(
+            endpoint=endpoint_alias(finding.endpoint),
             capability=Capability.AUTHENTICATION,
             category=Category.FINDING,
             kind="query",
@@ -403,6 +442,7 @@ def _authentication(result: AuthenticationSecurityResult) -> Iterable[Fact]:
         )
     for e in result.evidence:
         yield Fact(
+            endpoint=endpoint_alias(e.endpoint),
             capability=Capability.AUTHENTICATION,
             category=Category.SECURITY_OBSERVATION
             if e.evidence_id in linked
@@ -418,9 +458,12 @@ def _authentication(result: AuthenticationSecurityResult) -> Iterable[Fact]:
         )
 
 
-def _abuse(result: AbuseControlResult) -> Iterable[Fact]:
+def _abuse(
+    result: AbuseControlResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     for f in result.findings:
         yield Fact(
+            endpoint=endpoint_alias(f.operation.endpoint),
             capability=Capability.ABUSE_CONTROLS,
             category=Category.FINDING,
             name=name(f.operation.name),
@@ -432,6 +475,7 @@ def _abuse(result: AbuseControlResult) -> Iterable[Fact]:
     if result.selected and result.attempts:
         first = next((e.signal for e in result.attempts if e.signal), None)
         yield Fact(
+            endpoint=endpoint_alias(result.selected.endpoint),
             capability=Capability.ABUSE_CONTROLS,
             category=Category.SECURITY_OBSERVATION
             if result.findings
@@ -450,9 +494,12 @@ def _abuse(result: AbuseControlResult) -> Iterable[Fact]:
         )
 
 
-def _upload(result: FileUploadSecurityResult) -> Iterable[Fact]:
+def _upload(
+    result: FileUploadSecurityResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     for f in result.findings:
         yield Fact(
+            endpoint=endpoint_alias(f.operation.endpoint),
             capability=Capability.FILE_UPLOAD,
             category=Category.FINDING,
             kind="mutation",
@@ -466,6 +513,7 @@ def _upload(result: FileUploadSecurityResult) -> Iterable[Fact]:
     linked = {f.variant_evidence_id for f in result.findings}
     for e in result.attempts:
         yield Fact(
+            endpoint=endpoint_alias(e.endpoint),
             capability=Capability.FILE_UPLOAD,
             category=Category.SECURITY_OBSERVATION
             if e.evidence_id in linked
@@ -483,9 +531,12 @@ def _upload(result: FileUploadSecurityResult) -> Iterable[Fact]:
         )
 
 
-def _federation(result: FederationSecurityResult) -> Iterable[Fact]:
+def _federation(
+    result: FederationSecurityResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     for f in result.findings:
         yield Fact(
+            endpoint=endpoint_alias(f.endpoint),
             capability=Capability.FEDERATION,
             category=Category.FINDING,
             kind="query",
@@ -517,6 +568,7 @@ def _federation(result: FederationSecurityResult) -> Iterable[Fact]:
                     type_name = name(value) if isinstance(value, str) else None
                 keys = path(tuple(key for key, _ in plan.key_types))
         yield Fact(
+            endpoint=endpoint_alias(e.endpoint),
             capability=Capability.FEDERATION,
             category=Category.SECURITY_OBSERVATION
             if e.evidence_id in linked
@@ -534,9 +586,12 @@ def _federation(result: FederationSecurityResult) -> Iterable[Fact]:
         )
 
 
-def _subscriptions(result: SubscriptionSecurityResult) -> Iterable[Fact]:
+def _subscriptions(
+    result: SubscriptionSecurityResult, endpoint_alias: Callable[[str | None], str | None]
+) -> Iterable[Fact]:
     for f in result.findings:
         yield Fact(
+            endpoint=endpoint_alias(f.endpoint),
             capability=Capability.SUBSCRIPTIONS,
             category=Category.FINDING,
             kind="subscription",
@@ -549,6 +604,7 @@ def _subscriptions(result: SubscriptionSecurityResult) -> Iterable[Fact]:
     linked = {f.evidence_id for f in result.findings}
     for e in result.attempts:
         yield Fact(
+            endpoint=endpoint_alias(e.plan.candidate.endpoint),
             capability=Capability.SUBSCRIPTIONS,
             category=Category.SECURITY_OBSERVATION
             if e.evidence_id in linked

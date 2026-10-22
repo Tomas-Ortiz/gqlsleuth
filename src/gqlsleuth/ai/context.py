@@ -37,12 +37,14 @@ def build_ai_context(result: SafeExecutionScanResult | ActiveExecutionScanResult
     active = result if isinstance(result, ActiveExecutionScanResult) else None
     safe = active.safe_execution if active else result
     assert isinstance(safe, SafeExecutionScanResult)
-    security_facts, coverage = ordered_security_context(safe, active)
-    security_facts_total = len(security_facts)
     analysis = safe.query_generation.operation_analysis
     schema_scan = analysis.schema_scan
     introspection = schema_scan.introspection
     endpoints = {item.endpoint: f"endpoint_{i}" for i, item in enumerate(analysis.endpoints, 1)}
+    for item in schema_scan.schemas:
+        endpoints.setdefault(item.endpoint, f"endpoint_{len(endpoints) + 1}")
+    security_facts, coverage = ordered_security_context(safe, active, endpoints)
+    security_facts_total = len(security_facts)
     operations = [operation for item in analysis.endpoints for operation in item.operations]
     # Stable sort preserves retained Phase 7 order within equal priorities/scores.
     operations.sort(key=lambda item: (PRIORITY_RANK[item.priority], -item.interest_score))

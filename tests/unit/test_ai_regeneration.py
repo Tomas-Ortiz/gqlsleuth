@@ -34,7 +34,12 @@ def test_initial_prompt_and_schema_keep_inference_and_limitations_calibrated(sca
     prompt = " ".join(build_system_prompt(context).split())
     assert "Scanner safety skips describe GQLSleuth's own restraint" in prompt
     assert "Do not speculate about query structure, data access or exposure" in prompt
-    assert "Review need or unobserved controls do not establish that a control is absent" in prompt
+    assert "Not observed, not tested, not supplied and not established do NOT mean absent" in prompt
+    assert "Missing facts never establish missing controls" in prompt
+    assert "Match each fact's endpoint/kind/name to the exact operation reference" in prompt
+    assert (
+        "context_truncated describe ONLY bounded AI input, never partial schema retrieval" in prompt
+    )
     assert "no security cause, misconfiguration or data exposure" in prompt
     schema = build_response_schema(context)
     limitation = schema["$defs"]["AIInterpretiveLimitation"]["properties"]["text"]

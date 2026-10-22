@@ -43,13 +43,18 @@ Grounding for ALL prose:
   that operation's attempted/status facts; ordinary totals exclude specialized probes.
 - Explicit control claims require a cited matching control_observed/satisfied-policy fact,
   scoped to its tested probe. An unrelated control does not explain an operation outcome.
-  Review need or unobserved controls do not establish that a control is absent.
+  Not observed, not tested, not supplied and not established do NOT mean absent, missing,
+  disabled or not implemented. Missing facts never establish missing controls.
+  Match each fact's endpoint/kind/name to the exact operation reference, including endpoint.
+  Endpoint-wide facts (no name) and global facts (no endpoint) are not operation results.
 - Zero Findings is not zero review/security facts and never overall security/safety assurance.
   Do not deny supplied observations or infer control effectiveness from successful checks.
 - Preserve uncertainty about identity, ownership, tenancy and intended business policy. Schema
   bounds do not prove runtime enforcement. Policy expectations are operator supplied.
 - A schema_retrieval of partial means incomplete coverage: counts describe retrieved content;
   omitted operations/types are unknown, not evidence that they do not exist.
+  A schema_retrieval of retrieved means full retrieval succeeded. operations_included/omitted
+  and context_truncated describe ONLY bounded AI input, never partial schema retrieval.
 - No invented causes, severity/CVSS/CWE, automatic testing, destructive guidance, brute force,
   flooding, evasion or credential theft. Named-context/differential AI is unsupported.
 
@@ -185,6 +190,8 @@ def collect_interpretation_quality_warnings(
     for check in (
         _validate_prose,
         _validate_grounding,
+        _validate_fact_association,
+        _validate_schema_coverage,
         validate_execution_claims,
         _validate_summary_completion,
         _validate_other_completion,
@@ -364,8 +371,21 @@ _CONTROL_ABSENCE = re.compile(
     r"(?:authorization|authentication|(?:input|file)\s+validation|rate[- ]limiting|"
     r"access[- ]controls?|ownership\s+checks?|(?:security|data\s+exposure)\s+controls?)\b"
 )
+# Bounded control concepts and assertion forms, not a general phrase blacklist.
+_ABSENCE_CONTROL = (
+    r"(?:authentication|authorization|rate[- ]limiting|(?:input|file)\s+validation|"
+    r"(?:complexity|depth|access|runtime|security)\s+(?:controls?|limits?|protections?)|"
+    r"protections?)"
+)
+_CONTROL_ABSENCE_ASSERTION = re.compile(
+    rf"\b(?:no\s+{_ABSENCE_CONTROL}(?:\s+controls?)?\s+"
+    r"(?:(?:is|are|was|were)\s+)?(?:present|implemented|enforced|exists?)|"
+    rf"{_ABSENCE_CONTROL}(?:\s+controls?)?\s+(?:is|are|was|were)\s+"
+    r"(?:absent|missing|disabled|not\s+(?:implemented|present|enforced))|"
+    rf"(?:has|have)\s+no\s+{_ABSENCE_CONTROL})\b"
+)
 _CONTROL_UNCERTAINTY = re.compile(
-    r"\s*(?:manual review is needed to determine|"
+    r"\s*(?:gqlsleuth did not establish|manual review is needed to determine|"
     r"(?:the\s+)?(?:(?:supplied|available)\s+)?(?:evidence|facts)\s+"
     r"(?:(?:does|do|may|might|could)\s+not\s+establish|"
     r"(?:may|might|could)\s+not\s+be\s+sufficient\s+to\s+determine|"
@@ -374,9 +394,14 @@ _CONTROL_UNCERTAINTY = re.compile(
     r"(?:the\s+)?assessment\s+lacks\s+enough\s+(?:runtime\s+)?"
     r"(?:evidence|information)\s+to\s+determine)\s+"
     r"(?:if|whether)\s+(?:the\s+)?(?:authentication|authorization|input\s+validation|"
-    r"rate\s+limiting)"
+    r"rate\s+limiting|complexity|depth)"
     r"(?:\s+(?:controls?|policy))?\s+(?:(?:is|are)\s+)?"
-    r"(?:(?:correctly|properly)\s+)?(?:enforced|provided|present|exists?|involved)\s*"
+    r"(?:(?:correctly|properly)\s+)?(?:enforced|provided|present|absent|missing|exists?|involved)\s*"
+)
+_NO_CONTROL_EVIDENCE = re.compile(
+    r"\s*no\s+deterministic\s+evidence\s+(?:in\s+the\s+supplied\s+context\s+)?"
+    r"establishes\s+(?:an?\s+)?(?:authentication|authorization|rate[- ]limiting|"
+    r"complexity|depth|input\s+validation)\s+controls?\s+for\s+this\s+operation\s*"
 )
 _REVIEW_CONCLUSION = re.compile(
     r"\b(?:is|are|be|suggest\w*|indicat\w*|prov\w*|confirm\w*|reveal\w*)\s+"
@@ -528,15 +553,25 @@ def _validate_grounding(interpretation: AIInterpretation, context: AIContext) ->
     Ordinary execution outcomes and schema review interest do not establish causes or risk.
     """
     facts = {fact.security_fact_ref: fact for fact in context.security_facts}
-    for text, _, refs in prose_entries(interpretation):
-        supplied = tuple(facts[ref] for ref in refs)
+    for text, operations, refs in prose_entries(interpretation):
+        supplied = tuple(
+            facts[ref]
+            for ref in refs
+            if not operations or _fact_operation(facts[ref]) in operations
+        )
         normalized = " ".join(text.casefold().replace("’", "'").split())
         # Canonicalize only the validator's working text; accepted prose is never
         # rewritten. Singular, plural and canonical GRAPHQL_ERROR share one rule.
         normalized = re.sub(r"\bgraphql[ _-]errors?\b", "graphql_error", normalized)
         _validate_outcome_attribution(normalized, supplied)
         for clause in re.split(r"[.!?;\n]|\b(?:but|however|yet)\b", normalized):
-            if _CONTROL_ABSENCE.search(clause):
+            if _CONTROL_UNCERTAINTY.fullmatch(clause) or _NO_CONTROL_EVIDENCE.fullmatch(clause):
+                continue
+            if any(
+                not _NEGATED_INFERENCE.search(clause[: match.start()])
+                for pattern in (_CONTROL_ABSENCE, _CONTROL_ABSENCE_ASSERTION)
+                for match in pattern.finditer(clause)
+            ):
                 # The current facts encode scoped observations/policy outcomes,
                 # not blanket absence. A review or control_observed=False is
                 # not proof that authorization/validation is absent.
@@ -604,6 +639,46 @@ def _validate_grounding(interpretation: AIInterpretation, context: AIContext) ->
                 and "schema" not in clause
             ):
                 raise AIValidationError("facts", "unsupported_review_conclusion")
+
+
+def _fact_operation(fact: AISecurityFact) -> str | None:
+    if fact.endpoint and fact.kind and fact.name:
+        return f"{fact.endpoint}/{fact.kind}/{fact.name}"
+    return None
+
+
+def _validate_fact_association(interpretation: AIInterpretation, context: AIContext) -> None:
+    """Flag mixed subjects in an entry's structured references; never infer from adjacency."""
+    facts = {fact.security_fact_ref: fact for fact in context.security_facts}
+    for _, operations, refs in prose_entries(interpretation):
+        if not operations:
+            continue
+        for ref in refs:
+            fact = facts[ref]
+            if fact.name and _fact_operation(fact) not in operations:
+                raise AIValidationError("facts", "unsupported_review_conclusion")
+
+
+_PARTIAL_SCHEMA_CLAIM = re.compile(
+    r"\b(?:schema(?:\s+(?:retrieval|coverage|data))?\s+(?:is|was|remains)\s+"
+    r"(?:only\s+)?(?:partial|incomplete)|only\s+part\s+of\s+the\s+schema\s+"
+    r"was\s+retrieved|introspection\s+returned\s+(?:partial|incomplete)\s+schema(?:\s+data)?)\b"
+)
+
+
+def _validate_schema_coverage(interpretation: AIInterpretation, context: AIContext) -> None:
+    """AI-input omissions cannot contradict known full schema retrieval for the subject."""
+    facts = {fact.security_fact_ref: fact for fact in context.security_facts}
+    for text, operations, refs in prose_entries(interpretation):
+        endpoints = {ref.split("/", 1)[0] for ref in operations}
+        endpoints.update(endpoint for ref in refs if (endpoint := facts[ref].endpoint))
+        schemas = tuple(s for s in context.schemas if not endpoints or s.endpoint in endpoints)
+        if not schemas or any(s.schema_retrieval == "partial" for s in schemas):
+            continue
+        for clause in re.split(r"[.!?;\n]|\b(?:but|however|yet)\b", text.casefold()):
+            for match in _PARTIAL_SCHEMA_CLAIM.finditer(clause):
+                if not _NEGATED_INFERENCE.search(clause[: match.start()]):
+                    raise AIValidationError("facts", "unsupported_review_conclusion")
 
 
 def build_response_schema(context: AIContext) -> dict[str, object]:
