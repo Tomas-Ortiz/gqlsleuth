@@ -245,14 +245,14 @@ def test_rendering_is_local_and_preserves_result_json_and_ai(whole, monkeypatch,
     assert serialize_context(after) == serialized and build_system_prompt(after) == prompt
 
 
-def test_caps_report_exact_omissions_and_verbose_keeps_every_item(whole):
+def test_caps_report_exact_omissions_and_verbose_is_bounded(whole):
     auth = whole.authentication_token_security
     expanded = replace(
         whole, authentication_token_security=replace(auth, findings=auth.findings * 12)
     )
     compact = capture(expanded)
-    assert "7 additional findings" in compact
-    assert "additional findings" not in capture(expanded, verbose=True)
+    assert "Showing 10 of 17 findings" in compact
+    assert "Showing 10 of 17 findings" not in capture(expanded, verbose=True)
     review = expanded.safe_execution.query_generation.security_review
     generation = replace(
         expanded.safe_execution.query_generation,
@@ -266,7 +266,7 @@ def test_caps_report_exact_omissions_and_verbose_keeps_every_item(whole):
         ),
     )
     view = build_assessment(build_report(expanded))
-    assert f"{len(view.manual_review) - 8} additional manual review items" in capture(expanded)
+    assert f"Showing 8 of {len(view.manual_review)} manual review items" in capture(expanded)
 
 
 @pytest.mark.parametrize("format", [ReportFormat.MARKDOWN, ReportFormat.HTML])
@@ -356,7 +356,7 @@ def test_limitations_cap_and_query_classifications_are_not_successes(whole, monk
     assert view.query_outcomes == (("SUCCESS", 1), ("GRAPHQL_ERROR", 1), ("SKIPPED_SAFETY", 1))
     monkeypatch.setattr(completed, "build_report", lambda *args, **kwargs: report)
     text = capture(whole)
-    assert "3 additional limitations; use --verbose." in text
+    assert "Showing 5 of 8 limitations" in text
     assert "FAILURE 4" in text and "FAILURE 5" not in text
     assert "FAILURE 7" in capture(whole, verbose=True)
 

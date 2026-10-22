@@ -18,12 +18,14 @@ from gqlsleuth.presentation.assessment import (
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.console import _section, _table
 from gqlsleuth.presentation.endpoints import endpoint_groups
+from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
 from gqlsleuth.presentation.priorities import style_priority_terms
 from gqlsleuth.presentation.statuses import status_text, style_status_terms
 from gqlsleuth.reporting.assessment import grouped_technical_sections
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.endpoint_context import group_endpoint_context
 from gqlsleuth.reporting.presentation import ReportSection, technical_sections
+from gqlsleuth.reporting.scaling import bound_section
 
 
 def _rows(
@@ -64,10 +66,7 @@ def _items(
             )
         console.print(table)
     if cap is not None and len(items) > cap:
-        console.print(
-            f"{len(items) - cap} additional {title.lower()} items not shown; "
-            "use --verbose or a report."
-        )
+        console.print(showing_notice(cap, len(items), title.lower() + " items"))
 
 
 def render_completed_assessment(
@@ -94,12 +93,17 @@ def render_completed_assessment(
         for capability, status in view.capabilities:
             table.add_row(Text(capability), style_status_terms(status))
         console.print(table)
-    _items(console, "Findings", view.findings, None if verbose else DEFAULT_MAX_FINDINGS)
+    _items(
+        console,
+        "Findings",
+        view.findings,
+        MAX_HUMAN_INVENTORY_ITEMS if verbose else DEFAULT_MAX_FINDINGS,
+    )
     _items(
         console,
         "Manual Review",
         view.manual_review,
-        None if verbose else DEFAULT_MAX_MANUAL_REVIEW_ITEMS,
+        MAX_HUMAN_INVENTORY_ITEMS if verbose else DEFAULT_MAX_MANUAL_REVIEW_ITEMS,
     )
     if view.query_outcomes:
         _section(console, "Query Execution")
@@ -113,11 +117,11 @@ def render_completed_assessment(
         _rows(console, view.mutations)
     if view.limitations:
         _section(console, "Important Limitations")
-        for note in view.limitations if verbose else view.limitations[:DEFAULT_MAX_LIMITATIONS]:
+        cap = MAX_HUMAN_INVENTORY_ITEMS if verbose else DEFAULT_MAX_LIMITATIONS
+        for note in view.limitations[:cap]:
             console.print(Text(note))
-        omitted = len(view.limitations) - DEFAULT_MAX_LIMITATIONS
-        if not verbose and omitted > 0:
-            console.print(f"{omitted} additional limitations; use --verbose.")
+        if len(view.limitations) > cap:
+            console.print(showing_notice(cap, len(view.limitations), "limitations"))
     console.print(
         "Review interest is not vulnerability severity. Controls apply only to tested cases.",
         style="gql.secondary",
@@ -132,7 +136,7 @@ def render_completed_assessment(
 
 def _render_technical(console: Console, section: ReportSection) -> None:
     """Reuse report capability projections and the existing bounded response representation."""
-    section = group_endpoint_context(section)
+    section = group_endpoint_context(bound_section(section))
     if section.title:
         _section(console, section.title)
     if section.endpoint:
@@ -143,7 +147,15 @@ def _render_technical(console: Console, section: ReportSection) -> None:
     if section.table_rows:
         table = _table(*section.table_headers)
         for row in section.table_rows:
-            table.add_row(*(Text(value) for value in row))
+            cells = []
+            for header, value in zip(section.table_headers, row, strict=True):
+                if header in {"Priority", "Review priority"}:
+                    cells.append(style_priority_terms(value))
+                elif header in {"Status", "Decision", "Observation", "Generation", "Baseline"}:
+                    cells.append(style_status_terms(value))
+                else:
+                    cells.append(Text(value))
+            table.add_row(*cells)
         console.print(table)
     for entry in section.entries:
         console.print()

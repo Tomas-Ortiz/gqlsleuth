@@ -331,8 +331,9 @@ def test_verbose_retains_detailed_technical_output(flag):
     assert "Mutation resetPassword" in output
     assert "Interest score 6" in output
     assert "Deterministic test terminology." in output
-    assert "query { exportUsers }" in output
-    assert "HTTP status 404" in output
+    assert "query { exportUsers }" not in output
+    assert "exportUsers SUCCESS 404" in output
+    assert "canonical JSON report" in output
 
 
 def test_scan_command_requires_a_target() -> None:

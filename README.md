@@ -150,7 +150,7 @@ gqlsleuth scan https://authorized.example/graphql --verbose
 ```
 
 Default output is an assessment-oriented summary. `--verbose` (or `-v`) adds discovery signals,
-review reasons, generated documents/variables and bounded execution-response detail.
+review reasons, compact operation inventories and bounded exception/request/response detail.
 It changes presentation, not the requests or consent requirements.
 
 ### 3. Generate a report
@@ -205,7 +205,7 @@ operation success. GraphQL errors can come from placeholders, business rules or 
 logic; they are not automatically authentication failures.
 
 Default single-context output caps long lists and states how many items were omitted.
-Use `--verbose` or a report for full retained detail. Named-context output remains a
+Use `--verbose` for more analyst detail and JSON for exhaustive retained facts. Named-context output remains a
 pairwise Authorization Differential Review.
 
 ### Transport failures and process status
@@ -290,6 +290,13 @@ gqlsleuth scan https://authorized.example/graphql --format json --format html
   lossless base64 objects.
 - **Markdown / HTML:** human-readable assessments with technical details. HTML is standalone,
   using embedded CSS and native expandable details, with no CDN or external JavaScript.
+  Human inventories show up to 20 rows and detail collections up to 10 blocks, with explicit
+  omission counts. Routine SAFE successes and unselected Mutations use compact rows; errors,
+  safety skips and selected or evidence-linked security cases retain detail within these
+  bounds. Repeated SAFE per-scan budget skips are summarized without consuming individual detail
+  slots; matching limitations are grouped by endpoint, stage, code and normalized message.
+  Exact ACTIVE consent previews are never compacted. JSON retains every operation and
+  all collected evidence, including routine successful response bodies omitted from human views.
 - `--format` / `-f` accepts comma-separated or repeated formats. Each requested format is written
   once. `--output` / `-o` is a directory, created when needed; default: `./gqlsleuth-reports`.
 - No format means no report files/directories. `--output` without `--format` is an input error.

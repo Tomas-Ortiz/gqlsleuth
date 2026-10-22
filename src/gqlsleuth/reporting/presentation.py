@@ -159,17 +159,12 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             if report.graphql_security_review is not None
             else []
         ),
-        ReportSection(
-            "Generated Queries", entries=tuple(_artifact_entry(item) for item in report.queries)
-        ),
+        ReportSection("Generated Queries"),
         ReportSection(
             "Safe Query Execution",
             paragraphs=(
                 "Attempted requests are established only by QUERY_EXECUTION evidence. "
                 "SUCCESS is an execution outcome, not a vulnerability finding.",
-            ),
-            entries=tuple(
-                _execution_entry(item, report.evidence) for item in report.queries if item.execution
             ),
         ),
     ]
@@ -203,9 +198,6 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                             ", ".join(map(str, active.selected_indices)) or "None",
                         ),
                         ("Final batch confirmed", "Yes" if active.confirmed else "No"),
-                    ),
-                    entries=tuple(
-                        _mutation_entry(item, report.evidence) for item in active.candidates
                     ),
                 )
             )
@@ -390,7 +382,9 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             ),
         )
     )
-    return tuple(sections)
+    from gqlsleuth.reporting.scaling import scale_operations
+
+    return scale_operations(report, tuple(sections))
 
 
 def security_review_section(

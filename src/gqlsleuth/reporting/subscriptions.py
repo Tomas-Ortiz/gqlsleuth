@@ -3,6 +3,7 @@
 import json
 
 from gqlsleuth.domain.subscriptions import SUBSCRIPTION_NOTICE, SubscriptionSecurityResult
+from gqlsleuth.presentation.limits import JSON_DETAIL_NOTICE
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection
 
 
@@ -17,6 +18,7 @@ def subscription_sections(result: SubscriptionSecurityResult) -> tuple[ReportSec
             ),
         )
         for c in result.candidates
+        if c.failure
     ]
     if result.plan:
         plan = result.plan
@@ -67,11 +69,22 @@ def subscription_sections(result: SubscriptionSecurityResult) -> tuple[ReportSec
     sections = [
         ReportSection(
             "Subscriptions & GraphQL over WebSocket",
-            paragraphs=(SUBSCRIPTION_NOTICE, *result.limitations),
+            paragraphs=(SUBSCRIPTION_NOTICE, *result.limitations, JSON_DETAIL_NOTICE),
             rows=(
                 ("Candidate count", str(len(result.candidates))),
                 ("Confirmed", str(result.confirmed)),
                 ("Connection attempts", str(len(result.attempts))),
+            ),
+            table_headers=("Subscription", "Root", "Return", "Generation", "Endpoint"),
+            table_rows=tuple(
+                (
+                    c.field.name,
+                    c.root,
+                    c.field.type.render(),
+                    "FAILED" if c.failure else "AVAILABLE",
+                    c.endpoint,
+                )
+                for c in result.candidates
             ),
             entries=tuple(entries),
         )

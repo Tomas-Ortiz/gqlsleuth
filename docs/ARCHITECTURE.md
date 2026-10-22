@@ -3694,7 +3694,7 @@ Authorization, Sensitive Inputs, Rate Limiting & Abuse Controls, File Upload Sec
 Security, Subscriptions & WebSocket, Query Multiplicity, Query Depth, Sequential Object Discovery.
 Within each source, retained result order is preserved. Structural candidates appear in Manual
 Review. Default caps are 10 Findings, 8 Manual Review items, 5 limitations and 3 AI insights;
-omissions are counted explicitly and verbose output is uncapped. Manual Review prioritizes
+omissions are counted explicitly. Verbose summary collections are capped at 20 items. Manual Review prioritizes
 additional policy violations, unresolved attempted checks, structural candidates, then ordinary
 CRITICAL/HIGH-interest operations not already represented more strongly. Findings preserve
 workflow/source order rather than receiving a new severity ranking.
@@ -3713,6 +3713,22 @@ item order within each group; differential context labels and exceptional endpoi
 remain explicit. Shared human-only projections handle this grouping without removing endpoint
 fields from canonical JSON, domain records or Evidence. Interactive ACTIVE consent previews
 retain explicit target context before selection and confirmation.
+
+Post-scan human views use shared collection budgets: 20 inventory rows and 10 detailed blocks
+per technical section, applied before endpoint grouping. Generated Queries and SAFE executions
+lead with counts and compact tables. Routine SUCCESS bodies are omitted; errors, safety/limit
+skips and unresolved outcomes remain detail candidates, except routine SAFE per-scan budget
+skips, which use counts and a concise aggregate statement rather than individual detail blocks.
+Human limitations group matching endpoint/stage/code/whitespace-normalized messages with a
+record count; material limitations precede routine SAFE budget groups. Distinct limit reasons
+remain separate, and canonical records are never grouped or removed. Retained Finding/capability references
+keep supporting executions eligible for detail, and selected/attempted support receives space
+before ordinary exceptions without changing operation scores or retained ordering. Unselected
+Mutation and capability candidates use inventories; selected/attempted and blocked cases retain
+bounded detail. Every collection limit states how many items are shown and points to exhaustive
+canonical JSON. Verbose means more analyst detail, not an evidence dump. AI presentation and
+exact ACTIVE consent previews are outside these post-scan collection limits. Rendering does
+not mutate records, reclassify results, or alter report schema version 2.
 
 Canonical JSON/model/evidence relationships and Phase 31 AIContext, prompts, validation, serialized
 Ollama request and inference count are unchanged. No new networking or dependencies. Exact selected

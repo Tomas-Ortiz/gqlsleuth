@@ -3,6 +3,7 @@
 import json
 
 from gqlsleuth.domain.abuse_controls import AbuseControlResult
+from gqlsleuth.presentation.limits import JSON_DETAIL_NOTICE
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection
 
 
@@ -10,6 +11,8 @@ def abuse_control_sections(result: AbuseControlResult) -> tuple[ReportSection, .
     entries = []
     for candidate in result.candidates:
         selected = result.selected == candidate
+        if not selected:
+            continue
         entries.append(
             ReportEntry(
                 f"{candidate.operation.kind.value} {candidate.operation.name}",
@@ -76,8 +79,14 @@ def abuse_control_sections(result: AbuseControlResult) -> tuple[ReportSection, .
     sections = [
         ReportSection(
             "Rate Limiting & Abuse Controls",
-            paragraphs=(result.operator_policy, result.scope_limitation, *result.limitations),
+            paragraphs=(
+                result.operator_policy,
+                result.scope_limitation,
+                *result.limitations,
+                JSON_DETAIL_NOTICE,
+            ),
             rows=(
+                ("Candidates", str(len(result.candidates))),
                 ("Confirmed", str(result.confirmed)),
                 (
                     "Planned repeats",
@@ -91,6 +100,18 @@ def abuse_control_sections(result: AbuseControlResult) -> tuple[ReportSection, .
                     if result.first_signal_attempt
                     else "None observed",
                 ),
+            ),
+            table_headers=("Operation", "Selected", "Baseline", "Planned repeats", "Endpoint"),
+            table_rows=tuple(
+                (
+                    f"{candidate.operation.kind.value} {candidate.operation.name}",
+                    "Yes" if result.selected == candidate else "No",
+                    f"{candidate.baseline_status.value.upper()} / "
+                    f"HTTP {candidate.baseline_http_status}",
+                    str(candidate.planned_attempts),
+                    candidate.endpoint,
+                )
+                for candidate in result.candidates
             ),
             entries=tuple(entries),
         )

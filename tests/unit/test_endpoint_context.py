@@ -72,7 +72,7 @@ def test_shared_sections_show_one_endpoint_without_mutating_canonical_records(
     evidence = active.evidence
     count = len(requests)
     section = next(s for s in technical_sections(report) if s.title == title)
-    assert len(section.entries) >= 2
+    assert max(len(section.entries), len(section.table_rows)) >= 2
     monkeypatch.setattr("gqlsleuth.reporting.renderers.human_sections", lambda context: (section,))
     rendered = render_report(report, format).replace("\\.", ".")
     assert rendered.count(ENDPOINT) == 1

@@ -14,25 +14,6 @@ def _endpoint(entry: ReportEntry) -> str | None:
 def group_endpoint_context(section: ReportSection) -> ReportSection:
     """Preserve exceptional/unscoped entries locally; never infer endpoints from prose."""
     section = replace(section, children=tuple(group_endpoint_context(s) for s in section.children))
-    if "Endpoint" in section.table_headers and not section.entries:
-        index = section.table_headers.index("Endpoint")
-        headers = section.table_headers[:index] + section.table_headers[index + 1 :]
-        table_groups = endpoint_groups(section.table_rows, lambda row: row[index])
-        children = tuple(
-            ReportSection(
-                "",
-                endpoint=endpoint,
-                table_headers=headers,
-                table_rows=tuple(row[:index] + row[index + 1 :] for row in rows),
-            )
-            for endpoint, rows in table_groups
-        )
-        return replace(
-            section, table_headers=(), table_rows=(), children=children + section.children
-        )
-    groups = endpoint_groups(section.entries, _endpoint)
-    if not any(endpoint for endpoint, _ in groups):
-        return section
 
     def scoped(entries: tuple[ReportEntry, ...], endpoint: str) -> tuple[ReportEntry, ...]:
         return tuple(
@@ -42,6 +23,46 @@ def group_endpoint_context(section: ReportSection) -> ReportSection:
             )
             for entry in entries
         )
+
+    if "Endpoint" in section.table_headers:
+        index = section.table_headers.index("Endpoint")
+        headers = section.table_headers[:index] + section.table_headers[index + 1 :]
+        table_groups = dict(endpoint_groups(section.table_rows, lambda row: row[index]))
+        entry_groups = dict(endpoint_groups(section.entries, _endpoint))
+        endpoints = tuple(dict.fromkeys((*table_groups, *entry_groups)))
+        children = tuple(
+            ReportSection(
+                "",
+                endpoint=endpoint,
+                table_headers=headers,
+                table_rows=tuple(
+                    row[:index] + row[index + 1 :] for row in table_groups.get(endpoint, ())
+                ),
+                entries=scoped(entry_groups.get(endpoint, ()), endpoint)
+                if endpoint
+                else entry_groups.get(endpoint, ()),
+            )
+            for endpoint in endpoints
+        )
+        if len(children) == 1 and section.endpoint in (None, children[0].endpoint):
+            child = children[0]
+            return replace(
+                section,
+                endpoint=child.endpoint,
+                table_headers=headers,
+                table_rows=child.table_rows,
+                entries=child.entries,
+            )
+        return replace(
+            section,
+            entries=(),
+            table_headers=(),
+            table_rows=(),
+            children=children + section.children,
+        )
+    groups = endpoint_groups(section.entries, _endpoint)
+    if not any(endpoint for endpoint, _ in groups):
+        return section
 
     if len(groups) == 1 and groups[0][0] and section.endpoint in (None, groups[0][0]):
         endpoint, entries = groups[0]

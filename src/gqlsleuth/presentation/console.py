@@ -35,6 +35,7 @@ from gqlsleuth.infrastructure.http import HttpResponse
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.differential import present_differential
 from gqlsleuth.presentation.endpoints import endpoint_groups
+from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
 from gqlsleuth.presentation.object_lookup import (
     FOLLOW_UP_NOTICE,
     ObjectLookupFollowUpHint,
@@ -867,7 +868,7 @@ def render_differential(
             "Completed" if context.scan else f"Failed: {context.error_code}",
         )
     _render_table(console, summary)
-    rows = candidates.rows if verbose else candidates.rows[:10]
+    rows = candidates.rows[: MAX_HUMAN_INVENTORY_ITEMS if verbose else 10]
     shown = len(rows)
     multiple = len(candidates.endpoints) > 1
     for endpoint, entries in endpoint_groups(rows, lambda row: row[-1] if multiple else None):
@@ -882,18 +883,21 @@ def render_differential(
                 )
             )
         _render_table(console, table)
-    if not verbose and sum(len(pair.candidates) for pair in result.pairs) > shown:
-        console.print("Additional candidates available with --verbose or in reports.")
+    if len(candidates.rows) > shown:
+        console.print(showing_notice(shown, len(candidates.rows), "differential candidates"))
     limitations = [(pair, item) for pair in result.pairs for item in pair.limitations]
     if limitations:
         console.print(
             f"Comparison limitations: {len(limitations)}. "
             "Missing observations do not establish absence."
         )
-        for pair, item in limitations if verbose else limitations[:3]:
+        cap = MAX_HUMAN_INVENTORY_ITEMS if verbose else 3
+        for pair, item in limitations[:cap]:
             console.print(
                 Text(f"{pair.context_a} <-> {pair.context_b}: {item.stage}: {item.reason}")
             )
+        if len(limitations) > cap:
+            console.print(showing_notice(cap, len(limitations), "comparison limitations"))
     console.print("Zero differential Mutations executed. Comparison added zero HTTP requests.")
     for context in result.contexts:
         if context.scan:
@@ -948,8 +952,8 @@ def render_security_review(
         console.print(Text("Context: " + context, style="gql.metadata"))
     console.print(f"{len(candidates)} structural review candidate(s).")
     console.print(SECURITY_REVIEW_NOTICE, markup=False, style="gql.secondary")
-    visible = candidates if verbose else candidates[:10]
-    visible_limits = limitations if verbose else limitations[:3]
+    visible = candidates[: MAX_HUMAN_INVENTORY_ITEMS if verbose else 10]
+    visible_limits = limitations[: MAX_HUMAN_INVENTORY_ITEMS if verbose else 3]
     endpoints = dict.fromkeys(
         [item.endpoint for item in visible] + [item.endpoint for item in visible_limits]
     )
@@ -995,4 +999,6 @@ def render_security_review(
             if limitation.endpoint == group_endpoint:
                 console.print(Text(capability_wording(limitation.reason)), style="gql.secondary")
     if len(candidates) > len(visible):
-        console.print("Additional structural candidates are available with --verbose or reports.")
+        console.print(showing_notice(len(visible), len(candidates), "structural candidates"))
+    if len(limitations) > len(visible_limits):
+        console.print(showing_notice(len(visible_limits), len(limitations), "limitations"))

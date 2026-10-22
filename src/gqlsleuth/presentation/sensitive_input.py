@@ -14,6 +14,7 @@ from gqlsleuth.domain.sensitive_input import (
 )
 from gqlsleuth.presentation.console import _document, _section
 from gqlsleuth.presentation.endpoints import endpoint_groups
+from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
 from gqlsleuth.presentation.statuses import style_status_terms
 
 
@@ -32,7 +33,7 @@ def render_sensitive_review(
     console.print(
         f"{len(candidates)} schema-derived review candidate(s); zero additional requests."
     )
-    visible = candidates if verbose else candidates[:10]
+    visible = candidates[: MAX_HUMAN_INVENTORY_ITEMS if verbose else 10]
     for endpoint, items in endpoint_groups(visible, lambda item: item.endpoint):
         if endpoint:
             console.print(Text("Endpoint: " + endpoint, style="gql.metadata"))
@@ -77,6 +78,8 @@ def render_sensitive_review(
                         "Supply the exact value and target; schema hints do not establish "
                         "valid runtime values."
                     )
+    if len(candidates) > len(visible):
+        console.print(showing_notice(len(visible), len(candidates), "sensitive-input candidates"))
     console.print(Text(SENSITIVE_REVIEW_NOTICE))
 
 

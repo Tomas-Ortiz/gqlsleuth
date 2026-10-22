@@ -297,10 +297,10 @@ def test_reports_show_attempted_query_and_mutation_responses_safely(execution_vi
     context = build_report(active, generated_at=STAMP)
     before = render_report(context, ReportFormat.JSON)
     output = render_report(context, format)
-    assert "QUERY_BODY" in output and "MUTATION_BODY" in output
+    assert "QUERY_BODY" not in output and "MUTATION_BODY" in output
     assert "OBSERVED_ERROR" in output and "PLAIN_BODY" in output
     assert "Binary/unrenderable" in output
-    assert "truncated" in output and "UNSHOWN_TAIL" not in output
+    assert "BODY_PREFIX" not in output and "UNSHOWN_TAIL" not in output
     assert "Duration" in output
     assert "No HTTP response was received" in output
     sections = {section.title: section for section in technical_sections(context)}
@@ -314,14 +314,14 @@ def test_reports_show_attempted_query_and_mutation_responses_safely(execution_vi
     )
     assert blocked.response is None and blocked.request_blocks == ()
     if format is ReportFormat.HTML:
-        assert output.count("<details>") == 8
+        assert output.count("<details>") == 6
         assert "<summary>Server response - HTTP 200 - SUCCESS</summary>" in output
         assert "<script>" not in output and "&lt;script&gt;" in output
-        assert '"value": "QUERY_BODY"' in unescape(output)
+        assert '"value": "QUERY_BODY"' not in unescape(output)
     else:
-        assert output.count("#### Response") == 8
+        assert output.count("#### Response") == 6
         assert "````text\n</code><script>" in output
-        assert '"value": "QUERY_BODY"' in output
+        assert '"value": "QUERY_BODY"' not in output
     assert render_report(context, ReportFormat.JSON) == before
     canonical = json.loads(before)
     execution = next(

@@ -208,7 +208,8 @@ def test_compact_and_verbose_leave_results_requests_and_all_report_formats_ident
     assert "query {" not in compact.stdout
     assert "Manual review candidates" in compact.stdout
     assert "Use --verbose for technical details" in compact.stdout
-    assert "Interest score" in verbose.stdout and "query {" in verbose.stdout
+    assert "Interest score" in verbose.stdout and "Generated Queries" in verbose.stdout
+    assert "canonical JSON report" in verbose.stdout
     assert "Query name contains explicit state-changing" in verbose.stdout
     assert len(compact.stdout) < len(verbose.stdout)
     assert verbose.stdout.split("\nReports\n")[0] == long_verbose.stdout

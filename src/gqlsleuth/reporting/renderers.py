@@ -17,6 +17,7 @@ from gqlsleuth.reporting.differential import differential_sections
 from gqlsleuth.reporting.endpoint_context import group_endpoint_context
 from gqlsleuth.reporting.models import DifferentialReportContext, ReportContext, ReportFormat
 from gqlsleuth.reporting.presentation import human_sections
+from gqlsleuth.reporting.scaling import bound_section
 
 
 def render_report(context: ReportContext | DifferentialReportContext, format: ReportFormat) -> str:
@@ -53,7 +54,7 @@ def render_report(context: ReportContext | DifferentialReportContext, format: Re
             else human_sections(context)
         )
         return environment.get_template(name).render(
-            sections=tuple(group_endpoint_context(section) for section in sections)
+            sections=tuple(group_endpoint_context(bound_section(section)) for section in sections)
         )
     except (TemplateError, OSError, TypeError, ValueError, RecursionError) as error:
         raise ReportingError(
