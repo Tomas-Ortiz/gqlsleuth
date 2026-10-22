@@ -3775,6 +3775,17 @@ canonical JSON. Verbose means more analyst detail, not an evidence dump. AI pres
 exact ACTIVE consent previews are outside these post-scan collection limits. Rendering does
 not mutate records, reclassify results, or alter report schema version 2.
 
+Important Limitations uses a shared human-only summary in compact/verbose console and
+Markdown/HTML. Execution outcomes count affected query/mutation executions rather than individual
+GraphQL error objects, naming at most three affected operations. Larger sets refer to detailed
+results. Standard SAFE budget reasons retain their recorded limit and aggregate skip count;
+state-changing-name safety skips may share that known cause, while distinct safety reasons remain
+separate. Transport diagnostics are not counted again alongside their primary network outcome.
+Discovery failures count probed paths within each origin; operation summaries preserve endpoint
+scope when multiple endpoints are present. Arbitrary application error prose stays in technical
+details. Existing 5/20 summary limits and 20/10 technical scaling budgets are unchanged, and
+canonical operation-level errors/limitations remain exhaustive.
+
 Canonical JSON/model/evidence relationships and Phase 31 AIContext, prompts, validation, serialized
 Ollama request and inference count are unchanged. No new networking or dependencies. Exact selected
 ACTIVE requests remain visible before each separate default-NO consent, even without verbose.

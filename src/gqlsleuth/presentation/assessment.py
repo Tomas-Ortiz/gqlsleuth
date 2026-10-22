@@ -7,6 +7,7 @@ from typing import Literal
 from gqlsleuth.domain.analysis import InterestPriority
 from gqlsleuth.domain.models import ConfidenceLevel
 from gqlsleuth.presentation.capabilities import capability_wording
+from gqlsleuth.presentation.limitations import summarize_issues
 from gqlsleuth.presentation.security_review import candidate_label, candidate_summary
 from gqlsleuth.reporting.models import ReportContext
 
@@ -204,31 +205,7 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
         )
     if not schemas:
         limitations.append("No parsed schema was available; operation coverage is limited.")
-    transport_messages = {
-        "HttpTransportError": (
-            "A target connection failed. "
-            "Check the URL, network reachability, proxy and TLS settings."
-        ),
-        "HttpTimeoutError": (
-            "A target request timed out. Check network reachability and the target timeout setting."
-        ),
-        "HttpProxyError": (
-            "A target proxy request failed. Check the proxy configuration and reachability."
-        ),
-        "HttpRedirectError": (
-            "A target request exceeded the redirect limit. Check the target URL and redirects."
-        ),
-    }
-    for issue in report.errors_and_limitations:
-        # Group normalized codes only. Raw target error prose stays in technical details.
-        if issue.code in {"skipped_safety", "not_selected", "blocked_safety", "partial"}:
-            continue
-        if issue.code in transport_messages:
-            limitations.append(transport_messages[issue.code])
-            continue
-        limitations.append(
-            f"{capability_wording(issue.stage)}: {issue.code.replace('_', ' ').upper()}."
-        )
+    limitations.extend(summarize_issues(report))
     if any(e.state == "UNRESOLVED" for e in events):
         limitations.append(
             "Some security checks remain unresolved; see Prioritized Review and technical details."
@@ -250,6 +227,7 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
             limitations.append(
                 "Capability scope/coverage limitations are retained in technical details."
             )
+            break
     if report.ai_interpretation and report.ai_interpretation.context_metadata.context_truncated:
         limitations.append("AI context was truncated; interpretation covers only supplied facts.")
     return AssessmentPresentationSummary(
@@ -266,7 +244,7 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
         manual,
         tuple((str(status).upper(), count) for status, count in queries.items()),
         mutations,
-        tuple(dict.fromkeys(limitations)),
+        tuple(limitations),
     )
 
 

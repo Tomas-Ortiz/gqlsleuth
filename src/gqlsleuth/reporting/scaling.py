@@ -1,6 +1,5 @@
 """Bounded human inventories and exception details; canonical records stay exhaustive."""
 
-import re
 from collections import Counter
 from dataclasses import replace
 
@@ -10,6 +9,7 @@ from gqlsleuth.presentation.limits import (
     JSON_DETAIL_NOTICE,
     MAX_HUMAN_DETAIL_ITEMS,
     MAX_HUMAN_INVENTORY_ITEMS,
+    is_safe_budget_reason,
     showing_notice,
 )
 from gqlsleuth.reporting.models import OperationReport, ReportContext
@@ -55,17 +55,6 @@ def _exception(item: OperationReport) -> bool:
     return _state(item) not in {"SUCCESS", "NOT_SELECTED", "NOT_RUN"}
 
 
-def _budget_reason(reason: str) -> bool:
-    """Recognize only the scanner's fixed SAFE budget message, not other limit decisions."""
-    return (
-        re.fullmatch(
-            r"Per-scan safe execution limit of [1-9][0-9]* was reached\.",
-            " ".join(reason.split()),
-        )
-        is not None
-    )
-
-
 def _budget_skip(item: OperationReport) -> bool:
     execution = item.execution
     return bool(
@@ -75,7 +64,7 @@ def _budget_skip(item: OperationReport) -> bool:
         and not execution.recorded_attempted
         and not execution.evidence_ids
         and execution.response is None
-        and _budget_reason(execution.reason)
+        and is_safe_budget_reason(execution.reason)
     )
 
 
@@ -87,7 +76,9 @@ def _group_limitations(report: ReportContext, section: ReportSection) -> ReportS
     # Administrative groups follow material limitations; ordering within each class is stable.
     keys = sorted(
         groups,
-        key=lambda key: key[1] == "query" and key[2] == "skipped_limit" and _budget_reason(key[3]),
+        key=lambda key: (
+            key[1] == "query" and key[2] == "skipped_limit" and is_safe_budget_reason(key[3])
+        ),
     )
     entries = []
     for key in keys:

@@ -6,6 +6,7 @@ from gqlsleuth.presentation.assessment import (
     build_assessment,
 )
 from gqlsleuth.presentation.endpoints import endpoint_groups
+from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
 from gqlsleuth.reporting.models import ReportContext
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection, technical_sections
 
@@ -156,6 +157,13 @@ def assessment_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 ),
             )
         )
+    if summary.limitations:
+        limitations = summary.limitations[:MAX_HUMAN_INVENTORY_ITEMS]
+        if len(summary.limitations) > MAX_HUMAN_INVENTORY_ITEMS:
+            limitations += (
+                showing_notice(MAX_HUMAN_INVENTORY_ITEMS, len(summary.limitations), "limitations"),
+            )
+        sections.append(ReportSection("Important Limitations", paragraphs=limitations))
     sections.extend(s for s in technical if s.title == "AI-Assisted Interpretation")
     sections.append(
         ReportSection("Detailed Technical Results", children=grouped_technical_sections(technical))
