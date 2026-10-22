@@ -199,6 +199,12 @@ The assessment separates conclusions from observations and missing information:
 priorities rank manual-review interest, not exploitability. Introspection being enabled or an
 operation returning SUCCESS does not by itself establish a vulnerability.
 
+Generic search/filter terminology found only in descriptions and bare `hidden` terminology
+retain context-only rule matches with zero contribution to operation review interest. They do
+not independently create review candidates. Meaningful name/type signals, internal/private or
+debug terminology, and specific credential descriptions retain their existing contributions.
+Only contributing rules determine the operation's categories and score.
+
 Execution counts distinguish attempted requests, SUCCESS, GRAPHQL_ERROR, HTTP_ERROR,
 INVALID_RESPONSE, NETWORK_FAILURE and unexecuted safety/limit skips. HTTP 200 alone is not
 operation success. GraphQL errors can come from placeholders, business rules or other server

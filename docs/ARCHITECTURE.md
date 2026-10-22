@@ -714,7 +714,16 @@ primary operation surface. Generic `flag` fields do not imply configuration, whi
 feature-flag terminology may still match. A rule contributes its weight at most once per operation
 while retaining every matched keyword and surface location for explanation. Different rules
 contribute independently.
-When no semantic rule matches, Query fields receive the `READ_ONLY_BUSINESS_DATA` fallback and
+For root-operation prioritization, generic search terms (`filter`, `search`, `find`, `lookup`,
+and `query` if configured) found only in descriptions retain their matches but contribute zero.
+The same terms in permitted operation/argument/input-field/type names still contribute normally.
+Bare `hidden` matches also contribute zero to internal functionality; an `internal` or `private`
+match can still give that rule its normal once-per-operation contribution. More specific terms,
+including credential terminology in descriptions, retain their existing weights. Context-only
+matches explicitly report contribution zero and are excluded from score-bearing categories.
+This refinement applies to root review interest, not the separate nested-authorization terminal
+field matcher. It does not change keyword lists, candidate thresholds, or execution policies.
+When no semantic rule contributes, Query fields receive the `READ_ONLY_BUSINESS_DATA` fallback and
 Mutation fields receive `STATE_CHANGING_BUSINESS_OPERATION`; both remain informational unless a
 configured rule contributes a score.
 

@@ -1,0 +1,28 @@
+type Query {
+  ability("Filter the rows returned." where: Criteria): Entry
+  concealed(where: Visibility): VisibleEntry
+  combined("Filter the rows returned." where: Visibility): VisibleEntry
+  search: String
+  searchUsers: String
+  findAccounts: String
+  entries(filter: Criteria): Entry
+  internalStatus: String
+  systemDebug: String
+  systemDiagnostics(password: String): Diagnostics
+  me: Person
+}
+
+type Mutation {
+  login(password: String!): SessionPayload
+  createUser(input: CreateUserInput!): Boolean
+  adminResetPassword: Boolean
+}
+
+input Criteria { value: String }
+input Visibility { is_hidden: Boolean }
+input CreateUserInput { email: String! password: String! }
+type Entry { id: ID }
+type VisibleEntry { is_hidden: Boolean }
+type Diagnostics { status: String }
+type Person { token: String }
+type SessionPayload { token: String }

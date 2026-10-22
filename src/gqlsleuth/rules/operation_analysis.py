@@ -106,13 +106,16 @@ def _analyze_field(
 ) -> OperationAnalysis:
     surfaces = _build_surfaces(schema, field)
     matches = tuple(
-        match for rule in rules.rules if (match := _match_rule(rule, surfaces)) is not None
+        match
+        for rule in rules.rules
+        if (match := _match_rule(rule, surfaces, contextual_interest=True)) is not None
     )
     score = sum(match.weight for match in matches)
-    if matches:
+    scoring_matches = tuple(match for match in matches if match.weight > 0)
+    if scoring_matches:
         category_order = {category: index for index, category in enumerate(OperationCategory)}
         categories = tuple(
-            sorted({match.category for match in matches}, key=category_order.__getitem__)
+            sorted({match.category for match in scoring_matches}, key=category_order.__getitem__)
         )
     else:
         categories = (
@@ -243,9 +246,12 @@ def _add_surface(
 def _match_rule(
     rule: OperationRule,
     surfaces: tuple[_AnalysisSurface, ...],
+    *,
+    contextual_interest: bool = False,
 ) -> RuleMatch | None:
     matched_keywords: set[str] = set()
     matched_locations: set[str] = set()
+    contributes = False
     for keyword in rule.keywords:
         keyword_tokens = frozenset(normalize_terms(keyword))
         if not keyword_tokens:
@@ -254,13 +260,32 @@ def _match_rule(
             if surface.kind in rule.surfaces and keyword_tokens.issubset(surface.tokens):
                 matched_keywords.add(keyword.casefold())
                 matched_locations.add(surface.location)
+                contributes |= not contextual_interest or _contributes_interest(
+                    rule.category, keyword_tokens, surface.location
+                )
     if not matched_keywords:
         return None
     return RuleMatch(
         rule_id=rule.id,
         category=rule.category,
-        weight=rule.weight,
+        weight=rule.weight if contributes else 0,
         matched_keywords=tuple(sorted(matched_keywords)),
         locations=tuple(sorted(matched_locations)),
-        reason=rule.reason,
+        reason=rule.reason
+        if contributes
+        else "Context-only terminology; no independent review-interest contribution.",
     )
+
+
+def _contributes_interest(
+    category: OperationCategory, keyword_tokens: frozenset[str], location: str
+) -> bool:
+    """Discount two ambiguous root-priority signals without changing capability matching."""
+    if category is OperationCategory.INTERNAL_FUNCTIONALITY and keyword_tokens == {"hidden"}:
+        return False
+    description = location == "operation.description" or location.partition(".")[0].endswith(
+        "_description"
+    )
+    if category is OperationCategory.SEARCH and description:
+        return not keyword_tokens.issubset({"filter", "search", "find", "query", "lookup"})
+    return True
