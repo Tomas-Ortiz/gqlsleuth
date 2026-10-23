@@ -76,7 +76,7 @@ def render_query_depth(
         )
         if verbose and item.evidence:
             console.print()
-            console.print("Response", style="gql.response")
+            console.print("RESPONSE", style="gql.heading")
             response = depth_response(item.evidence)
             for label, value in response.details:
                 console.print(Text(f"{label}: {value}"))

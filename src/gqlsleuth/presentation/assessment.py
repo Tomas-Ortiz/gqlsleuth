@@ -18,9 +18,10 @@ DEFAULT_MAX_AI_INSIGHTS = 3
 
 PRIORITIZED_REVIEW_TITLE = "Prioritized Review"
 PRIORITIZED_REVIEW_NOTICE = (
-    "The review-item count covers structural/sensitive-input candidates and CRITICAL/HIGH-interest "
-    "operations not already represented elsewhere. This curated view also includes policy "
-    "violations and attempted unresolved checks; detailed candidate sets may overlap."
+    "The review-item count includes schema-structure and sensitive-input candidates. "
+    "It also counts CRITICAL/HIGH-interest operations not already represented elsewhere. "
+    "This view additionally shows policy violations and attempted checks with unresolved results. "
+    "Detailed candidate sets may overlap."
 )
 
 CAPABILITY_ORDER = (

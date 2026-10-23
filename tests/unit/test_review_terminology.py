@@ -110,12 +110,12 @@ def test_console_terminology_without_selection_or_data_changes(review_state, mon
     )
     text = " ".join(output.getvalue().split())
     assert f"Prioritized review items {expected_count}" in text
-    assert "Prioritized Review" in text
+    assert "PRIORITIZED REVIEW" in text
     assert PRIORITIZED_REVIEW_NOTICE in text
     assert "Manual review candidates" not in text
     assert "Security Review Candidates" not in text
     if verbose:
-        assert "Operation Review Candidates" in text
+        assert "OPERATION REVIEW CANDIDATES" in text
         assert f"Operation review candidate count {len(report.review_candidates)}" in text
         assert (
             f"Structural review candidates {len(report.graphql_security_review.candidates)}" in text

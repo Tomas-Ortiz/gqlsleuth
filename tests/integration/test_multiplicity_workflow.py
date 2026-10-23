@@ -137,11 +137,11 @@ def test_cli_explicit_selection_and_baseline_requests(probe_cli, input, count):
     assert len(requests) == count == len(results[0].evidence)
     assert baselines[0] == baselines[1]
     assert active.output.count("selected active Query-Shape checks?") <= 1
-    assert active.output.index("Active Query-Shape candidates") < active.output.index(
-        "Active Mutation candidates"
+    assert active.output.index("ACTIVE QUERY-SHAPE CANDIDATES") < active.output.index(
+        "ACTIVE MUTATION CANDIDATES"
     )
     if count:
-        assert "Selected Query-Shape checks" in active.output
+        assert "SELECTED QUERY-SHAPE CHECKS" in active.output
 
 
 @pytest.mark.parametrize("invalid", ["all", "*", "1-2", "0", "9", "1,3", "-1"])

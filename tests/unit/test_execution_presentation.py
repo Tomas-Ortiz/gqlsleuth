@@ -169,7 +169,7 @@ def test_execution_status_segments_share_semantics(execution_views, renderer, wh
             assert matches and all(s.style.color.name == color for s in matches)
 
 
-@pytest.mark.parametrize("title", ["Active Mutation candidates:", "Selected Mutations:"])
+@pytest.mark.parametrize("title", ["Active Mutation candidates:", "SELECTED MUTATIONS:"])
 def test_endpoint_grouping_preserves_indices_documents_and_priorities(execution_views, title):
     candidates = execution_views[1].preview.candidates
     second = replace(
@@ -212,7 +212,7 @@ def test_review_and_preview_use_priority_spans(execution_views):
     console.print = collect
     render_scan(console, safe, verbose=True)
     render_mutations(
-        console, tuple(enumerate(active.preview.candidates, 1)), title="Selected Mutations:"
+        console, tuple(enumerate(active.preview.candidates, 1)), title="SELECTED MUTATIONS:"
     )
     for priority in (InterestPriority.CRITICAL_INTEREST, InterestPriority.HIGH_INTEREST):
         word = priority_label(priority, compact=True).plain
@@ -280,12 +280,12 @@ def test_query_response_console_is_verbose_only_and_mutations_show_actual_respon
     assert "PLAIN_BODY" in verbose and "Binary/unrenderable" in verbose
     assert "No HTTP response was received" in verbose
     assert "truncated" in verbose and "UNSHOWN_TAIL" not in verbose
-    assert verbose.count("\nResponse\n") == 6
+    assert verbose.count("\nRESPONSE\n") == 6
     assert "readAndBurn - " not in verbose
     output = capture(render_active_execution, active)
     assert "2 executed; 1 SUCCESS; 1 GRAPHQL_ERROR." in output
     assert "MUTATION_BODY" in output and "OBSERVED_ERROR" in output
-    assert output.count("\nResponse\n") == 2
+    assert output.count("\nRESPONSE\n") == 2
     assert "deleteUser" not in output
     for repeated in ("identified", "generated", "blocked for safety", "selected", "confirmed"):
         assert repeated not in output
@@ -314,12 +314,12 @@ def test_reports_show_attempted_query_and_mutation_responses_safely(execution_vi
     )
     assert blocked.response is None and blocked.request_blocks == ()
     if format is ReportFormat.HTML:
-        assert output.count("<details>") == 6
+        assert output.count('<details class="response">') == 6
         assert "<summary>Server response - HTTP 200 - SUCCESS</summary>" in output
         assert "<script>" not in output and "&lt;script&gt;" in output
         assert '"value": "QUERY_BODY"' not in unescape(output)
     else:
-        assert output.count("#### Response") == 6
+        assert len(re.findall(r"^(?:#{2,6} Response|\*\*Response\*\*)$", output, re.M)) == 6
         assert "````text\n</code><script>" in output
         assert '"value": "QUERY_BODY"' not in output
     assert render_report(context, ReportFormat.JSON) == before
@@ -348,7 +348,7 @@ def test_unexecuted_batch_has_no_response_and_decline_is_concise(execution_views
         confirmed=False,
     )
     output = capture(render_active_execution, active)
-    assert "0 executed." in output and "Response" not in output
+    assert "0 executed." in output and "RESPONSE" not in output
     assert ("Batch confirmation declined" in output) is selected
     for section in technical_sections(build_report(active)):
         if section.title == "Active Mutation Analysis":
@@ -395,12 +395,12 @@ def test_ai_tables_preserve_stored_prose_and_validated_facts(execution_views, ai
     before = tuple(render_report(report, format) for format in ReportFormat)
     output = capture(render_ai, result, width=width, verbose=True)
     assert max(map(len, output.splitlines())) <= width
-    assert "AI-Assisted Interpretation" in output
+    assert "AI-ASSISTED INTERPRETATION" in output
     assert "AI-generated interpretation" in output
-    assert "Execution Summary" in output and "Review Focus" not in output
-    assert "Operation Analysis" in output
+    assert "EXECUTION SUMMARY" in output and "Review Focus" not in output
+    assert "OPERATION ANALYSIS" in output
     assert "Operation Explanations" not in output and "Manual Review Suggestions" not in output
-    assert "Limitations" in output
+    assert "LIMITATIONS" in output
     assert "HIGH" in output and "CRITICAL" in output
     assert "[bold]" in output
     assert "highly" in output
@@ -458,24 +458,24 @@ def test_rendered_titles_and_tables_use_structural_styles(execution_views, ai_vi
     monkeypatch.setattr(console, "print", collect)
     safe, active = execution_views
     render_scan(console, safe)
-    for title in ("Active Mutation candidates:", "Selected Mutations:"):
+    for title in ("ACTIVE MUTATION CANDIDATES:", "SELECTED MUTATIONS:"):
         render_mutations(console, tuple(enumerate(active.preview.candidates, 1)), title=title)
     render_active_execution(console, active)
     render_ai(console, ai_view, verbose=True)
     assert titles == [
-        "Operation Review Candidates",
-        "Generated Queries",
-        "Query Execution",
-        "Active Mutation candidates:",
-        "Selected Mutations:",
-        "Mutation Execution",
-        "AI-Assisted Interpretation",
-        "AI Generation Metadata",
-        "Execution Summary (validated facts)",
-        "Interpretive Summary",
-        "Operation Analysis",
-        "Cross-Operation Review Themes",
-        "Limitations",
+        "OPERATION REVIEW CANDIDATES",
+        "GENERATED QUERIES",
+        "QUERY EXECUTION",
+        "ACTIVE MUTATION CANDIDATES:",
+        "SELECTED MUTATIONS:",
+        "MUTATION EXECUTION",
+        "AI-ASSISTED INTERPRETATION",
+        "AI GENERATION METADATA",
+        "EXECUTION SUMMARY (VALIDATED FACTS)",
+        "INTERPRETIVE SUMMARY",
+        "OPERATION ANALYSIS",
+        "CROSS-OPERATION REVIEW THEMES",
+        "LIMITATIONS",
     ]
     for table in tables:
         stream = StringIO()
@@ -487,7 +487,7 @@ def test_rendered_titles_and_tables_use_structural_styles(execution_views, ai_vi
 def test_structural_console_spacing(execution_views, ai_view, width):
     safe, active = execution_views
     compact = capture(render_scan, safe, width=width)
-    for title in ("Operation Review Candidates", "Generated Queries", "Query Execution"):
+    for title in ("OPERATION REVIEW CANDIDATES", "GENERATED QUERIES", "QUERY EXECUTION"):
         assert_separated(compact, title)
     assert re.search(r"\n\n +Operation +Outcome", compact)
     assert len(compact.splitlines()) < 65
@@ -495,20 +495,20 @@ def test_structural_console_spacing(execution_views, ai_view, width):
 
     output = capture(render_ai, ai_view, width=width, verbose=True)
     for title in (
-        "Execution Summary",
-        "Operation Analysis",
-        "Limitations",
+        "EXECUTION SUMMARY",
+        "OPERATION ANALYSIS",
+        "LIMITATIONS",
     ):
         assert_separated(output, title)
-    assert "Model: qwen3:8b\n\nAI Generation Metadata" in output
-    assert "AI status: SUCCESS\n\nExecution Summary" in output
-    assert "Operation Analysis\n\n" in output
+    assert "Model: qwen3:8b\n\nAI GENERATION METADATA" in output
+    assert "AI status: SUCCESS\n\nEXECUTION SUMMARY" in output
+    assert "OPERATION ANALYSIS\n\n" in output
     for rendered in (compact, output):
         assert "\n\n\n" not in rendered
         assert max(map(len, rendered.splitlines())) <= width
         assert all(not line or line.strip() for line in rendered.splitlines())
 
-    for title in ("Active Mutation candidates:", "Selected Mutations:"):
+    for title in ("ACTIVE MUTATION CANDIDATES:", "SELECTED MUTATIONS:"):
         candidates = tuple(enumerate(active.preview.candidates, 1))
         preview = capture(render_mutations, candidates, title=title, width=100)
         for index, _candidate in candidates[1:]:

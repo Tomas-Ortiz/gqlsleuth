@@ -229,15 +229,15 @@ def test_rendering_is_local_and_preserves_result_json_and_ai(whole, monkeypatch,
     monkeypatch.setattr(WebSocketClient, "__enter__", forbidden)
     text = capture(whole, width=width, verbose=verbose)
     assert max(map(len, text.splitlines())) <= width
-    assert "GQLSleuth Assessment" in text and "Security Validation" in text
+    assert "GQLSLEUTH ASSESSMENT" in text and "SECURITY VALIDATION" in text
     assert SECRET not in text
     if not verbose:
-        assert "Variables:" not in text and "Response" not in text
+        assert "Variables:" not in text and "\nRESPONSE\n" not in text
         assert "Evidence Summary" not in text
         assert "Use --verbose" in text
     else:
         for title in ("Discovery & Schema", "Operations & Execution", "Specialized Surfaces"):
-            assert title in text
+            assert title.upper() in text
     for format in (ReportFormat.MARKDOWN, ReportFormat.HTML):
         render_report(report, format)
     assert whole == before
@@ -311,12 +311,12 @@ def test_ai_compact_caps_insights_and_verbose_retains_complete_answer(whole):
     output = StringIO()
     render_ai(Console(file=output, width=120, theme=CONSOLE_THEME), result)
     text = output.getvalue()
-    assert "Interpretive Summary" in text and "AI-generated interpretation" in text
-    assert "Execution Summary" not in text and "Security Fact Reviews" not in text
+    assert "INTERPRETIVE SUMMARY" in text and "AI-generated interpretation" in text
+    assert "EXECUTION SUMMARY" not in text and "SECURITY FACT REVIEWS" not in text
     assert f"{len(context.operations)} additional AI entries" in text
     output = StringIO()
     render_ai(Console(file=output, width=120, theme=CONSOLE_THEME), result, verbose=True)
-    assert "Execution Summary (validated facts)" in output.getvalue()
+    assert "EXECUTION SUMMARY (VALIDATED FACTS)" in output.getvalue()
     report = build_report(whole, ai_interpretation=result)
     for format in (ReportFormat.MARKDOWN, ReportFormat.HTML):
         text = render_report(report, format)

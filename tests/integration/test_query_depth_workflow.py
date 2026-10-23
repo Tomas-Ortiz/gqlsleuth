@@ -161,9 +161,9 @@ def test_independent_cli_selection_and_unchanged_safe_sequence(depth_cli, input,
     assert len(depth_cli[0]) == count == len(depth_cli[1][0].evidence)
     assert depth_cli[2][0] == depth_cli[2][1]
     assert (
-        active.output.index("Active Query-Shape candidates")
-        < active.output.index("Active Query-Depth candidates")
-        < active.output.index("Active Mutation candidates")
+        active.output.index("ACTIVE QUERY-SHAPE CANDIDATES")
+        < active.output.index("ACTIVE QUERY-DEPTH CANDIDATES")
+        < active.output.index("ACTIVE MUTATION CANDIDATES")
     )
     assert active.output.count("selected active Query-Depth check?") <= 1
 
@@ -267,9 +267,9 @@ def test_default_active_exact_previews_precede_selection_consent_and_requests(
     assert result.exit_code == 0, (result.exception, result.output)
     assert len(depth_cli[0]) == 4
     for hint, select_hint, heading, count in (
-        ("Query-Shape checks?", "Select active Query-Shape", "Selected Query-Shape checks", 2),
-        ("Query-Depth check?", "Select active Query-Depth", "Selected Query-Depth check", 1),
-        ("selected Mutations?", "Select Mutations", "Selected Mutations:", 1),
+        ("Query-Shape checks?", "Select active Query-Shape", "SELECTED QUERY-SHAPE CHECKS", 2),
+        ("Query-Depth check?", "Select active Query-Depth", "SELECTED QUERY-DEPTH CHECK", 1),
+        ("selected Mutations?", "Select Mutations", "SELECTED MUTATIONS:", 1),
     ):
         confirmation = consent_trace.confirmation(hint)
         selection = consent_trace.selection_before(select_hint, confirmation)
@@ -285,7 +285,7 @@ def test_default_active_exact_previews_precede_selection_consent_and_requests(
                 assert_request_preview(selected, payload)
         assert "Variables:" in selected
     shape = consent_trace.confirmation("Query-Shape checks?").output.split(
-        "Selected Query-Shape checks", 1
+        "SELECTED QUERY-SHAPE CHECKS", 1
     )[1]
     assert "Aliases requested: 3" in shape
     assert "Batch entries: 2 identical Query/variables request objects." in shape
@@ -294,7 +294,7 @@ def test_default_active_exact_previews_precede_selection_consent_and_requests(
     mutation = consent_trace.confirmation("selected Mutations?").output
     assert "WARNING: These operations may modify application state." in mutation
     consent_trace.assert_private(secret, "UX006_COOKIE_SECRET", "UX006_API_KEY_SECRET")
-    final = consent_trace.output.split("GQLSleuth Assessment", 1)[1]
+    final = consent_trace.output.split("GQLSLEUTH ASSESSMENT", 1)[1]
     assert "Variables:" not in final and "query (" not in final and "mutation (" not in final
 
 
@@ -389,7 +389,7 @@ def test_narrow_console_and_neutral_outcome(phase_ten_scan):
     output = StringIO()
     console = Console(file=output, width=45, theme=CONSOLE_THEME, color_system=None)
     render_depth_previews(
-        console, ((1, preview.candidates[0]),), title="Active Query-Depth candidates"
+        console, ((1, preview.candidates[0]),), title="ACTIVE QUERY-DEPTH CANDIDATES"
     )
     render_query_depth(console, result, verbose=True)
     text = output.getvalue()

@@ -36,7 +36,7 @@ class ConsentTrace:
         assert len(matches) == 1
         confirmation = matches[0]
         assert confirmation.answer is True
-        assert "GQLSleuth Assessment" not in confirmation.output
+        assert "GQLSLEUTH ASSESSMENT" not in confirmation.output
         return confirmation
 
     def sent_after(self, confirmation):

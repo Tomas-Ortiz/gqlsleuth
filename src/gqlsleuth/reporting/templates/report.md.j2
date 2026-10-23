@@ -1,18 +1,22 @@
 # GQLSleuth Assessment
 
+{% macro heading(text, level) -%}
+{{ ('#' * level ~ ' ' ~ text) if level <= 6 else ('**' ~ text ~ '**') }}
+{%- endmacro %}
 {% macro render_section(section, level=2) %}
 {% if section.title %}
-{{ "#" * level }} {{ section.title }}
-
-{% endif %}
-{% if section.endpoint %}
-Endpoint: {{ section.endpoint | markdown_text }}
+{{ heading(section.title, level) }}
 
 {% endif %}
 {% for paragraph in section.paragraphs %}
 {{ paragraph | markdown_text }}
 
 {% endfor %}
+{% if section.endpoint %}
+{{ heading('Endpoint: ' ~ (section.endpoint | markdown_text), level + (1 if section.title else 0)) }}
+
+{% endif %}
+{% set entry_level = level + 1 + (1 if section.endpoint and section.title else 0) %}
 {% if section.rows %}
 | Metric | Value |
 | --- | --- |
@@ -30,7 +34,12 @@ Endpoint: {{ section.endpoint | markdown_text }}
 
 {% endif %}
 {% for entry in section.entries %}
-{{ "#" * (level + 1) }} {{ entry.title | markdown_text }}
+{{ heading(entry.title | markdown_text, entry_level) }}
+
+{% if entry.execution %}
+{{ heading('Execution', entry_level + 1) }}
+
+{% endif %}
 
 {% for label, value in entry.details %}
 - **{{ label | markdown_text }}:** {{ value | markdown_text }}
@@ -45,11 +54,14 @@ Endpoint: {{ section.endpoint | markdown_text }}
 
 {% endfor %}
 {% if entry.request_blocks %}
-{{ "#" * (level + 2) }} Request
+{{ heading('Request', entry_level + 1) }}
 
 {% for language, text in entry.request_blocks %}
 {% if language == 'json' %}
 Variables:
+
+{% elif language == 'graphql' %}
+GraphQL document:
 
 {% endif %}
 {{ text | fenced(language) }}
@@ -57,13 +69,17 @@ Variables:
 {% endfor %}
 {% endif %}
 {% if entry.response %}
-{{ "#" * (level + 2) }} Response
+{{ heading('Response', entry_level + 1) }}
+
+**Metadata**
 
 {% for label, value in entry.response.details %}
 - **{{ label }}:** {{ value | markdown_text }}
 {% endfor %}
 
 {% if entry.response.body is not none %}
+**Body**
+
 {% if entry.response.body.notice %}
 {{ entry.response.body.notice | markdown_text }}
 
@@ -79,11 +95,11 @@ No HTTP response was received; no server response body is available.
 {% endif %}
 {% endfor %}
 {% if not section.paragraphs and not section.rows and not section.entries and not section.table_rows and not section.children %}
-None recorded.
+*None recorded.*
 
 {% endif %}
 {% for child in section.children %}
-{{ render_section(child, [level + 1, 4] | min) }}
+{{ render_section(child, level + 1) }}
 {% endfor %}
 {% endmacro %}
 {% for section in sections %}

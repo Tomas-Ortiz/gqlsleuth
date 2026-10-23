@@ -162,7 +162,9 @@ def test_many_errors_are_bounded_with_exact_omission_notice(base):
     view = section(report, "Safe Query Execution")
     assert dict(view.rows)["GRAPHQL_ERROR"] == "60"
     assert len(view.entries) == MAX_HUMAN_DETAIL_ITEMS
-    assert "Showing 10 of 60 exception/review detail blocks" in " ".join(view.paragraphs)
+    assert "Showing 10 of 60 available exception/review detail sections" in " ".join(
+        view.paragraphs
+    )
     assert [entry.title for entry in view.entries] == [f"item{i:03}" for i in range(10)]
     assert len(json.loads(render_report(report, ReportFormat.JSON))["queries"]) == 60
 
@@ -214,7 +216,7 @@ def test_generic_collection_bounds_are_explicit_and_idempotent():
     )
     bounded = bound_section(source)
     assert len(bounded.entries) == MAX_HUMAN_DETAIL_ITEMS
-    assert "Showing 10 of 50 detail blocks" in " ".join(bounded.paragraphs)
+    assert "Showing 10 of 50 available detail sections" in " ".join(bounded.paragraphs)
     assert bound_section(bounded) == bounded
     assert len(source.entries) == 50
 

@@ -48,6 +48,7 @@ from gqlsleuth.presentation.security_review import (
     candidate_facts,
     candidate_label,
     candidate_summary,
+    review_wording,
 )
 from gqlsleuth.presentation.statuses import status_text
 
@@ -60,6 +61,7 @@ CONSOLE_THEME = Theme(
         "gql.warning": "yellow",
         "gql.error": "bold red",
         "gql.metadata": "cyan",
+        "gql.operation": "bold cyan",
         "gql.secondary": "dim",
     }
 )
@@ -89,7 +91,9 @@ def render_root_help(console: Console, commands: tuple[tuple[str, str], ...]) ->
         console,
         Panel(Group(*blocks), title="Commands", title_align="left", border_style="dim"),
     )
-    _section(console, "Quick Start")
+    # Root help follows Typer's title-case help layout, separate from scan headings.
+    console.print()
+    console.print("Quick Start", style="gql.section")
     for command in (
         "gqlsleuth scan https://example.com",
         "gqlsleuth scan https://example.com --mode active",
@@ -146,7 +150,26 @@ def _table(*columns: str) -> Table:
 
 def _section(console: Console, title: str) -> None:
     console.print()
-    console.print(title, style="gql.section")
+    console.print(_heading_text(title), style="gql.section", markup=False)
+
+
+def _heading_text(title: str) -> str:
+    """Uppercase structure only; tester-defined context labels retain their exact casing."""
+    prefix, separator, context = title.partition("Context: ")
+    return prefix.upper() + separator.upper() + context if separator else title.upper()
+
+
+def _major_section(console: Console, title: str) -> None:
+    """Width-aware navigation for completed output, not individual operations or consent."""
+    console.print()
+    console.rule(style="gql.secondary")
+    console.print(_heading_text(title), style="gql.section", markup=False)
+
+
+def _endpoint_heading(console: Console, endpoint: str) -> None:
+    console.print()
+    console.print(Text.assemble(("Endpoint: ", "gql.heading"), (endpoint, "gql.metadata")))
+    console.print()
 
 
 def _render_table(console: Console, table: Table) -> None:
@@ -665,7 +688,7 @@ def _render_execution_response(
     console.print()
     console.print(Text.assemble((operation + " - ", "gql.heading"), _status(status)))
     view = present_response(response, status, duration_seconds=duration_seconds)
-    console.print("Response", style="gql.response")
+    console.print("RESPONSE", style="gql.heading")
     console.print(Text("; ".join(f"{key}: {value}" for key, value in view.details)))
     if view.body is None:
         console.print("No HTTP response was received; no server response body is available.")
@@ -691,7 +714,7 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
     if not verbose:
         _render_ai_summary(console, result)
         return
-    _section(console, "AI-Assisted Interpretation")
+    _major_section(console, "AI-Assisted Interpretation")
     console.print(AI_NOTICE, markup=False, style="gql.secondary")
     _render_ai_quality(console, result, verbose=True)
     console.print(f"Model: {result.model}", markup=False)
@@ -809,7 +832,7 @@ def _render_ai_summary(console: Console, result: AIInterpretationResult) -> None
         )
         return
     interpretation = result.interpretation
-    _section(console, "AI-Assisted Interpretation")
+    _major_section(console, "AI-Assisted Interpretation")
     console.print(AI_NOTICE, markup=False, style="gql.secondary")
     _render_ai_quality(console, result, verbose=False)
     _section(console, "Interpretive Summary")
@@ -960,7 +983,7 @@ def render_security_review(
     )
     for group_endpoint in endpoints:
         entries = tuple(item for item in visible if item.endpoint == group_endpoint)
-        console.print(Text("Endpoint: " + group_endpoint, style="gql.metadata"))
+        _endpoint_heading(console, group_endpoint)
         table = _table("Type", "Subject", "Review")
         for item in entries:
             table.add_row(
@@ -974,7 +997,7 @@ def render_security_review(
             for item in entries:
                 console.print()
                 console.print(Text(item.subject, style="gql.metadata"))
-                console.print(capability_wording(item.deterministic_reason), markup=False)
+                console.print(review_wording(item.deterministic_reason), markup=False)
                 if item.related_operation:
                     console.print(priority_label(item.related_operation.priority))
                     console.print(
@@ -987,11 +1010,11 @@ def render_security_review(
                 for fact in candidate_facts(item):
                     console.print(fact, markup=False)
                 console.print(
-                    "Manual review: " + capability_wording(item.review_guidance), markup=False
+                    "Manual review: " + review_wording(item.review_guidance), markup=False
                 )
                 for hint in follow_ups:
                     if hint.endpoint == item.endpoint and item.subject == f"query {hint.operation}":
-                        console.print("Suggested follow-up:", style="gql.section")
+                        console.print("SUGGESTED FOLLOW-UP:", style="gql.section")
                         for label, command in follow_up_commands(hint):
                             console.print(Text(f"  {label}:"))
                             console.print(Text(f"    {command}", style="gql.metadata"))

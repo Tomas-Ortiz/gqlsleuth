@@ -165,7 +165,7 @@ def test_cli_reports_secret_isolation_transport_and_no_ai(controlled, tmp_path, 
         ],
     )
     assert output.exit_code == 0, output.exception
-    assert "Authorization Differential Review" in output.stdout
+    assert "AUTHORIZATION DIFFERENTIAL REVIEW" in output.stdout
     assert "Pairs compared: 3" in output.stdout and "Zero differential Mutations" in output.stdout
     assert "Select Mutations" not in output.stdout and "AI-Assisted" not in output.stdout
     for request in controlled[0]:

@@ -54,7 +54,7 @@ def test_no_format_creates_nothing_and_preserves_safe_console_output(report_cli,
     assert list(tmp_path.iterdir()) == []
     reported = invoke("--format", "json")
     assert reported.exit_code == 0
-    assert reported.stdout.split("\nReports\n")[0] == baseline.stdout
+    assert reported.stdout.split("\nREPORTS\n")[0] == baseline.stdout
     paths = list((tmp_path / "gqlsleuth-reports").iterdir())
     assert len(paths) == 1
     assert paths[0].suffix == ".json"
@@ -81,7 +81,7 @@ def test_multiple_formats_and_explicit_directory_write_one_file_per_format(repor
         ".md",
         ".html",
     }
-    report_output = result.stdout.split("Reports\n")[1]
+    report_output = result.stdout.split("REPORTS\n")[1]
     assert report_output.count("JSON") == 1
     assert report_output.count("Markdown") == 1
     assert report_output.count("HTML") == 1
@@ -101,7 +101,7 @@ def test_active_empty_selection_reports_previews_without_mutation_requests(repor
     baseline = invoke("--mode", "active", input="\n")
     result = invoke("--mode", "active", "--format", "json", "--format", "html", input="\n")
     assert baseline.exit_code == result.exit_code == 0
-    assert result.stdout.split("\nReports\n")[0] == baseline.stdout
+    assert result.stdout.split("\nREPORTS\n")[0] == baseline.stdout
     assert result.stdout.count("Select Mutations to execute") == 1
     assert "Execute these" not in result.stdout
     report = json.loads(
@@ -123,11 +123,11 @@ def test_active_selected_confirmation_and_http_behavior_are_unchanged(report_cli
     before = list(report_cli[1])
     result = invoke("--mode", "active", "--format", "json", input="1\ny\n")
     assert baseline.exit_code == result.exit_code == 0
-    assert result.stdout.split("\nReports\n")[0] == baseline.stdout
+    assert result.stdout.split("\nREPORTS\n")[0] == baseline.stdout
     assert result.stdout.count("Execute these 1 selected Mutations?") == 1
     confirmation = result.stdout.split("Execute these 1 selected Mutations?", 1)[1]
-    assert ": y\n\nGQLSleuth Assessment\n" in confirmation
-    assert "\nMutation Execution\n" in confirmation
+    assert ": y\n\nGQLSLEUTH ASSESSMENT\n" in confirmation
+    assert "\nMUTATION EXECUTION\n" in confirmation
     assert report_cli[1] == before + before
     report = json.loads(
         next((tmp_path / "gqlsleuth-reports").glob("*.json")).read_text(encoding="utf-8")
@@ -142,7 +142,7 @@ def test_report_write_failure_occurs_after_scan_with_concise_error(report_cli, t
     path.write_text("existing file", encoding="utf-8")
     result = invoke("--format", "json", "--output", str(path))
     assert result.exit_code == 1
-    assert "Query Execution" in result.stdout
+    assert "QUERY EXECUTION" in result.stdout
     assert "SUCCESS 1" in " ".join(result.stdout.split())
     assert "Reporting error:" in result.stderr
     assert "Traceback" not in result.output

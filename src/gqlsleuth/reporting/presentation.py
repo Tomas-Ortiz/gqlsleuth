@@ -17,7 +17,7 @@ from gqlsleuth.presentation.object_lookup import (
 )
 from gqlsleuth.presentation.query_depth import depth_response
 from gqlsleuth.presentation.responses import ResponsePresentation, present_response
-from gqlsleuth.presentation.security_review import candidate_facts, candidate_label
+from gqlsleuth.presentation.security_review import candidate_facts, candidate_label, review_wording
 from gqlsleuth.reporting.models import OperationReport, ReportContext
 
 
@@ -30,6 +30,7 @@ class ReportEntry:
     request_blocks: tuple[tuple[str, str], ...] = ()
     response: ResponsePresentation | None = None
     evidence_references: tuple[tuple[str, str], ...] = ()
+    execution: bool = False
 
 
 @dataclass(frozen=True)
@@ -413,9 +414,9 @@ def security_review_section(
                 else ()
             ),
             paragraphs=(
-                capability_wording(item.deterministic_reason),
+                review_wording(item.deterministic_reason),
                 *candidate_facts(item),
-                "Manual review: " + capability_wording(item.review_guidance),
+                "Manual review: " + review_wording(item.review_guidance),
             )
             + (
                 (FOLLOW_UP_NOTICE,)
@@ -644,6 +645,7 @@ def _execution_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ())
         + ((execution.error_message,) if execution.error_message else ()),
         request_blocks=_artifact_entry(item).code_blocks if execution.attempted else (),
         response=response,
+        execution=True,
     )
 
 
@@ -670,6 +672,7 @@ def _mutation_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ()) 
         ),
         request_blocks=execution.request_blocks,
         response=execution.response,
+        execution=True,
     )
 
 

@@ -151,7 +151,7 @@ def test_verbose_guidance_compact_output_and_width(phase_ten_scan, width):
         stream = StringIO()
         render_scan(Console(file=stream, width=width, theme=CONSOLE_THEME), scan, verbose=verbose)
         text = stream.getvalue()
-        assert ("Suggested follow-up" in text) is verbose
+        assert ("SUGGESTED FOLLOW-UP" in text) is verbose
         assert not JARGON.search(text)
         assert max(map(len, text.splitlines())) <= width
         if verbose:

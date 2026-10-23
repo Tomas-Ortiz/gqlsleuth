@@ -149,7 +149,7 @@ def test_notice_precedes_any_generated_console_prose(prepared, monkeypatch, verb
     assert output.count(AI_NOTICE) == 1
     assert (
         output.index(AI_NOTICE)
-        < output.index("Interpretive Summary")
+        < output.index("INTERPRETIVE SUMMARY")
         < output.index("The target appears secure.")
     )
     assert "AI quality checks flagged 1 potential issues" in output

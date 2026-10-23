@@ -311,11 +311,11 @@ def test_scan_command_runs_safe_execution_workflow() -> None:
     assert "GraphQL endpoints 1 confirmed / probable" in output
     assert "Introspection ENABLED: 1" in output
     assert "Queries 2 Mutations 1 Subscriptions 0" in output
-    assert "Prioritized Review" in output and "resetPassword" in output
+    assert "PRIORITIZED REVIEW" in output and "resetPassword" in output
     assert "HIGH review interest" in output
     assert "query { exportUsers }" not in output
     assert "Deterministic test terminology" not in output
-    assert "Query Execution SUCCESS 1" in output
+    assert "QUERY EXECUTION SUCCESS 1" in output
     assert "not vulnerability severity" in output
     assert target in output
     assert "Mode: SAFE" in output
@@ -368,8 +368,8 @@ def test_scan_accepts_active_and_retains_safe_query_execution_before_previews() 
 
     assert result.exit_code == 0
     assert "Mode: ACTIVE" in output
-    assert "Query Execution SUCCESS 1" in output
-    assert "Active Mutation candidates:" in output
+    assert "QUERY EXECUTION SUCCESS 1" in output
+    assert "ACTIVE MUTATION CANDIDATES:" in output
     assert "not vulnerability severity" in output
 
 

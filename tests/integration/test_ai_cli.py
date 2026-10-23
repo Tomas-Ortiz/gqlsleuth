@@ -1,6 +1,7 @@
 """Offline CLI sequencing and AI fallback without altering completed scan behavior."""
 
 import json
+import re
 from contextlib import contextmanager
 from copy import deepcopy
 from io import StringIO
@@ -118,7 +119,7 @@ def test_regeneration_progress_and_reports_follow_all_scanning(
         assert "could not produce a valid interpretation after 10 attempts" in text
         assert "Deterministic scan completed normally" in text
     else:
-        assert text.count("AI-Assisted Interpretation") == 1
+        assert text.count("AI-ASSISTED INTERPRETATION") == 1
     report = json.loads(next((tmp_path / "gqlsleuth-reports").glob("*.json")).read_text("utf8"))
     ai_result = report["ai_interpretation"]
     assert ai_result["attempt_count"] == len(requests)
@@ -249,7 +250,7 @@ def test_one_ai_inference_follows_completed_safe_and_active_behavior(
     assert (
         "\n".join(
             line
-            for line in displayed.split("\nAI-Assisted Interpretation")[0].split("\n")
+            for line in re.split(r"\n[─-]+\nAI-ASSISTED INTERPRETATION", displayed)[0].split("\n")
             if not line.startswith("AI attempt ")
         )
         == baseline.stdout
@@ -266,7 +267,7 @@ def test_one_ai_inference_follows_completed_safe_and_active_behavior(
     if mode == "active":
         assert results[-1].selected_indices == ((1,) if mutation_count else ())
         assert results[-1].confirmed is bool(mutation_count)
-    assert "AI-Assisted Interpretation" in result.stdout
+    assert "AI-ASSISTED INTERPRETATION" in result.stdout
     assert "AI-generated interpretation" in result.stdout
     assert "HIDDEN_REASONING_CANARY" not in result.stdout
 

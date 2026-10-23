@@ -124,7 +124,7 @@ def test_console_reports_and_ai_remain_local(phase_ten_scan, monkeypatch):
         stream = StringIO()
         render_scan(Console(file=stream, width=80, theme=CONSOLE_THEME), scan, verbose=verbose)
         output = stream.getvalue()
-        assert "GraphQL Security Review" in output and "Object Lookup Review" in output
+        assert "GRAPHQL SECURITY REVIEW" in output and "Object Lookup Review" in output
         if verbose:
             assert "Cycle:" in output and "Manual review:" in output
     stream = StringIO()
@@ -223,7 +223,7 @@ def test_cli_adds_review_without_new_options_or_requests(phase_ten_scan, monkeyp
         ["scan", "https://example.com/graphql", "-f", "json,markdown,html", "-o", str(tmp_path)],
     )
     assert result.exit_code == 0, result.exception
-    assert "Prioritized Review" in result.output
+    assert "PRIORITIZED REVIEW" in result.output
     assert len(list(tmp_path.iterdir())) == 3
 
 
@@ -268,7 +268,7 @@ def test_wrapper_decisions_use_optional_schema_arguments_and_reach_all_views(pha
             Console(file=stream, width=120, theme=CONSOLE_THEME), review, verbose=verbose
         )
         text = stream.getvalue()
-        assert "Collection without obvious size bound" in text
+        assert "Collection without a schema-visible result limit" in " ".join(text.split())
         if verbose:
             assert "Collection path: AlbumsPage.data" in text
 

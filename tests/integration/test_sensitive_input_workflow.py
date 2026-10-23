@@ -83,7 +83,7 @@ def test_default_sensitive_request_and_warning_before_consent(controlled, consen
     )
     assert result.exit_code == 0, result.exception
     confirmation = consent_trace.confirmation("Execute sensitive input")
-    preview = confirmation.output.split("Sensitive Input Validation", 1)[1]
+    preview = confirmation.output.split("SENSITIVE INPUT VALIDATION", 1)[1]
     requests = consent_trace.sent_after(confirmation)
     assert len(requests) == 1
     assert_request_preview(preview, requests[0].json_body)
@@ -155,7 +155,7 @@ def test_cli_complete_preview_requests_and_reports(
     assert len(confirmations) == int(interactive)
     assert SECRET not in after.output
     for text in (
-        "Sensitive Input Validation",
+        "SENSITIVE INPUT VALIDATION",
         "isStaff",
         "true",
         "DENY",
@@ -364,9 +364,9 @@ def test_safe_named_review_and_disabled_no_chaining(controlled, monkeypatch, tmp
         )
         assert result.exit_code == 0, (result.exception, result.output)
         assert (
-            "Sensitive Input Review" if "--auth-context" in options else "Prioritized Review"
+            "SENSITIVE INPUT REVIEW" if "--auth-context" in options else "PRIORITIZED REVIEW"
         ) in result.output
-        assert "Sensitive Input Validation" not in result.output
+        assert "SENSITIVE INPUT VALIDATION" not in result.output
     for file in tmp_path.iterdir():
         text = file.read_text(encoding="utf-8")
         assert "Sensitive Input Review" in text and text.count("Safety Notice") == 1

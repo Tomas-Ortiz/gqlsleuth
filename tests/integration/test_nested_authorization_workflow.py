@@ -155,7 +155,7 @@ def test_console_reports_no_business_values_and_exact_json(controlled, tmp_path,
         ],
     )
     assert result.exit_code == 0, result.exception
-    assert "Nested Authorization Review" in result.output
+    assert "NESTED AUTHORIZATION REVIEW" in result.output
     assert "Confirm" not in result.output and "Select" not in result.output
     assert len(list(tmp_path.iterdir())) == 3
     assert all(secret not in result.output for secret in CANARIES)

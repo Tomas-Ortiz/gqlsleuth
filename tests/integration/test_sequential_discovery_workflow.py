@@ -82,7 +82,7 @@ def test_default_sequential_all_conditional_requests_before_consent(controlled, 
     )
     assert result.exit_code == 0, result.exception
     confirmation = consent_trace.confirmation("Execute bounded sequential")
-    preview = confirmation.output.split("Bounded Sequential Object Discovery", 1)[1]
+    preview = confirmation.output.split("BOUNDED SEQUENTIAL OBJECT DISCOVERY", 1)[1]
     requests = consent_trace.sent_after(confirmation)
     assert len(requests) == 3
     for request in requests:
@@ -154,7 +154,7 @@ def test_cli_confirmation_reports_and_prior_request_invariance(
     )
     assert all(dict(item[2])["authorization"] == SECRET for item in controlled)
     assert SECRET not in after.output
-    assert "Active Mutation candidates" in after.output
+    assert "ACTIVE MUTATION CANDIDATES" in after.output
     assert after.output.count("Execute bounded sequential object discovery?") == int(interactive)
     assert "Execute these" not in after.output
     report = json.loads(next((tmp_path / "on").glob("*.json")).read_text())

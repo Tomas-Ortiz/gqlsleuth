@@ -99,7 +99,7 @@ def render_multiplicity(
         if verbose and item.evidence:
             console.print()
             response = probe_response(item.evidence)
-            console.print("Response", style="gql.response")
+            console.print("RESPONSE", style="gql.heading")
             for label, value in response.details:
                 console.print(Text(f"{label}: {value}"))
             if response.body:

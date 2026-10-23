@@ -75,7 +75,7 @@ def test_default_idor_all_conditional_requests_before_consent(controlled, consen
     result = CliRunner().invoke(cli.app, options, input="y\n" if named else "\ny\n\n")
     assert result.exit_code == 0, result.exception
     confirmation = consent_trace.confirmation("Execute IDOR / BOLA")
-    preview = confirmation.output.split("IDOR / BOLA Detection", 1)[1]
+    preview = confirmation.output.split("IDOR / BOLA DETECTION", 1)[1]
     requests = consent_trace.sent_after(confirmation)
     assert len(requests) == 3
     for request in requests:
@@ -138,9 +138,9 @@ def test_cli_consent_reports_isolated_named_path(
     input_text = consent + "\n" if named else "\n" + consent + "\n\n"
     result = CliRunner().invoke(cli.app, options, input=input_text)
     assert result.exit_code == 0, (result.exception, result.output)
-    assert result.output.count("Pre-ACTIVE Context") == 1
+    assert result.output.count("PRE-ACTIVE CONTEXT") == 1
     if interactive:
-        assert result.output.index("Pre-ACTIVE Context") < result.output.index(
+        assert result.output.index("PRE-ACTIVE CONTEXT") < result.output.index(
             "Execute IDOR / BOLA detection?"
         )
     probes = [

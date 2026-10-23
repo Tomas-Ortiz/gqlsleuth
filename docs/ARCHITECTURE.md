@@ -3786,6 +3786,23 @@ scope when multiple endpoints are present. Arbitrary application error prose sta
 details. Existing 5/20 summary limits and 20/10 technical scaling budgets are unchanged, and
 canonical operation-level errors/limitations remain exhaustive.
 
+Completed console output separates major sections with width-aware Rich rules. Endpoint
+subheadings and operation blocks use whitespace rather than nested boxes. Console structural
+headings are uppercase; operation names, context labels and request content retain their casing.
+EXECUTION, REQUEST and RESPONSE share one heading style; internal labels are subordinate.
+Operation titles directly precede EXECUTION, with one blank line between operation blocks.
+Priority fields in tables and detail rows reuse the existing semantic priority palette, retaining
+their text when color is disabled. These console conventions do not change report heading casing.
+Human execution
+details distinguish Execution, Request (GraphQL document and Variables), and Response (Metadata
+and Body); unattempted operations do not gain empty request/response blocks. Markdown preserves
+heading depth, using bold subsection labels beyond six levels; HTML uses semantic groups,
+subheadings and self-contained CSS. Methodology, empty states and collection notices are secondary
+to results. Detail-section totals describe rendered entries, not structural-candidate totals.
+Human schema-review wording explains result-limit inputs and object-relationship loops while
+retaining qualifications about runtime controls. Canonical candidate names, facts, request
+artifacts and ACTIVE consent previews are unchanged.
+
 Canonical JSON/model/evidence relationships and Phase 31 AIContext, prompts, validation, serialized
 Ollama request and inference count are unchanged. No new networking or dependencies. Exact selected
 ACTIVE requests remain visible before each separate default-NO consent, even without verbose.

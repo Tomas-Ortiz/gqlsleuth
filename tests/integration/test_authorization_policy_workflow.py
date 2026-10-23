@@ -159,14 +159,14 @@ def test_exact_request_invariance_and_reports(
         )
         for secret in ("PHASE21_A_SECRET", "PHASE21_B_SECRET", "PHASE20_BUSINESS_VALUE"):
             assert secret not in human
-    assert "Authorization Policy Validation" in after.output
-    assert "Authorization Policy Validation" not in before.output
+    assert "AUTHORIZATION POLICY VALIDATION" in after.output
+    assert "AUTHORIZATION POLICY VALIDATION" not in before.output
     assert "PHASE21_A_SECRET" not in after.output and "PHASE21_B_SECRET" not in after.output
     if phase19:
         assert (
-            after.output.index("Nested Authorization Review")
-            < after.output.index("Controlled Object Authorization Validation")
-            < after.output.index("Authorization Policy Validation")
+            after.output.index("NESTED AUTHORIZATION REVIEW")
+            < after.output.index("CONTROLLED OBJECT AUTHORIZATION VALIDATION")
+            < after.output.index("AUTHORIZATION POLICY VALIDATION")
         )
 
 

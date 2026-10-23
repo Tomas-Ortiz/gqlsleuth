@@ -46,7 +46,7 @@ def test_pre_active_context_uses_existing_surface_facts_without_work(
     assert "Queries 1" in text and "Mutations 1" in text and "Subscriptions 1" in text
     assert "Query-Shape, Query-Depth, Mutations" in text
     assert "ACTIVE validation has not run" in text
-    assert "GQLSleuth Assessment" not in text
+    assert "GQLSLEUTH ASSESSMENT" not in text
     assert len(stream.getvalue().splitlines()) < 23
     assert safe == before and requests == before_requests
 

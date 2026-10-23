@@ -78,7 +78,7 @@ def test_default_mutation_policy_request_and_warning_before_consent(controlled, 
     )
     assert result.exit_code == 0, result.exception
     confirmation = consent_trace.confirmation("Execute mutation authorization")
-    preview = confirmation.output.split("Mutation Authorization Validation", 1)[1]
+    preview = confirmation.output.split("MUTATION AUTHORIZATION VALIDATION", 1)[1]
     requests = consent_trace.sent_after(confirmation)
     assert len(requests) == 1
     assert_request_preview(preview, requests[0].json_body)
@@ -146,9 +146,9 @@ def test_cli_preview_confirmation_reports_and_disabled_invariance(
     assert controlled[: len(original)] == original
     assert len(controlled) == len(original) + count
     assert len(confirmations) == int(interactive)
-    assert "Active Mutation candidates" in result.output
+    assert "ACTIVE MUTATION CANDIDATES" in result.output
     for text in (
-        "Mutation Authorization Validation",
+        "MUTATION AUTHORIZATION VALIDATION",
         "Target identifier",
         "123",
         "DENY",

@@ -29,7 +29,9 @@ def bound_section(section: ReportSection) -> ReportSection:
     notices = []
     if len(section.entries) > MAX_HUMAN_DETAIL_ITEMS:
         notices.append(
-            showing_notice(MAX_HUMAN_DETAIL_ITEMS, len(section.entries), "detail blocks")
+            showing_notice(
+                MAX_HUMAN_DETAIL_ITEMS, len(section.entries), "available detail sections"
+            )
         )
     if len(section.table_rows) > MAX_HUMAN_INVENTORY_ITEMS:
         notices.append(
@@ -164,7 +166,9 @@ def _inventory(
         notices += (showing_notice(MAX_HUMAN_INVENTORY_ITEMS, len(rows), collection),)
     if len(details) > MAX_HUMAN_DETAIL_ITEMS:
         notices += (
-            showing_notice(MAX_HUMAN_DETAIL_ITEMS, len(details), "exception/review detail blocks"),
+            showing_notice(
+                MAX_HUMAN_DETAIL_ITEMS, len(details), "available exception/review detail sections"
+            ),
         )
     # Reserve space for selected/attempted support before ordinary exceptions, then retain order.
     selected = [index for index, entry in enumerate(details) if entry.title in protected_titles]

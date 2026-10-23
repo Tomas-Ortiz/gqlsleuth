@@ -194,7 +194,7 @@ def test_output_requires_formats_without_changing_verbosity(completed_cli, tmp_p
     assert completed_cli[1] == []
     baseline = invoke()
     reported = invoke(flag, "reports", "-f", "json")
-    assert baseline.stdout == reported.stdout.split("\nReports\n")[0]
+    assert baseline.stdout == reported.stdout.split("\nREPORTS\n")[0]
 
 
 def test_compact_and_verbose_leave_results_requests_and_all_report_formats_identical(
@@ -208,11 +208,11 @@ def test_compact_and_verbose_leave_results_requests_and_all_report_formats_ident
     assert "query {" not in compact.stdout
     assert "Prioritized review items" in compact.stdout
     assert "Use --verbose for technical details" in compact.stdout
-    assert "Interest score" in verbose.stdout and "Generated Queries" in verbose.stdout
+    assert "Interest score" in verbose.stdout and "GENERATED QUERIES" in verbose.stdout
     assert "canonical JSON report" in verbose.stdout
     assert "Query name contains explicit state-changing" in verbose.stdout
     assert len(compact.stdout) < len(verbose.stdout)
-    assert verbose.stdout.split("\nReports\n")[0] == long_verbose.stdout
+    assert verbose.stdout.split("\nREPORTS\n")[0] == long_verbose.stdout
     for path in (tmp_path / "compact").iterdir():
         assert path.read_bytes() == (tmp_path / "verbose" / path.name).read_bytes()
     assert len(completed_cli[1]) == 3
@@ -230,7 +230,7 @@ def test_plain_narrow_console_wraps_without_mutating_or_interpreting_target_mark
     render_scan(console, safe)
     text = stream.getvalue()
     assert "GraphQL: CONFIRMED" in text
-    assert "Query Execution" in text
+    assert "QUERY EXECUTION" in text
     assert "\x1b[" not in text
     assert "Success 12;" in text
     assert "... 2 additional" in text

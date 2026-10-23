@@ -59,8 +59,8 @@ def test_safe_never_enters_mutation_stage_or_prompts(active_cli, monkeypatch):
     monkeypatch.setattr(cli.typer, "confirm", unexpected)
     result = _invoke(mode="safe")
     assert result.exit_code == 0
-    assert "Active Mutation candidates" not in result.stdout
-    assert "Pre-ACTIVE Context" not in result.stdout
+    assert "ACTIVE MUTATION CANDIDATES" not in result.stdout
+    assert "PRE-ACTIVE CONTEXT" not in result.stdout
     assert active_cli == ([], [])
 
 
@@ -73,13 +73,13 @@ def test_pre_active_context_precedes_previews_and_every_prompt(active_cli, monke
     def check_context(function):
         def checked(*args, **kwargs):
             text = plain_cli_output(stream.getvalue(), normalize_whitespace=True)
-            assert "Pre-ACTIVE Context" in text
+            assert "PRE-ACTIVE CONTEXT" in text
             assert "Target: https://example.com/graphql" in text
             assert "Mode: ACTIVE" in text
             assert "GraphQL endpoint: https://example.com/graphql" in text
             assert "Introspection ENABLED" in text
             assert "Queries 2" in text and "Mutations 6" in text and "Subscriptions 0" in text
-            assert "GQLSleuth Assessment" not in text
+            assert "GQLSLEUTH ASSESSMENT" not in text
             prompt_calls.append(args[0])
             return function(*args, **kwargs)
 
@@ -95,12 +95,12 @@ def test_pre_active_context_precedes_previews_and_every_prompt(active_cli, monke
     assert prompt_calls and "Query-Shape" in prompt_calls[0]
     assert len(active_cli[0]) == 1
     text = plain_cli_output(stream.getvalue())
-    assert text.count("Pre-ACTIVE Context") == 1
-    assert text.index("Pre-ACTIVE Context") < text.index("Active Query-Shape candidates")
-    assert text.index("Active Mutation candidates") < text.index("GQLSleuth Assessment")
-    context = text.split("Pre-ACTIVE Context", 1)[1].split("Active Query-Shape candidates", 1)[0]
+    assert text.count("PRE-ACTIVE CONTEXT") == 1
+    assert text.index("PRE-ACTIVE CONTEXT") < text.index("ACTIVE QUERY-SHAPE CANDIDATES")
+    assert text.index("ACTIVE MUTATION CANDIDATES") < text.index("GQLSLEUTH ASSESSMENT")
+    context = text.split("PRE-ACTIVE CONTEXT", 1)[1].split("ACTIVE QUERY-SHAPE CANDIDATES", 1)[0]
     assert "Query-Shape, Mutations" in context
-    assert "Findings" not in context and "Security Validation" not in context
+    assert "FINDINGS" not in context and "SECURITY VALIDATION" not in context
 
 
 def test_empty_selection_displays_previews_and_executes_none(active_cli):
@@ -108,16 +108,16 @@ def test_empty_selection_displays_previews_and_executes_none(active_cli):
     assert result.exit_code == 0
     output = " ".join(result.stdout.split())
     assert "ACTIVE mode" in output
-    assert "Active Mutation candidates" in output
+    assert "ACTIVE MUTATION CANDIDATES" in output
     assert "BLOCKED SAFETY deleteUser" in output
     assert "Destructive action token(s): delete" in output
     assert "mutation ($id: ID!)" in output
     assert 'Variables: {"id": "1"}' in output
     assert "Execute these" not in output
-    assert "Mutation Execution" not in output
+    assert "MUTATION EXECUTION" not in output
     assert active_cli[0] == []
     assert active_cli[1][0].selected_indices == ()
-    preview_output = result.stdout.split("Active Mutation candidates:")[1].split(
+    preview_output = result.stdout.split("ACTIVE MUTATION CANDIDATES:")[1].split(
         "Select Mutations"
     )[0]
     assert preview_output.count("Endpoint: https://example.com/graphql") == 1
@@ -134,7 +134,7 @@ def test_selected_batch_is_rendered_then_confirmed_exactly_once(active_cli, phas
     assert result.exit_code == 0
     assert result.stdout.count("Execute these 2 selected Mutations?") == 1
     assert result.stdout.count("Select Mutations to execute") == 1
-    selected_output = result.stdout.split("Selected Mutations:")[1].split("Execute these")[0]
+    selected_output = result.stdout.split("SELECTED MUTATIONS:")[1].split("Execute these")[0]
     assert "WARNING: These operations may modify application state." in selected_output
     assert selected_output.count("Endpoint: https://example.com/graphql") == 1
     for index in indices:
@@ -164,7 +164,7 @@ def test_default_exact_selected_mutation_batch_at_confirmation(active_cli, conse
     assert result.exit_code == 0, result.exception
     confirmation = consent_trace.confirmation("selected Mutations?")
     selection = consent_trace.selection_before("Select Mutations", confirmation)
-    selected = confirmation.output.split("Selected Mutations:", 1)[1]
+    selected = confirmation.output.split("SELECTED MUTATIONS:", 1)[1]
     assert confirmation.text == "Execute these 2 selected Mutations?"
     requests = consent_trace.sent_after(confirmation)
     assert len(requests) == len(active_cli[0]) == 2
@@ -272,7 +272,7 @@ def test_interrupted_selection_or_confirmation_fails_closed(active_cli, monkeypa
     assert result.exit_code == 130
     assert result.stdout.count("Scan cancelled by user.") == 1
     assert active_cli == ([], [])
-    assert "GQLSleuth Assessment" not in result.stdout
+    assert "GQLSLEUTH ASSESSMENT" not in result.stdout
     assert "Traceback" not in result.stdout
 
 

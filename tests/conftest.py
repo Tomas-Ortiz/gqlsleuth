@@ -75,7 +75,7 @@ def run_interrupted_cli(monkeypatch):
         assert result.exit_code == 130, (result.exception, result.output)
         assert result.output.count("Scan cancelled by user.") == 1
         assert "Traceback" not in result.output
-        assert "GQLSleuth Assessment" not in result.output
+        assert "GQLSLEUTH ASSESSMENT" not in result.output
         return result
 
     return run

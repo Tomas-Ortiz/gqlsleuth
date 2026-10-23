@@ -18,7 +18,7 @@ from gqlsleuth.presentation.assessment import (
     build_assessment,
 )
 from gqlsleuth.presentation.capabilities import capability_wording
-from gqlsleuth.presentation.console import _section, _table
+from gqlsleuth.presentation.console import _endpoint_heading, _major_section, _section, _table
 from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
 from gqlsleuth.presentation.priorities import style_priority_terms
@@ -38,7 +38,10 @@ def _rows(
     table.add_column(ratio=2, overflow="fold")
     for label, value in rows:
         table.add_row(
-            status_text(label) if status_labels else Text(label), style_status_terms(value)
+            status_text(label) if status_labels else Text(label),
+            style_priority_terms(value)
+            if label in {"Priority", "Review priority", "Review interest"}
+            else style_status_terms(value),
         )
     console.print(table)
 
@@ -48,13 +51,13 @@ def _items(
 ) -> None:
     if not items:
         return
-    _section(console, title)
+    _major_section(console, title)
     if title == PRIORITIZED_REVIEW_TITLE:
         console.print(PRIORITIZED_REVIEW_NOTICE, style="gql.secondary")
     visible = items if cap is None else items[:cap]
     for endpoint, entries in endpoint_groups(visible, lambda item: item.endpoint):
         if endpoint:
-            console.print(Text("Endpoint: " + endpoint, style="gql.metadata"))
+            _endpoint_heading(console, endpoint)
         table = _table("Result / review", "Operation")
         for item in entries:
             prefix = ""
@@ -70,7 +73,9 @@ def _items(
             )
         console.print(table)
     if cap is not None and len(items) > cap:
-        console.print(showing_notice(cap, len(items), title.lower() + " items"))
+        console.print(
+            showing_notice(cap, len(items), title.lower() + " items"), style="gql.secondary"
+        )
 
 
 def render_completed_assessment(
@@ -87,9 +92,9 @@ def render_completed_assessment(
     for endpoint in view.endpoints:
         console.print(Text("GraphQL endpoint: " + endpoint, style="gql.metadata"))
     console.print("Mode: " + view.mode)
-    _section(console, "GraphQL Overview")
+    _major_section(console, "GraphQL Overview")
     _rows(console, view.overview)
-    _section(console, "Security Validation")
+    _major_section(console, "Security Validation")
     _rows(console, view.validation_rows)
     if view.capabilities:
         console.print()
@@ -110,22 +115,24 @@ def render_completed_assessment(
         MAX_HUMAN_INVENTORY_ITEMS if verbose else DEFAULT_MAX_MANUAL_REVIEW_ITEMS,
     )
     if view.query_outcomes:
-        _section(console, "Query Execution")
+        _major_section(console, "Query Execution")
         _rows(
             console,
             tuple((name, str(count)) for name, count in view.query_outcomes),
             status_labels=True,
         )
     if view.mutations:
-        _section(console, "Mutation Execution")
+        _major_section(console, "Mutation Execution")
         _rows(console, view.mutations)
     if view.limitations:
-        _section(console, "Important Limitations")
+        _major_section(console, "Important Limitations")
         cap = MAX_HUMAN_INVENTORY_ITEMS if verbose else DEFAULT_MAX_LIMITATIONS
         for note in view.limitations[:cap]:
             console.print(Text(note))
         if len(view.limitations) > cap:
-            console.print(showing_notice(cap, len(view.limitations), "limitations"))
+            console.print(
+                showing_notice(cap, len(view.limitations), "limitations"), style="gql.secondary"
+            )
     console.print(
         "Review interest is not vulnerability severity. Controls apply only to tested cases.",
         style="gql.secondary",
@@ -138,22 +145,26 @@ def render_completed_assessment(
         console.print("Use --verbose for technical details.", style="gql.secondary")
 
 
-def _render_technical(console: Console, section: ReportSection) -> None:
+def _render_technical(console: Console, section: ReportSection, *, major: bool = True) -> None:
     """Reuse report capability projections and the existing bounded response representation."""
     section = group_endpoint_context(bound_section(section))
     if section.title:
-        _section(console, section.title)
-    if section.endpoint:
-        console.print(Text("Endpoint: " + section.endpoint, style="gql.metadata"))
+        (_major_section if major else _section)(console, section.title)
     for paragraph in section.paragraphs:
-        console.print(Text(capability_wording(paragraph)))
+        console.print(Text(capability_wording(paragraph)), style="gql.secondary")
+    if section.endpoint:
+        _endpoint_heading(console, section.endpoint)
+    elif section.paragraphs and (section.rows or section.table_rows):
+        console.print()
     _rows(console, section.rows)
     if section.table_rows:
+        if section.rows:
+            console.print()
         table = _table(*section.table_headers)
         for row in section.table_rows:
             cells = []
             for header, value in zip(section.table_headers, row, strict=True):
-                if header in {"Priority", "Review priority"}:
+                if header in {"Priority", "Review priority", "Review interest"}:
                     cells.append(style_priority_terms(value))
                 elif header in {"Status", "Decision", "Observation", "Generation", "Baseline"}:
                     cells.append(style_status_terms(value))
@@ -161,22 +172,40 @@ def _render_technical(console: Console, section: ReportSection) -> None:
                     cells.append(Text(value))
             table.add_row(*cells)
         console.print(table)
-    for entry in section.entries:
-        console.print()
-        console.print(Text(entry.title, style="gql.metadata"))
+    for index, entry in enumerate(section.entries):
+        if index or not section.endpoint or section.rows or section.table_rows:
+            console.print()
+        console.print(Text(entry.title, style="gql.operation"))
+        if entry.execution:
+            console.print("EXECUTION", style="gql.heading")
         _rows(console, entry.details)
         for paragraph in entry.paragraphs:
             console.print(Text(capability_wording(paragraph)))
-        for language, value in (*entry.code_blocks, *entry.request_blocks):
+        for language, value in entry.code_blocks:
+            console.print()
             if language == "json":
-                console.print("Variables:")
+                console.print("Variables:", style="gql.response")
+            console.print(Syntax(value, language, word_wrap=True))
+        if entry.request_blocks:
+            console.print()
+            console.print("REQUEST", style="gql.heading")
+        for block_index, (language, value) in enumerate(entry.request_blocks):
+            if block_index:
+                console.print()
+            console.print(
+                "Variables:" if language == "json" else "GraphQL document:", style="gql.response"
+            )
             console.print(Syntax(value, language, word_wrap=True))
         _rows(console, entry.evidence_references)
         if entry.response:
-            console.print("Response", style="gql.response")
+            console.print()
+            console.print("RESPONSE", style="gql.heading")
+            console.print("METADATA", style="gql.response")
             _rows(console, entry.response.details)
             body = entry.response.body
             if body:
+                console.print()
+                console.print("BODY", style="gql.response")
                 if body.notice:
                     console.print(Text(body.notice))
                 if body.text:
@@ -185,5 +214,9 @@ def _render_technical(console: Console, section: ReportSection) -> None:
                 console.print(
                     "No HTTP response was received; no server response body is available."
                 )
+    if not any(
+        (section.paragraphs, section.rows, section.table_rows, section.entries, section.children)
+    ):
+        console.print("None recorded.", style="gql.secondary")
     for child in section.children:
-        _render_technical(console, child)
+        _render_technical(console, child, major=False)
