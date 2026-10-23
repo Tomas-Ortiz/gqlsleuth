@@ -4,6 +4,7 @@ import json
 
 from gqlsleuth.domain.abuse_controls import AbuseControlResult
 from gqlsleuth.presentation.limits import JSON_DETAIL_NOTICE
+from gqlsleuth.presentation.terminology import category_label
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection
 
 
@@ -23,7 +24,10 @@ def abuse_control_sections(result: AbuseControlResult) -> tuple[ReportSection, .
                         "Review priority",
                         candidate.operation.priority.value.replace("_", " ").upper(),
                     ),
-                    ("Categories", ", ".join(c.value for c in candidate.operation.categories)),
+                    (
+                        "Categories",
+                        ", ".join(category_label(c.value) for c in candidate.operation.categories),
+                    ),
                     (
                         "Baseline",
                         f"{candidate.baseline_status.value.upper()} / "

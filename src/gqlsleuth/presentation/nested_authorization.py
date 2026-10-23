@@ -8,6 +8,7 @@ from rich.text import Text
 
 from gqlsleuth.domain.nested_authorization import NESTED_NOTICE, NestedAuthorizationResult
 from gqlsleuth.presentation.console import _document, _section
+from gqlsleuth.presentation.terminology import category_label
 
 
 def render_nested_authorization(
@@ -50,7 +51,10 @@ def render_nested_authorization(
                 )
         if verbose:
             console.print(
-                Text("Rules: " + ", ".join(item.rule_id for item in candidate.matched_rules))
+                Text(
+                    "Rules: "
+                    + ", ".join(category_label(item.rule_id) for item in candidate.matched_rules)
+                )
             )
             if candidate.query:
                 _document(console, candidate.query)

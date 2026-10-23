@@ -3803,6 +3803,15 @@ Human schema-review wording explains result-limit inputs and object-relationship
 retaining qualifications about runtime controls. Canonical candidate names, facts, request
 artifacts and ACTIVE consent previews are unchanged.
 
+Human views use shared readable category labels and schema-review titles (Result Size Limit,
+Complex / Nested Input, and Recursive Relationship Review). Rule explanations describe matched
+schema locations in plain language before retaining exact technical paths, keywords and score
+contributions. Query safety skips explain precautionary avoidance of actions that may modify data.
+"Execution attempted" means a matching retained execution-evidence record exists; transport
+failures count as attempts and do not guarantee that a server received the request. Internal
+category/rule identifiers, canonical reasons, scoring and JSON remain unchanged. These wording
+projections do not alter console/report layout, scaling, or AI input and interpretation behavior.
+
 Canonical JSON/model/evidence relationships and Phase 31 AIContext, prompts, validation, serialized
 Ollama request and inference count are unchanged. No new networking or dependencies. Exact selected
 ACTIVE requests remain visible before each separate default-NO consent, even without verbose.

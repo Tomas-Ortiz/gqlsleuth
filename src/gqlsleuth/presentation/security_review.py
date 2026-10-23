@@ -1,13 +1,22 @@
 """Human labels and bounded facts shared by deterministic security review views."""
 
-from gqlsleuth.domain.security_review import GraphQLSecurityReviewCandidate, SecurityCandidateType
+import re
+
+from gqlsleuth.domain.security_review import (
+    SECURITY_REVIEW_NOTICE,
+    GraphQLSecurityReviewCandidate,
+    SecurityCandidateType,
+)
 from gqlsleuth.presentation.capabilities import capability_wording
 
 
 def candidate_label(kind: SecurityCandidateType) -> str:
-    if kind is SecurityCandidateType.FLEXIBLE_SCALAR_INPUT_REVIEW:
-        return "Flexible Scalar Input"
-    return kind.value.replace("_", " ").title()
+    return {
+        SecurityCandidateType.FLEXIBLE_SCALAR_INPUT_REVIEW: "Flexible Scalar Input",
+        SecurityCandidateType.LIST_BOUNDING_REVIEW: "Result Size Limit Review",
+        SecurityCandidateType.COMPLEX_INPUT_REVIEW: "Complex / Nested Input Review",
+        SecurityCandidateType.RECURSIVE_GRAPH_REVIEW: "Recursive Relationship Review",
+    }.get(kind, kind.value.replace("_", " ").title())
 
 
 def candidate_summary(candidate: GraphQLSecurityReviewCandidate) -> str:
@@ -24,7 +33,7 @@ def candidate_summary(candidate: GraphQLSecurityReviewCandidate) -> str:
             "Query can follow object relationships in a loop, including a list"
         ),
         SecurityCandidateType.FLEXIBLE_SCALAR_INPUT_REVIEW: "Broad custom scalar input",
-        SecurityCandidateType.COMPLEX_INPUT_REVIEW: "Recursive/deep required input structure",
+        SecurityCandidateType.COMPLEX_INPUT_REVIEW: "Nested or recursive input structures",
         SecurityCandidateType.DEPRECATED_SECURITY_RELEVANT_OPERATION: (
             "Deprecated with review interest"
         ),
@@ -33,6 +42,27 @@ def candidate_summary(candidate: GraphQLSecurityReviewCandidate) -> str:
 
 def review_wording(text: str) -> str:
     """Clarify known schema-review prose in human views only; retain all qualifications."""
+    if text == SECURITY_REVIEW_NOTICE:
+        return (
+            "These items were identified from the GraphQL schema and need manual review. "
+            "They are not confirmed vulnerabilities. A control not visible in the schema "
+            "may still exist at runtime. This analysis adds no requests or operations."
+        )
+    text = re.sub(
+        r"Obvious bounding input: none observed \(root arguments and up to (\d+) "
+        r"input-object levels\)\.",
+        r"Input to limit the number of results: none observed. "
+        r"Checked root arguments and nested input objects up to \1 levels.",
+        text,
+    )
+    text = re.sub(
+        r"Root input has a recursive relationship or a required input-object chain "
+        r"deeper than (\d+) objects\.",
+        r"This operation accepts nested or recursive input structures that can become complex. "
+        r"Input types refer back to an earlier type, "
+        r"or required inputs nest more than \1 objects deep.",
+        text,
+    )
     text = capability_wording(text)
     for original, readable in (
         ("Obvious bounding input:", "Input to limit the number of results:"),
@@ -41,6 +71,7 @@ def review_wording(text: str) -> str:
             "no schema input was found that clearly limits how many results it can return",
         ),
         ("A bounding input's presence", "The presence of a result-limit input"),
+        ("query-complexity controls", "controls that limit query complexity"),
         (
             "A Query-reachable output cycle contains a list-valued composite relationship.",
             "A Query can follow object relationships back to an earlier type. "

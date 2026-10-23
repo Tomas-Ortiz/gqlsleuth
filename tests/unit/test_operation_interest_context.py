@@ -206,6 +206,6 @@ def test_analysis_and_report_projection_are_offline_and_preserve_zero_match_prov
     assert [m["weight"] for m in noisy["generated"]["operation"]["matched_rules"]] == [0, 0]
     for format in (ReportFormat.MARKDOWN, ReportFormat.HTML):
         text = render_report(report, format).replace("\\", "")
-        assert "searchUsers" in text and "Contribution: 1" in text
-        assert "Context-only terminology" in text and "Contribution: 0" in text
+        assert "searchUsers" in text and "(+1)" in text
+        assert "Context-only terminology" in text and "(+0)" in text
     assert render_report(report, ReportFormat.JSON) == canonical

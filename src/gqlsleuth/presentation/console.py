@@ -51,6 +51,7 @@ from gqlsleuth.presentation.security_review import (
     review_wording,
 )
 from gqlsleuth.presentation.statuses import status_text
+from gqlsleuth.presentation.terminology import category_label, execution_reason, rule_explanation
 
 CONSOLE_THEME = Theme(
     {
@@ -485,15 +486,14 @@ def _render_analysis(
                 )
             )
             console.print(
-                "Categories: " + ", ".join(c.value for c in item.categories), markup=False
+                "Categories: " + ", ".join(category_label(c.value) for c in item.categories),
+                markup=False,
             )
             for match in item.matched_rules:
                 console.print(
-                    f"  {match.rule_id}: {', '.join(match.matched_keywords)} "
-                    f"at {', '.join(match.locations)}",
+                    rule_explanation(match),
                     markup=False,
                 )
-                console.print("    Why: " + match.reason, markup=False)
 
 
 def _render_queries(
@@ -566,7 +566,9 @@ def _render_executions(
                     error_message=item.error_message,
                 )
             else:
-                console.print(f"{item.operation_name}: {item.reason}", markup=False)
+                console.print(
+                    f"{item.operation_name}: {execution_reason(item.reason)}", markup=False
+                )
     elif len(noteworthy) > len(visible):
         console.print(
             f"... {len(noteworthy) - len(visible)} additional outcomes; use --verbose or a report.",
@@ -614,7 +616,8 @@ def render_mutation(console: Console, index: int, candidate: MutationPreview) ->
     if not candidate.selectable:
         console.print(Text.assemble("Priority: ", priority))
     console.print(
-        "Categories: " + ", ".join(item.value for item in artifact.operation.categories),
+        "Categories: "
+        + ", ".join(category_label(item.value) for item in artifact.operation.categories),
         markup=False,
     )
     if not candidate.selectable:
@@ -975,7 +978,7 @@ def render_security_review(
     if context:
         console.print(Text("Context: " + context, style="gql.metadata"))
     console.print(f"{len(candidates)} structural review candidate(s).")
-    console.print(SECURITY_REVIEW_NOTICE, markup=False, style="gql.secondary")
+    console.print(review_wording(SECURITY_REVIEW_NOTICE), markup=False, style="gql.secondary")
     visible = candidates[: MAX_HUMAN_INVENTORY_ITEMS if verbose else 10]
     visible_limits = limitations[: MAX_HUMAN_INVENTORY_ITEMS if verbose else 3]
     endpoints = dict.fromkeys(
@@ -1003,7 +1006,8 @@ def render_security_review(
                     console.print(
                         "Categories: "
                         + ", ".join(
-                            category.value for category in item.related_operation.categories
+                            category_label(category.value)
+                            for category in item.related_operation.categories
                         ),
                         markup=False,
                     )

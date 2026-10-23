@@ -3,6 +3,7 @@
 import json
 
 from gqlsleuth.domain.nested_authorization import NESTED_NOTICE, NestedAuthorizationResult
+from gqlsleuth.presentation.terminology import category_label
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection
 
 
@@ -19,10 +20,16 @@ def nested_authorization_section(result: NestedAuthorizationResult) -> ReportSec
                     (
                         "Categories",
                         ", ".join(
-                            dict.fromkeys(item.category.value for item in candidate.matched_rules)
+                            dict.fromkeys(
+                                category_label(item.category.value)
+                                for item in candidate.matched_rules
+                            )
                         ),
                     ),
-                    ("Rules", ", ".join(item.rule_id for item in candidate.matched_rules)),
+                    (
+                        "Rules",
+                        ", ".join(category_label(item.rule_id) for item in candidate.matched_rules),
+                    ),
                     ("Selection depth", str(candidate.selection_depth)),
                     ("Composite list edges", str(candidate.list_edges)),
                 )

@@ -18,6 +18,7 @@ from gqlsleuth.presentation.object_lookup import (
 from gqlsleuth.presentation.query_depth import depth_response
 from gqlsleuth.presentation.responses import ResponsePresentation, present_response
 from gqlsleuth.presentation.security_review import candidate_facts, candidate_label, review_wording
+from gqlsleuth.presentation.terminology import category_label, execution_reason, rule_explanation
 from gqlsleuth.reporting.models import OperationReport, ReportContext
 
 
@@ -130,7 +131,7 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             "Operation Review Candidates",
             paragraphs=(
                 "Priority indicates manual-review interest, not vulnerability severity. "
-                "The existing operation-analysis order and rule matches are preserved.",
+                "Operations remain in review-priority order, with the reasons for each score.",
             )
             + (("None recorded.",) if not report.review_candidates else ()),
             entries=tuple(
@@ -140,14 +141,14 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                         ("Endpoint", item.endpoint),
                         ("Priority", item.priority.value.replace("_", " ").upper()),
                         ("Interest score", str(item.interest_score)),
-                        ("Categories", ", ".join(category.value for category in item.categories)),
+                        (
+                            "Categories",
+                            ", ".join(
+                                category_label(category.value) for category in item.categories
+                            ),
+                        ),
                     ),
-                    paragraphs=tuple(
-                        f"{match.rule_id}: {match.reason} "
-                        f"Keywords: {', '.join(match.matched_keywords)}. "
-                        f"Locations: {', '.join(match.locations)}. Contribution: {match.weight}."
-                        for match in item.matched_rules
-                    ),
+                    paragraphs=tuple(rule_explanation(match) for match in item.matched_rules),
                 )
                 for item in report.review_candidates
             ),
@@ -165,7 +166,9 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
         ReportSection(
             "Safe Query Execution",
             paragraphs=(
-                "Attempted requests are established only by QUERY_EXECUTION evidence. "
+                "Execution attempts are established from retained QUERY_EXECUTION evidence, "
+                "including transport failures. This does not guarantee the server received "
+                "the request. "
                 "SUCCESS is an execution outcome, not a vulnerability finding.",
             ),
         ),
@@ -230,7 +233,11 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                                 item.code if item.code.startswith("Http") else item.code.upper(),
                             ),
                         ),
-                        paragraphs=(item.message,),
+                        paragraphs=(
+                            execution_reason(item.message)
+                            if item.stage == "query" and item.code == "skipped_safety"
+                            else item.message,
+                        ),
                     )
                     for item in report.errors_and_limitations
                 ),
@@ -407,7 +414,10 @@ def security_review_section(
                     ),
                     (
                         "Categories",
-                        ", ".join(value.value for value in item.related_operation.categories),
+                        ", ".join(
+                            category_label(value.value)
+                            for value in item.related_operation.categories
+                        ),
                     ),
                 )
                 if item.related_operation
@@ -447,7 +457,7 @@ def security_review_section(
     )
     return ReportSection(
         "GraphQL Security Review" + (f" — Context: {context}" if context else ""),
-        paragraphs=(SECURITY_REVIEW_NOTICE,)
+        paragraphs=(review_wording(SECURITY_REVIEW_NOTICE),)
         + (
             ()
             if review.candidates
@@ -638,10 +648,10 @@ def _execution_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ())
                 "Decision",
                 execution.decision.upper() if execution.decision else execution.status or "None",
             ),
-            ("Attempted (execution evidence)", "Yes" if execution.attempted else "No"),
+            ("Execution attempted", "Yes" if execution.attempted else "No"),
             ("HTTP status", str(execution.response.status_code) if execution.response else "None"),
         ),
-        paragraphs=(execution.reason,)
+        paragraphs=(execution_reason(execution.reason),)
         + ((execution.error_message,) if execution.error_message else ()),
         request_blocks=_artifact_entry(item).code_blocks if execution.attempted else (),
         response=response,
@@ -656,7 +666,12 @@ def _mutation_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ()) 
         f"[{item.candidate_index}] {artifact.operation_name}",
         details=(
             ("Priority", artifact.operation.priority.value.replace("_", " ").upper()),
-            ("Categories", ", ".join(category.value for category in artifact.operation.categories)),
+            (
+                "Categories",
+                ", ".join(
+                    category_label(category.value) for category in artifact.operation.categories
+                ),
+            ),
             ("Generated", "Yes" if artifact.success else "No"),
             ("Preview decision", (item.preview_decision or "None").upper()),
             ("Selected", "Yes" if item.selected else "No"),

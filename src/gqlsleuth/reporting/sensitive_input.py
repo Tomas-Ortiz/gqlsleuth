@@ -8,6 +8,7 @@ from gqlsleuth.domain.sensitive_input import (
     SensitiveInputCandidate,
     SensitiveInputValidationResult,
 )
+from gqlsleuth.presentation.terminology import category_label
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection
 
 
@@ -31,7 +32,7 @@ def sensitive_review_section(
                     ("Endpoint", item.endpoint),
                     ("Input field", f"{item.argument}.{item.field}"),
                     ("Type", item.input_type),
-                    ("Review category", item.category.value.upper()),
+                    ("Review category", category_label(item.category.value)),
                 ),
                 paragraphs=(item.reason, *item.supporting_facts),
                 code_blocks=(

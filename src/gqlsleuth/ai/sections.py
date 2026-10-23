@@ -1,6 +1,7 @@
 """Shared interpretation presentation and application-owned reference metadata."""
 
 from gqlsleuth.ai.models import AIInterpretationResult
+from gqlsleuth.presentation.terminology import category_label
 
 
 def operation_metadata(
@@ -13,7 +14,7 @@ def operation_metadata(
         ("Operation", operation.name),
         ("Kind", operation.kind.value.title()),
         ("Review interest", operation.priority.value.upper().replace("_", " ")),
-        ("Categories", ", ".join(c.value for c in operation.categories) or "None"),
+        ("Categories", ", ".join(category_label(c.value) for c in operation.categories) or "None"),
         ("Attempted", "Yes" if operation.attempted else "No"),
         (
             "Execution",

@@ -170,8 +170,8 @@ def test_safety_tokens_share_only_their_known_cause(base):
     report = outcomes(base[1], cases)
     assert len(notes(report)) == 1
     assert (
-        "3 queries were not executed because their names contain state-changing action tokens"
-        in notes(report)[0]
+        "3 queries were not executed as a precaution because their names contain "
+        "actions that may modify data" in notes(report)[0]
     )
     assert "(deleteAllPastes, readAndBurn, systemUpdate)" in notes(report)[0]
     report = outcomes(

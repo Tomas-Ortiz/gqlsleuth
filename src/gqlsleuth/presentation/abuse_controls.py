@@ -11,6 +11,7 @@ from gqlsleuth.presentation.console import _document, _section
 from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.priorities import priority_label
 from gqlsleuth.presentation.statuses import status_text, style_status_terms
+from gqlsleuth.presentation.terminology import category_label
 
 
 def render_abuse_controls(
@@ -37,7 +38,7 @@ def render_abuse_controls(
             console.print(
                 Text(
                     "Categories: "
-                    + ", ".join(c.value.replace("_", " ") for c in candidate.operation.categories)
+                    + ", ".join(category_label(c.value) for c in candidate.operation.categories)
                 )
             )
             console.print(

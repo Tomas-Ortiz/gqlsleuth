@@ -210,7 +210,7 @@ def test_compact_and_verbose_leave_results_requests_and_all_report_formats_ident
     assert "Use --verbose for technical details" in compact.stdout
     assert "Interest score" in verbose.stdout and "GENERATED QUERIES" in verbose.stdout
     assert "canonical JSON report" in verbose.stdout
-    assert "Query name contains explicit state-changing" in verbose.stdout
+    assert "Safe Query execution skipped this query as a precaution" in verbose.stdout
     assert len(compact.stdout) < len(verbose.stdout)
     assert verbose.stdout.split("\nREPORTS\n")[0] == long_verbose.stdout
     for path in (tmp_path / "compact").iterdir():

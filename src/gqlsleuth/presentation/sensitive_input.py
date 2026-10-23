@@ -16,6 +16,7 @@ from gqlsleuth.presentation.console import _document, _section
 from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
 from gqlsleuth.presentation.statuses import style_status_terms
+from gqlsleuth.presentation.terminology import category_label
 
 
 def render_sensitive_review(
@@ -31,7 +32,8 @@ def render_sensitive_review(
     if context:
         console.print(Text(f"Context: {context}"))
     console.print(
-        f"{len(candidates)} schema-derived review candidate(s); zero additional requests."
+        f"{len(candidates)} review candidate(s) identified from the schema; "
+        "zero additional requests."
     )
     visible = candidates[: MAX_HUMAN_INVENTORY_ITEMS if verbose else 10]
     for endpoint, items in endpoint_groups(visible, lambda item: item.endpoint):
@@ -45,7 +47,7 @@ def render_sensitive_review(
                 item.operation,
                 f"{item.argument}.{item.field}",
                 item.input_type,
-                item.category.value.replace("_", " "),
+                category_label(item.category.value),
             )
         console.print(table)
         if verbose:

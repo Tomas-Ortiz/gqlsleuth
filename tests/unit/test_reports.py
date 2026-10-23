@@ -265,10 +265,13 @@ def test_human_sections_do_not_repeat_rule_or_mutation_reasons(report_results):
     review_candidate = active.review_candidates[0]
     assert len(review_entry.paragraphs) == len(review_candidate.matched_rules)
     assert all(reason not in review_entry.paragraphs for reason in review_candidate.reasons)
-    assert all(
-        all(label in paragraph for label in ("Keywords:", "Locations:", "Contribution:"))
-        for paragraph in review_entry.paragraphs
-    )
+    for paragraph, match in zip(
+        review_entry.paragraphs, review_candidate.matched_rules, strict=True
+    ):
+        assert "Matched" in paragraph and "Technical location" in paragraph
+        assert f"(+{match.weight})" in paragraph
+        assert all(keyword in paragraph for keyword in match.matched_keywords)
+        assert all(location in paragraph for location in match.locations)
 
     blocked = next(
         entry

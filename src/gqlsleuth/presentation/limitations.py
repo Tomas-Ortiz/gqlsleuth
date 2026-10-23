@@ -132,7 +132,7 @@ def _summarize_group(stage: str, code: str, reason: str, group: list[ReportIssue
             return operations + f" {'was' if count == 1 else 'were'} not executed. " + explanation
         if code == "skipped_safety":
             explanation = (
-                "because their names contain state-changing action tokens"
+                "as a precaution because their names contain actions that may modify data"
                 if reason == "state-changing action tokens"
                 else "because the parsed schema was unavailable for validation"
                 if reason == "Parsed schema is unavailable for this endpoint."

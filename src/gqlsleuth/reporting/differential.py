@@ -134,7 +134,7 @@ def differential_sections(report: DifferentialReportContext) -> tuple[ReportSect
                                 else "No execution result",
                             ),
                             (
-                                "Attempted (execution evidence)",
+                                "Execution attempted",
                                 "Yes" if execution and execution.attempted else "No",
                             ),
                             (

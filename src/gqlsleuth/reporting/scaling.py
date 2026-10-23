@@ -91,7 +91,10 @@ def _group_limitations(report: ReportContext, section: ReportSection) -> ReportS
                 entry,
                 title=key[1],
                 details=entry.details + (("Records", str(len(group))),),
-                paragraphs=(key[3], "Complete operation-level records remain in canonical JSON."),
+                paragraphs=(
+                    entry.paragraphs[0],
+                    "Complete operation-level records remain in canonical JSON.",
+                ),
             )
         entries.append(entry)
     return replace(section, entries=tuple(entries))

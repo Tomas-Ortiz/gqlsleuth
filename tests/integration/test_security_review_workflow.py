@@ -116,7 +116,7 @@ def test_console_reports_and_ai_remain_local(phase_ten_scan, monkeypatch):
         text = render_report(report, format)
         assert "GraphQL Security Review" in text
         assert "File Upload Surface" in text and "Manual review:" in text
-        assert "schema control does not prove" in text
+        assert "A control not visible in the schema may still exist at runtime" in text
         assert text.count("Safety Notice") == 1
         assert not re.search(r"<h[234]>|^#{2,4} ", text.split("Safety Notice")[1], re.M)
     assert render_report(report, ReportFormat.JSON) == canonical

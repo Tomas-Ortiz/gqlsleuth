@@ -9,6 +9,7 @@ from gqlsleuth.domain.models import ConfidenceLevel
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.limitations import summarize_issues
 from gqlsleuth.presentation.security_review import candidate_label, candidate_summary
+from gqlsleuth.presentation.terminology import category_label
 from gqlsleuth.reporting.models import ReportContext
 
 DEFAULT_MAX_FINDINGS = 10
@@ -18,10 +19,10 @@ DEFAULT_MAX_AI_INSIGHTS = 3
 
 PRIORITIZED_REVIEW_TITLE = "Prioritized Review"
 PRIORITIZED_REVIEW_NOTICE = (
-    "The review-item count includes schema-structure and sensitive-input candidates. "
-    "It also counts CRITICAL/HIGH-interest operations not already represented elsewhere. "
-    "This view additionally shows policy violations and attempted checks with unresolved results. "
-    "Detailed candidate sets may overlap."
+    "This shortlist covers schema patterns and input fields that need review. "
+    "It also counts CRITICAL/HIGH-interest operations not already listed. "
+    "Policy violations and attempted checks with inconclusive results may also appear. "
+    "The same item may appear in more than one detailed review."
 )
 
 CAPABILITY_ORDER = (
@@ -112,7 +113,7 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
                 "Sensitive Inputs",
                 operation,
                 "REVIEW",
-                f"{sensitive.category.value.replace('_', ' ')}: "
+                f"{category_label(sensitive.category.value)}: "
                 f"{sensitive.argument}.{sensitive.field}",
                 sensitive.endpoint,
             )
