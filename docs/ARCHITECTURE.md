@@ -912,6 +912,22 @@ without interpretable GraphQL errors, `INVALID_RESPONSE` for non-error non-Graph
 `NETWORK_FAILURE` for normalized transport failures, plus the two skipped statuses above. One
 result never stops later eligible operations.
 
+`SUCCESS` checks for the presence of the `data` key, not its value: top-level `data: null` and
+`data: {}` remain SUCCESS when HTTP is below 400 and no interpretable GraphQL errors exist.
+Interpretable errors are entries with a string `message` in a non-empty `errors` list and take
+precedence even over HTTP errors. Missing `data`, non-object or invalid JSON without such errors
+is INVALID_RESPONSE below HTTP 400. Transport failures are classified separately.
+
+Human presentation qualifies attempted SUCCESS responses with top-level `data: null` beside
+the operation and aggregates them in Important Limitations, using existing display budgets.
+Nested nulls and falsey/empty values are not treated as top-level null data. The qualification
+does not create an error code, Finding, policy violation, review candidate or extra Evidence;
+canonical JSON/schema version 2 and classifications remain unchanged. SUCCESS describes a
+classified execution outcome, not meaningful application data or business success. AI receives
+the existing allowlisted status/attempt metadata only, not response bodies or new data fields;
+prompt guidance explicitly forbids inferring non-null/meaningful data from SUCCESS. Existing
+AI grounding validation and eligibility are unchanged.
+
 Every attempted request creates `QUERY_EXECUTION` evidence retaining the POST method, exact query
 and variables, HTTP response status/headers/body/duration when available, normalized transport
 failure details, and the associated classification and review priority. Skipped operations create

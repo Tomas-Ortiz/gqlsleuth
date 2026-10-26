@@ -86,6 +86,8 @@ def phase_ten_scan() -> Callable[..., tuple[SafeExecutionScanResult, list[dict[s
     def scan(
         sdl: str = DEFAULT_ACTIVE_SCHEMA,
         mode: ScanMode = ScanMode.ACTIVE,
+        *,
+        execution_data: dict[str, object] | None = None,
     ) -> tuple[SafeExecutionScanResult, list[dict[str, object]]]:
         introspection = introspection_from_schema(build_schema(sdl))
         requests: list[dict[str, object]] = []
@@ -102,7 +104,7 @@ def phase_ten_scan() -> Callable[..., tuple[SafeExecutionScanResult, list[dict[s
             if payload["query"] == FULL_INTROSPECTION_QUERY:
                 return httpx.Response(200, json={"data": introspection})
             assert payload["query"].startswith("query")
-            return httpx.Response(200, json={"data": None})
+            return httpx.Response(200, json={"data": execution_data})
 
         with HttpClient(transport=httpx.MockTransport(handler)) as client:
             detection = discover_and_detect_graphql(

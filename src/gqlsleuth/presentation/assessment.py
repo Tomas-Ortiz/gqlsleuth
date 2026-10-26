@@ -7,7 +7,7 @@ from typing import Literal
 from gqlsleuth.domain.analysis import InterestPriority
 from gqlsleuth.domain.models import ConfidenceLevel
 from gqlsleuth.presentation.capabilities import capability_wording
-from gqlsleuth.presentation.limitations import summarize_issues
+from gqlsleuth.presentation.limitations import null_data_limitations, summarize_issues
 from gqlsleuth.presentation.security_review import candidate_label, candidate_summary
 from gqlsleuth.presentation.terminology import category_label
 from gqlsleuth.reporting.models import ReportContext
@@ -86,7 +86,7 @@ class AssessmentPresentationSummary:
 
 
 def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
-    """Group existing enums/objects, without reading bodies or recomputing any policy."""
+    """Group retained facts and human qualifications without recomputing any policy."""
     findings = _findings(report)
     events = _validation_items(report)
     represented = {(i.endpoint, i.operation) for i in (*findings, *events)}
@@ -193,7 +193,7 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
         if report.active
         else ()
     )
-    limitations = []
+    limitations = list(null_data_limitations(report))
     if not meaningful:
         limitations.append("No confirmed or probable GraphQL endpoint was retained.")
     if meaningful and any(e.observed_introspection_status != "enabled" for e in meaningful):

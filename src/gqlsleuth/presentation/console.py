@@ -44,7 +44,13 @@ from gqlsleuth.presentation.object_lookup import (
     object_lookup_follow_ups,
 )
 from gqlsleuth.presentation.priorities import priority_label, style_priority_terms
-from gqlsleuth.presentation.responses import present_response, present_response_body
+from gqlsleuth.presentation.responses import (
+    NULL_DATA_NOTICE,
+    SUCCESS_NOTICE,
+    present_response,
+    present_response_body,
+    success_with_null_data,
+)
 from gqlsleuth.presentation.security_review import (
     candidate_facts,
     candidate_label,
@@ -532,6 +538,21 @@ def _render_executions(
     console: Console, results: tuple[QueryExecutionResult, ...], *, verbose: bool
 ) -> None:
     _section(console, "Query Execution")
+    console.print(SUCCESS_NOTICE, style="gql.secondary")
+    null_count = sum(
+        bool(
+            item.attempted
+            and item.response
+            and success_with_null_data(item.status, item.response.body)
+        )
+        for item in results
+    )
+    if null_count:
+        console.print(
+            f"{null_count} SUCCESS response(s) contained top-level GraphQL data: null; "
+            "meaningful application data was not established.",
+            style="gql.secondary",
+        )
     counts = Counter(item.status for item in results)
     console.print(
         f"Attempted {sum(item.attempted for item in results)}; "
@@ -639,6 +660,7 @@ def render_active_execution(console: Console, result: ActiveExecutionScanResult)
     attempted = tuple(item for item in result.executions if item.attempted)
     statuses = Counter(item.status for item in attempted)
     _section(console, "Mutation Execution")
+    console.print(SUCCESS_NOTICE, style="gql.secondary")
     summary = Text(f"{len(attempted)} executed")
     for status in QueryExecutionStatus:
         if statuses[status]:
@@ -698,6 +720,9 @@ def _render_execution_response(
     view = present_response(response, status, duration_seconds=duration_seconds)
     console.print("RESPONSE", style="gql.heading")
     console.print(Text("; ".join(f"{key}: {value}" for key, value in view.details)))
+    if response and success_with_null_data(status, response.body):
+        console.print("Response data: Null", style="gql.secondary")
+        console.print(NULL_DATA_NOTICE, style="gql.secondary")
     if view.body is None:
         console.print("No HTTP response was received; no server response body is available.")
         if error_message:

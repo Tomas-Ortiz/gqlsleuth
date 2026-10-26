@@ -22,7 +22,7 @@ from gqlsleuth.reporting.renderers import render_report
 
 @pytest.fixture
 def base(phase_ten_scan):
-    scan, _ = phase_ten_scan("type Query { health: String }")
+    scan, _ = phase_ten_scan("type Query { health: String }", execution_data={"health": "ok"})
     return scan, build_report(scan)
 
 

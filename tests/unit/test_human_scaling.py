@@ -27,10 +27,13 @@ from gqlsleuth.reporting.scaling import bound_section, scale_operations
 
 @pytest.fixture
 def base(phase_ten_scan, monkeypatch):
-    safe, requests = phase_ten_scan("""
+    safe, requests = phase_ten_scan(
+        """
         type Query { health: String }
         type Mutation { createItem(input: String!): String deleteItem: String }
-    """)
+    """,
+        execution_data={"health": "ok"},
+    )
     active = execute_selected_mutations(prepare_active_mutations(safe), confirmed=False)
     monkeypatch.setattr(HttpClient, "send", lambda *a, **k: pytest.fail("Rendering sent HTTP"))
     return safe, active, build_report(safe), requests
@@ -431,6 +434,7 @@ def test_actual_safe_pipeline_budget_records_render_without_repeated_details(pha
     safe, requests = phase_ten_scan(
         "type Query { " + " ".join(f"item{i:03}: String" for i in range(327)) + " }",
         mode=ScanMode.SAFE,
+        execution_data={},
     )
     report = build_report(safe)
     request_count = len(requests)

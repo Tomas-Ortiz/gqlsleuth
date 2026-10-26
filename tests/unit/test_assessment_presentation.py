@@ -357,8 +357,9 @@ def test_limitations_cap_and_query_classifications_are_not_successes(whole, monk
     assert view.query_outcomes == (("SUCCESS", 1), ("GRAPHQL_ERROR", 1), ("SKIPPED_SAFETY", 1))
     monkeypatch.setattr(completed, "build_report", lambda *args, **kwargs: report)
     text = capture(whole)
-    assert "Showing 5 of 8 limitations" in text
-    assert "FAILURE 4" in text and "FAILURE 5" not in text
+    assert "Showing 5 of 9 limitations" in text
+    assert "classified SUCCESS contained top-level GraphQL data: null" in " ".join(text.split())
+    assert "FAILURE 3" in text and "FAILURE 4" not in text
     assert "FAILURE 7" in capture(whole, verbose=True)
 
 

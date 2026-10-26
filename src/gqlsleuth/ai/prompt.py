@@ -38,6 +38,9 @@ Grounding for ALL prose:
   cause, misconfiguration or data exposure. Do not speculate about query structure, data access
   or exposure, even in a following
   'This may indicate' sentence. Ask what to review, not assert why an outcome happened.
+- SUCCESS is an execution classification only, not proof of non-null or meaningful data or
+  business success. Top-level GraphQL data may be null even with SUCCESS. Response bodies are
+  not supplied; never infer returned data or a meaningful application result from SUCCESS.
 - Scanner safety skips describe GQLSleuth's own restraint, not target denial or protection.
   Unattempted operations have no observed runtime result. Any execution assertion must match
   that operation's attempted/status facts; ordinary totals exclude specialized probes.

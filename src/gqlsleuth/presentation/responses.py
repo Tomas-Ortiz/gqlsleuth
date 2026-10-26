@@ -4,7 +4,11 @@ import codecs
 import json
 from dataclasses import dataclass
 
-from gqlsleuth.graphql.response_json import JsonNestingError, decode_response_json
+from gqlsleuth.graphql.response_json import (
+    JsonNestingError,
+    decode_response_json,
+    response_json_object,
+)
 from gqlsleuth.infrastructure.http import HttpResponse
 
 MAX_HUMAN_RESPONSE_BODY_BYTES = 64 * 1024
@@ -12,6 +16,22 @@ TRUNCATION_NOTICE = (
     "Response truncated for human-readable presentation. "
     "Full response is preserved in canonical JSON evidence."
 )
+SUCCESS_NOTICE = (
+    "SUCCESS means no execution error was classified. It does not establish meaningful "
+    "application data or business success, and is not a vulnerability finding."
+)
+NULL_DATA_NOTICE = (
+    "The response contained top-level GraphQL data: null. No GraphQL error was classified, "
+    "but this does not establish a meaningful application result."
+)
+
+
+def success_with_null_data(status: str | None, body: bytes | None) -> bool:
+    """Qualify an existing SUCCESS only; never classify outcomes or inspect field truthiness."""
+    if status is None or status.upper() != "SUCCESS" or body is None:
+        return False
+    document = response_json_object(body)
+    return document is not None and "data" in document and document["data"] is None
 
 
 @dataclass(frozen=True)

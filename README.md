@@ -211,6 +211,12 @@ change their membership or the prioritized review-item count.
 priorities rank manual-review interest, not exploitability. Introspection being enabled or an
 operation returning SUCCESS does not by itself establish a vulnerability.
 
+Execution `SUCCESS` means no execution error was classified; it does not establish meaningful
+application data or business success. Responses containing top-level GraphQL `data: null` retain
+that status, with a human qualification beside execution details and an aggregated Important
+Limitations note. A selected field returning null, false, zero, an empty string/list/object, or
+top-level `data: {}` does not receive that qualification. GraphQL errors retain precedence.
+
 Generic search/filter terminology found only in descriptions and bare `hidden` terminology
 retain context-only rule matches with zero contribution to operation review interest. They do
 not independently create review candidates. Meaningful name/type signals, internal/private or

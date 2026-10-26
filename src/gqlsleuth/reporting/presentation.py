@@ -17,7 +17,13 @@ from gqlsleuth.presentation.object_lookup import (
     follow_up_commands,
 )
 from gqlsleuth.presentation.query_depth import depth_response
-from gqlsleuth.presentation.responses import ResponsePresentation, present_response
+from gqlsleuth.presentation.responses import (
+    NULL_DATA_NOTICE,
+    SUCCESS_NOTICE,
+    ResponsePresentation,
+    present_response,
+    success_with_null_data,
+)
 from gqlsleuth.presentation.security_review import candidate_facts, candidate_label, review_wording
 from gqlsleuth.presentation.terminology import category_label, execution_reason, rule_explanation
 from gqlsleuth.reporting.models import OperationReport, ReportContext
@@ -185,8 +191,7 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             paragraphs=(
                 "Execution attempts are established from retained QUERY_EXECUTION evidence, "
                 "including transport failures. This does not guarantee the server received "
-                "the request. "
-                "SUCCESS is an execution outcome, not a vulnerability finding.",
+                "the request. " + SUCCESS_NOTICE,
             ),
         ),
     ]
@@ -208,7 +213,7 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                     paragraphs=(
                         "Generation, selection, confirmation, and execution are separate states. "
                         "Only MUTATION_EXECUTION evidence establishes an attempted request. "
-                        "SUCCESS does not confirm a vulnerability.",
+                        + SUCCESS_NOTICE,
                         "No Mutation candidates."
                         if not active.candidates
                         else f"{len(active.candidates)} identified; "
@@ -641,6 +646,11 @@ def _execution_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ())
             item.generated.operation_name, paragraphs=("No execution result retained.",)
         )
     response = None
+    null_data = bool(
+        execution.attempted
+        and execution.response
+        and success_with_null_data(execution.status, execution.response.body)
+    )
     if execution.attempted:
         duration = next(
             (
@@ -667,8 +677,10 @@ def _execution_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ())
             ),
             ("Execution attempted", "Yes" if execution.attempted else "No"),
             ("HTTP status", str(execution.response.status_code) if execution.response else "None"),
-        ),
+        )
+        + ((("Response data", "Null"),) if null_data else ()),
         paragraphs=(execution_reason(execution.reason),)
+        + ((NULL_DATA_NOTICE,) if null_data else ())
         + ((execution.error_message,) if execution.error_message else ()),
         request_blocks=_artifact_entry(item).code_blocks if execution.attempted else (),
         response=response,

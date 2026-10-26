@@ -12,6 +12,7 @@ from gqlsleuth.presentation.limits import (
     is_safe_budget_reason,
     showing_notice,
 )
+from gqlsleuth.presentation.responses import success_with_null_data
 from gqlsleuth.reporting.models import OperationReport, ReportContext
 from gqlsleuth.reporting.presentation import (
     ReportEntry,
@@ -228,13 +229,21 @@ def scale_operations(
             )
         )
 
+    def null_data_detail(item: OperationReport) -> bool:
+        return bool(
+            item.execution
+            and item.execution.attempted
+            and item.execution.response
+            and success_with_null_data(item.execution.status, item.execution.response.body)
+        )
+
     replacements = []
     for section in sections:
         if section.title == "Generated Queries":
             detailed = tuple(
                 item
                 for item in report.queries
-                if not (item.execution and (_exception(item) or execution_detail(item)))
+                if not (item.execution and (execution_detail(item) or null_data_detail(item)))
                 and (
                     not item.generated.success
                     or item.generated.manual_adjustments
@@ -301,7 +310,11 @@ def scale_operations(
                     )
                     for i in items
                 ),
-                tuple(_execution_detail(i, report) for i in items if execution_detail(i)),
+                tuple(
+                    _execution_detail(i, report)
+                    for i in items
+                    if execution_detail(i) or null_data_detail(i)
+                ),
                 "Query execution results",
                 frozenset(
                     i.generated.operation_name

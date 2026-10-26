@@ -23,6 +23,7 @@ from gqlsleuth.presentation.discovery_scope import discovery_scope_notes
 from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
 from gqlsleuth.presentation.priorities import style_priority_terms
+from gqlsleuth.presentation.responses import SUCCESS_NOTICE
 from gqlsleuth.presentation.statuses import status_text, style_status_terms
 from gqlsleuth.reporting.assessment import grouped_technical_sections
 from gqlsleuth.reporting.builder import build_report
@@ -128,6 +129,8 @@ def render_completed_assessment(
     if view.mutations:
         _major_section(console, "Mutation Execution")
         _rows(console, view.mutations)
+    if view.query_outcomes or view.mutations:
+        console.print(SUCCESS_NOTICE, style="gql.secondary")
     if view.limitations:
         _major_section(console, "Important Limitations")
         cap = MAX_HUMAN_INVENTORY_ITEMS if verbose else DEFAULT_MAX_LIMITATIONS

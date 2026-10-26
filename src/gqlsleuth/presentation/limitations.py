@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.limits import is_safe_budget_reason
+from gqlsleuth.presentation.responses import success_with_null_data
 from gqlsleuth.reporting.models import ReportContext, ReportIssue
 
 MAX_LIMITATION_OPERATION_NAMES = 3
@@ -21,6 +22,32 @@ _TRANSPORT = {
     "HttpRedirectError": ("redirect-limit failures", "Check the target URL and redirects."),
 }
 _OUTCOMES = {"graphql_error", "http_error", "invalid_response"}
+
+
+def null_data_limitations(report: ReportContext) -> tuple[str, ...]:
+    """One human-only qualification for ordinary attempted Query/Mutation responses."""
+    operations = (*report.queries, *(report.active.candidates if report.active else ()))
+    affected = [
+        item
+        for item in operations
+        if item.execution
+        and item.execution.attempted
+        and item.execution.response
+        and success_with_null_data(item.execution.status, item.execution.response.body)
+    ]
+    if not affected:
+        return ()
+    names = ", ".join(
+        f"{item.generated.operation_kind.value} {item.generated.operation_name}"
+        for item in affected[:MAX_LIMITATION_OPERATION_NAMES]
+    )
+    if len(affected) > MAX_LIMITATION_OPERATION_NAMES:
+        names += f", and {len(affected) - MAX_LIMITATION_OPERATION_NAMES} more"
+    return (
+        f"{len(affected)} execution response(s) classified SUCCESS contained top-level "
+        f"GraphQL data: null ({names}). No GraphQL error was classified; "
+        "these responses do not establish meaningful application data.",
+    )
 
 
 def summarize_issues(report: ReportContext) -> tuple[str, ...]:
