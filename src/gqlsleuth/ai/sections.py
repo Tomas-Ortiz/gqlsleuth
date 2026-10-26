@@ -3,6 +3,37 @@
 from gqlsleuth.ai.models import AIInterpretationResult
 from gqlsleuth.presentation.terminology import category_label
 
+QUALITY_WARNING_DESCRIPTIONS = {
+    "unsupported_security_assurance": (
+        "The interpretation may offer unsupported overall security assurance."
+    ),
+    "false_absence_claim": (
+        "An absence claim may contradict supplied Findings or security-relevant observations."
+    ),
+    "unsupported_outcome_inference": (
+        "An execution outcome may be used to infer an unsupported cause or security conclusion."
+    ),
+    "unsupported_control_claim": (
+        "A claim that a security control is present, effective or absent "
+        "may lack supporting evidence."
+    ),
+    "unsupported_review_conclusion": (
+        "A review conclusion may exceed what the supplied facts and schema coverage support."
+    ),
+    "unsupported_execution_claim": (
+        "An execution claim may conflict with supplied execution counts or outcomes."
+    ),
+    "incomplete_security_summary": "The interpretive summary may be incomplete or cut off.",
+    "incomplete_prose": "Other interpretation text may be incomplete or cut off.",
+}
+
+
+def quality_warning_description(code: str) -> str:
+    """Human wording only; retain unknown warnings without interpreting their identifiers."""
+    return QUALITY_WARNING_DESCRIPTIONS.get(
+        code, "Unrecognized AI quality warning; consult canonical JSON for its identifier."
+    )
+
 
 def operation_metadata(
     result: AIInterpretationResult, reference: str

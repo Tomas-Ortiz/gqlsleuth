@@ -4,6 +4,7 @@ import html
 import json
 import re
 from copy import deepcopy
+from dataclasses import replace
 from io import StringIO
 
 import httpx
@@ -11,6 +12,7 @@ import pytest
 from rich.console import Console
 
 from fixtures.ai_response import security_answer_fields
+from fixtures.cli_output import plain_cli_output
 from gqlsleuth.ai.context import build_ai_context
 from gqlsleuth.ai.models import AI_NOTICE, AIAnalysisStatus
 from gqlsleuth.ai.prompt import (
@@ -19,6 +21,7 @@ from gqlsleuth.ai.prompt import (
     validate_interpretation,
 )
 from gqlsleuth.ai.regeneration import corrective_instruction
+from gqlsleuth.ai.sections import QUALITY_WARNING_DESCRIPTIONS, quality_warning_description
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.infrastructure.http import HttpClient
@@ -152,8 +155,9 @@ def test_notice_precedes_any_generated_console_prose(prepared, monkeypatch, verb
         < output.index("INTERPRETIVE SUMMARY")
         < output.index("The target appears secure.")
     )
-    assert "AI quality checks flagged 1 potential issues" in output
-    assert ("unsupported_security_assurance" in output) is verbose
+    assert "AI quality checks flagged 1 potential issue." in output
+    assert "unsupported_security_assurance" not in output
+    assert (quality_warning_description("unsupported_security_assurance") in output) is verbose
     assert len(calls) == 1
 
 
@@ -175,8 +179,9 @@ def test_reports_warn_before_prose_and_serialize_advisory_separately(prepared, m
         assert normalized.index(AI_NOTICE) < normalized.index("The target appears secure.")
         assert "Heuristic quality flags, not deterministic Findings" in normalized
         assert normalized.index("AI-Assisted Interpretation") < normalized.index(
-            "unsupported_security_assurance"
+            quality_warning_description("unsupported_security_assurance")
         )
+        assert "unsupported_security_assurance" not in normalized
         assert rendered.count("Safety Notice") == 1
         assert normalized.rfind("Safety Notice") > normalized.index("The target appears secure.")
         assert "\x1b" not in rendered
@@ -192,6 +197,102 @@ def test_no_quality_flags_is_still_only_structural_success(prepared, monkeypatch
     assert result.status is AIAnalysisStatus.SUCCESS and result.quality_warnings == ()
     assert len(calls) == 1
     assert "inaccurate" in AI_NOTICE
+
+
+@pytest.mark.parametrize("count", [0, 1, 2, 8])
+@pytest.mark.parametrize("verbose", [False, True])
+def test_console_quality_count_grammar(prepared, monkeypatch, count, verbose):
+    scan, _, payload = prepared
+    result, calls = run_response(scan, payload, monkeypatch)
+    result = replace(result, quality_warnings=tuple(QUALITY_WARNING_DESCRIPTIONS)[:count])
+    stream = StringIO()
+    render_ai(
+        Console(file=stream, width=120, color_system=None, theme=CONSOLE_THEME),
+        result,
+        verbose=verbose,
+    )
+    output = " ".join(stream.getvalue().split())
+    if count:
+        noun = "issue" if count == 1 else "issues"
+        assert output.count(f"AI quality checks flagged {count} potential {noun}.") == 1
+        assert "not deterministic Findings" in output
+    else:
+        assert "AI quality checks flagged" not in output
+    assert len(calls) == 1
+
+
+def test_every_defined_quality_warning_has_a_description():
+    assert set(QUALITY_WARNING_DESCRIPTIONS) == QUALITY_WARNING_CODES
+
+
+@pytest.mark.parametrize("code", sorted(QUALITY_WARNING_CODES))
+def test_all_warning_descriptions_on_human_surfaces_preserve_json(prepared, monkeypatch, code):
+    scan, _, payload = prepared
+    result, calls = run_response(scan, payload, monkeypatch)
+    result = replace(result, quality_warnings=(code,))
+    before = deepcopy(result)
+    report = build_report(scan, ai_interpretation=result)
+    canonical_before = render_report(report, ReportFormat.JSON)
+    description = quality_warning_description(code)
+    for terminal in (False, True):
+        stream = StringIO()
+        render_ai(
+            Console(
+                file=stream,
+                width=120,
+                force_terminal=terminal,
+                no_color=True,
+                theme=CONSOLE_THEME,
+            ),
+            result,
+            verbose=True,
+        )
+        output = " ".join(plain_cli_output(stream.getvalue()).split())
+        assert description in output and code not in output
+        if not terminal:
+            assert "\x1b" not in stream.getvalue()
+    for format in (ReportFormat.MARKDOWN, ReportFormat.HTML):
+        rendered = render_report(report, format)
+        normalized = re.sub(r"\\([\W_])", lambda match: match[1], html.unescape(rendered))
+        assert description in normalized and code not in normalized
+        assert "\x1b" not in rendered
+    assert render_report(report, ReportFormat.JSON) == canonical_before
+    canonical = json.loads(canonical_before)
+    assert canonical["report_schema_version"] == 2
+    assert canonical["ai_interpretation"]["ai_contract_version"] == 2
+    assert canonical["ai_interpretation"]["quality_warnings"] == [code]
+    assert canonical["ai_interpretation"]["status"] == "success"
+    assert canonical["ai_interpretation"]["validation_failures"] == []
+    assert result == before and len(calls) == 1
+
+
+def test_warning_order_and_unknown_fallback_are_safe_and_preserved(prepared, monkeypatch):
+    scan, _, payload = prepared
+    result, calls = run_response(scan, payload, monkeypatch)
+    unknown = "future_<script>alert(1)</script>_[bold]warning"
+    codes = ("incomplete_prose", unknown, "false_absence_claim")
+    result = replace(result, quality_warnings=codes)
+    descriptions = tuple(quality_warning_description(code) for code in codes)
+    stream = StringIO()
+    render_ai(
+        Console(file=stream, width=120, color_system=None, theme=CONSOLE_THEME),
+        result,
+        verbose=True,
+    )
+    report = build_report(scan, ai_interpretation=result)
+    for output in (
+        stream.getvalue(),
+        render_report(report, ReportFormat.MARKDOWN),
+        html.unescape(render_report(report, ReportFormat.HTML)),
+    ):
+        normalized = " ".join(re.sub(r"\\([\W_])", lambda match: match[1], output).split())
+        positions = [normalized.index(description) for description in descriptions]
+        assert positions == sorted(positions)
+        assert unknown not in normalized and "<script>" not in normalized
+        assert all(code not in normalized for code in codes)
+    canonical = json.loads(render_report(report, ReportFormat.JSON))
+    assert canonical["ai_interpretation"]["quality_warnings"] == list(codes)
+    assert result.quality_warnings == codes and len(calls) == 1
 
 
 @pytest.mark.parametrize(

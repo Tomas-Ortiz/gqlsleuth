@@ -838,10 +838,14 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
 
 
 def _render_ai_quality(console: Console, result: AIInterpretationResult, *, verbose: bool) -> None:
+    from gqlsleuth.ai.sections import quality_warning_description
+
     if not result.quality_warnings:
         return
+    count = len(result.quality_warnings)
+    issue = "issue" if count == 1 else "issues"
     console.print(
-        f"AI quality checks flagged {len(result.quality_warnings)} potential issues. "
+        f"AI quality checks flagged {count} potential {issue}. "
         "These are heuristic quality flags, not deterministic Findings."
         + ("" if verbose else " Use --verbose or reports for details."),
         markup=False,
@@ -849,7 +853,7 @@ def _render_ai_quality(console: Console, result: AIInterpretationResult, *, verb
     )
     if verbose:
         for code in result.quality_warnings:
-            console.print(code, markup=False, style="gql.secondary")
+            console.print(quality_warning_description(code), markup=False, style="gql.secondary")
 
 
 def _render_ai_summary(console: Console, result: AIInterpretationResult) -> None:

@@ -31,6 +31,8 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Fixed
 
+- AI quality warnings use correct singular/plural console wording and human-readable descriptions
+  in verbose console and Markdown/HTML reports; canonical warning identifiers are unchanged.
 - AI prose checks for unsupported assurance, absence, causal/control/review conclusions,
   execution claims and clipped endings now produce advisory quality warnings instead of
   discarding usable structured interpretations. Structural schema/reference/coverage and

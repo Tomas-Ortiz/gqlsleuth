@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass, fields
 
 from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult
+from gqlsleuth.ai.sections import quality_warning_description
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence
 from gqlsleuth.domain.multiplicity import MULTIPLICITY_NOTICE
 from gqlsleuth.domain.query_depth import DEPTH_NOTICE
@@ -586,7 +587,10 @@ def ai_section(result: AIInterpretationResult) -> ReportSection:
                     "Heuristic quality flags, not deterministic Findings. "
                     "Absence of flags does not establish that AI prose is correct.",
                 ),
-                details=tuple(("Quality warning", code) for code in result.quality_warnings),
+                details=tuple(
+                    ("Quality warning", quality_warning_description(code))
+                    for code in result.quality_warnings
+                ),
             ),
         )
     entries.append(ReportEntry("AI Generation Metadata", details=usage_rows(result)))

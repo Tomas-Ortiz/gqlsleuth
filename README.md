@@ -448,6 +448,8 @@ Narrow prose/execution/completion checks produce advisory `quality_warnings`, no
 regeneration. These flags are not Findings or proof of incorrectness; no flags does not prove
 correctness. SUCCESS means usable structure, references and exact supplied-operation coverage,
 not factual assurance. Hard `validation_failures` remain separate from final-output quality flags.
+Verbose console and human reports explain quality flags in plain language; canonical JSON retains
+the original warning identifiers and order.
 Narrow grounding flags cover unsupported control-absence claims, contradictory partial-schema
 claims and cross-operation fact references. Untested or unobserved controls are not established
 as absent. These remain advisory checks, not general factual verification or automatic repair.
