@@ -19,6 +19,7 @@ from gqlsleuth.presentation.assessment import (
 )
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.console import _endpoint_heading, _major_section, _section, _table
+from gqlsleuth.presentation.discovery_scope import discovery_scope_notes
 from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
 from gqlsleuth.presentation.priorities import style_priority_terms
@@ -92,6 +93,9 @@ def render_completed_assessment(
     for endpoint in view.endpoints:
         console.print(Text("GraphQL endpoint: " + endpoint, style="gql.metadata"))
     console.print("Mode: " + view.mode)
+    if not verbose:
+        for note in discovery_scope_notes(report.target, report.evidence):
+            console.print(Text(note), style="gql.secondary")
     _major_section(console, "GraphQL Overview")
     _rows(console, view.overview)
     _major_section(console, "Security Validation")

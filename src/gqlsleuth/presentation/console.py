@@ -34,6 +34,7 @@ from gqlsleuth.domain.security_review import (
 from gqlsleuth.infrastructure.http import HttpResponse
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.differential import present_differential
+from gqlsleuth.presentation.discovery_scope import discovery_scope_notes
 from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
 from gqlsleuth.presentation.object_lookup import (
@@ -236,6 +237,8 @@ def render_pre_active_context(
     console.print("SAFE workflow complete; ACTIVE validation has not run.", style="gql.secondary")
     console.print(Text("Target: " + discovery.target.original_url, style="gql.metadata"))
     console.print("Mode: ACTIVE")
+    for note in discovery_scope_notes(discovery.target, discovery.evidence):
+        console.print(Text(note), style="gql.secondary")
     endpoints = tuple(
         dict.fromkeys(
             item.candidate_url
@@ -328,6 +331,8 @@ def render_scan(
     overview.add_row("Target", Text(discovery.target.original_url, style="gql.metadata"))
     overview.add_row("Mode", Text(discovery.mode.value.upper(), style="gql.heading"))
     console.print(Panel(overview, title="GQLSleuth", border_style="gql.metadata"))
+    for note in discovery_scope_notes(discovery.target, discovery.evidence):
+        console.print(Text(note), style="gql.secondary")
     introspections = {item.endpoint: item for item in introspection.introspections}
     schemas = {item.endpoint: item for item in schema_scan.schemas}
     analyses = {item.endpoint: item for item in analysis.endpoints}

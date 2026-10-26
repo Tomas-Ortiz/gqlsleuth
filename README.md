@@ -121,6 +121,13 @@ read-only Query execution. It never executes Mutations or Subscriptions. A base 
 is also accepted; a direct GraphQL URL is tried before fallback endpoint discovery.
 `--mode safe` explicitly selects the same default.
 
+When discovery checks additional paths, console and human reports disclose the actual paths
+checked and distinguish the supplied target from retained GraphQL endpoints. A root target starts
+at `/graphql`, not a probe of `/` itself. A confirmed/probable first candidate stops expansion;
+otherwise common paths use the same scheme, host and effective port. Redirects are still followed
+and may lead to another origin; this boundary describes generated candidate URLs, not redirect
+destinations. Verbose output and the human reports include this context with discovery details.
+
 Introspection support and schema retrieval are shown separately. The normal full query remains
 the first choice. If introspection is enabled and the full query explicitly exceeds a query
 depth, complexity or cost limit, GQLSleuth sends one static reduced introspection query: at most

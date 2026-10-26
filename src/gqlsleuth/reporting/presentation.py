@@ -4,11 +4,12 @@ import json
 from dataclasses import dataclass, fields
 
 from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult
-from gqlsleuth.domain.models import Evidence
+from gqlsleuth.domain.models import ConfidenceLevel, Evidence
 from gqlsleuth.domain.multiplicity import MULTIPLICITY_NOTICE
 from gqlsleuth.domain.query_depth import DEPTH_NOTICE
 from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
 from gqlsleuth.presentation.capabilities import capability_wording
+from gqlsleuth.presentation.discovery_scope import discovery_scope_notes
 from gqlsleuth.presentation.multiplicity import probe_guidance, probe_label, probe_response
 from gqlsleuth.presentation.object_lookup import (
     FOLLOW_UP_NOTICE,
@@ -49,6 +50,7 @@ class ReportSection:
 
 def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
     """Present recorded facts; response parsing is display-only, never classification."""
+    scope_notes = discovery_scope_notes(report.target, report.evidence)
     sections = [
         ReportSection(
             "Scan Overview",
@@ -66,6 +68,21 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
         ),
         ReportSection(
             "GraphQL Discovery and Confirmation",
+            paragraphs=scope_notes,
+            rows=(
+                ("Supplied target", report.target.original_url),
+                (
+                    "Retained GraphQL endpoints",
+                    ", ".join(
+                        item.endpoint
+                        for item in report.endpoints
+                        if item.confidence in {ConfidenceLevel.CONFIRMED, ConfidenceLevel.PROBABLE}
+                    )
+                    or "None",
+                ),
+            )
+            if scope_notes
+            else (),
             entries=tuple(
                 ReportEntry(
                     item.endpoint,

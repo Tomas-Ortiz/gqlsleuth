@@ -296,6 +296,18 @@ candidates are never requested or represented in results. Otherwise, the remaini
 probed with a synchronous pool of at most four workers. Completion order does not affect the
 stable candidate, result, or evidence order, and one candidate failure does not stop the others.
 
+Human discovery-scope disclosure is derived from retained `ENDPOINT_CANDIDATE` evidence, never
+from the list of candidates that could have been requested. Console (including pre-ACTIVE
+context), Markdown and HTML distinguish the supplied target from retained confirmed/probable
+candidate URLs and list actual additional same-origin paths, using the existing human-detail
+budget. No expansion notice is emitted when only the normalized supplied candidate was probed.
+Root targets start with `/graphql`; the root itself is not a discovery candidate. A supplied
+non-root candidate preserves its query string; bundled paths do not inherit that query string.
+The disclosure explicitly distinguishes same-origin candidate generation (scheme, host, effective
+port) from followed redirects, which may cross origins under the existing header-stripping
+policy. Retained endpoint URLs remain candidate URLs, not rewritten redirect destinations.
+This projection changes neither canonical JSON schema version 2 nor evidence or request behavior.
+
 Future versions may support:
 
 - Custom wordlists.
