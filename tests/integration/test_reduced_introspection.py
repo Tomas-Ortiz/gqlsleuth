@@ -137,6 +137,14 @@ NON_ELIGIBLE = [
     (413, {"errors": [{"message": "Query depth limit exceeded."}]}),
     (500, {"errors": [{"message": "Query too deep"}]}),
     (503, {"errors": [{"message": "Unavailable"}]}),
+    (504, b"<html>Gateway Timeout</html>"),
+    *(
+        (
+            status,
+            {"errors": [{"message": "Request rejected", "extensions": {"code": "QUERY_TOO_DEEP"}}]},
+        )
+        for status in (502, 503, 504)
+    ),
     (429, {"errors": [{"message": "Query too deep"}]}),
     (400, {"errors": [{"message": 'Cannot query field "other"'}]}),
     (400, {"errors": [{"message": "Business input rejected"}]}),
@@ -236,6 +244,118 @@ def test_transport_failure_is_bounded(failure, stage, count):
         assert "one reduced fallback attempted and failed" in result.schema_retrieval_summary
     elif stage == "full":
         assert "reduced fallback not attempted" in result.schema_retrieval_summary
+
+
+@pytest.mark.parametrize("transport_timeout", [False, True], ids=["http-504", "read-timeout"])
+def test_full_gateway_timeout_and_transport_timeout_preserve_distinct_provenance(
+    monkeypatch, transport_timeout
+):
+    requests = []
+    gateway_body = b"<html>Gateway Timeout</html>"
+
+    def handler(request):
+        requests.append(request)
+        assert str(request.url) == TARGET
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": {"__typename": "Query"}})
+        query = json.loads(request.content)["query"]
+        if query == MINIMAL_INTROSPECTION_QUERY:
+            return httpx.Response(
+                200, json={"data": {"__schema": {"queryType": {"name": "Query"}}}}
+            )
+        assert query == FULL_INTROSPECTION_QUERY, "Unexpected reduced or downstream request"
+        if transport_timeout:
+            raise httpx.ReadTimeout("offline timeout", request=request)
+        return httpx.Response(504, content=gateway_body, headers={"X-Fixture": "gateway"})
+
+    monkeypatch.setattr(
+        "httpx._client.HTTPTransport", lambda **kwargs: httpx.MockTransport(handler)
+    )
+    safe = run_safe_execution_scan(TARGET)
+    introspection = safe.query_generation.operation_analysis.schema_scan.introspection
+    endpoint = introspection.introspections[0]
+    assert [json.loads(r.content)["query"] for r in requests if r.method == "POST"] == [
+        MINIMAL_INTROSPECTION_QUERY,
+        FULL_INTROSPECTION_QUERY,
+    ]
+    assert len(requests) == 3  # Discovery GET plus exactly two introspection attempts.
+    assert endpoint.minimal_result.status is IntrospectionStatus.ENABLED
+    assert endpoint.minimal_result.reason == "Response contains a data.__schema object."
+    expected_category = "network_failure" if transport_timeout else "endpoint_error"
+    expected_status = "failed" if transport_timeout else "blocked"
+    full_reason = (
+        "HTTP request timed out." if transport_timeout else "HTTP 504 prevented introspection."
+    )
+    summary = (
+        "Full retrieval unsuccessful"
+        + ("" if transport_timeout else " (HTTP 504)")
+        + "; reduced fallback not attempted."
+    )
+    assert endpoint.full_retrieval_attempted
+    assert endpoint.full_result.status.value == endpoint.status.value == expected_category
+    assert endpoint.full_result.reason == full_reason
+    assert endpoint.reduced_result is None and endpoint.reduced_response is None
+    assert not endpoint.reduced_retrieval_attempted
+    assert endpoint.fallback_reason is None
+    assert endpoint.selected_schema_response is None
+    assert endpoint.schema_retrieval_status.value == expected_status
+    assert endpoint.schema_retrieval_summary == summary
+    assert endpoint.schema_retrieval_reason == summary + " " + full_reason
+    if transport_timeout:
+        assert endpoint.full_response is None
+        assert endpoint.full_error_type == "HttpTimeoutError"
+        assert endpoint.full_error_message == "HTTP request timed out."
+    else:
+        assert endpoint.full_error_type is None and endpoint.full_error_message is None
+        assert endpoint.full_response.status_code == 504
+        assert endpoint.full_response.body == gateway_body
+        assert endpoint.full_response.headers["x-fixture"] == "gateway"
+        assert endpoint.full_response.duration_seconds >= 0
+    assert safe.query_generation.operation_analysis.schema_scan.schemas == ()
+    assert safe.query_generation.queries == () and safe.executions == ()
+    assert len(safe.evidence) == 3
+    assert len(introspection.introspection_evidence) == 1
+    evidence = introspection.introspection_evidence[0]
+    assert evidence.evidence_type is EvidenceType.INTROSPECTION_RESULT
+    assert evidence.summary.startswith(expected_category.upper())
+    assert "Full retrieval attempted: yes" in evidence.notes
+    assert "Reduced fallback attempted: yes" not in evidence.notes
+    report = build_report(safe)
+    canonical = render_report(report, ReportFormat.JSON)
+    projected = json.loads(canonical)["endpoints"][0]
+    assert projected["introspection_status"] == expected_category
+    assert projected["minimal_introspection_status"] == "enabled"
+    assert projected["schema_retrieval_status"] == expected_status
+    assert projected["schema_retrieval_category"] == expected_category
+    assert projected["schema_retrieval_reason"] == summary + " " + full_reason
+    assert projected["schema_retrieval_summary"] == summary
+    assert projected["schema_summary"] is None
+    assert json.loads(canonical)["report_schema_version"] == 2
+    assert report.evidence == safe.evidence
+    assessment = build_assessment(report)
+    assert not assessment.findings and assessment.additional_policy_violations == 0
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("Rendering attempted another request")
+
+    monkeypatch.setattr(HttpClient, "send", unexpected)
+    for verbose in (False, True):
+        output = StringIO()
+        render_completed_assessment(
+            Console(file=output, width=60, theme=CONSOLE_THEME), safe, verbose=verbose
+        )
+        text = " ".join(output.getvalue().split())
+        assert summary in text
+        assert "Introspection ENABLED: 1" in text
+        assert "Schema retrieval " + expected_status.upper() + ": 1" in text
+        assert "\x1b" not in text
+    for format in (ReportFormat.MARKDOWN, ReportFormat.HTML):
+        text = render_report(report, format).replace("\\", "")
+        assert summary in text and expected_status.upper() in text
+        assert "ENABLED" in text
+        assert text.rfind("Safety Notice") > text.rfind("Introspection")
+    assert render_report(report, ReportFormat.JSON) == canonical
+    assert len(requests) == 3
 
 
 @pytest.mark.parametrize(
