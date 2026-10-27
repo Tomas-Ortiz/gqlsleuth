@@ -1,5 +1,6 @@
 """Build and map GraphQL introspection data into GQLSleuth schema models."""
 
+from collections import Counter
 from collections.abc import Mapping
 from typing import cast
 
@@ -259,7 +260,7 @@ def _summarize(
     query_type = schema.query_type
     if query_type is None:
         raise SchemaParsingError("Introspection schema does not define a query root.")
-    counts = {kind: sum(item.kind is kind for item in types) for kind in SchemaTypeKind}
+    counts = Counter(item.kind for item in types)
     custom_scalars = sum(
         item.kind is SchemaTypeKind.SCALAR and item.name not in BUILTIN_SCALAR_NAMES
         for item in types

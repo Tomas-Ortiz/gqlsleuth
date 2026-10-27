@@ -18,6 +18,7 @@ from gqlsleuth.infrastructure.http import HttpClient
 from gqlsleuth.presentation.completed import _render_technical, render_completed_assessment
 from gqlsleuth.presentation.console import CONSOLE_THEME, render_mutations
 from gqlsleuth.presentation.limits import MAX_HUMAN_DETAIL_ITEMS, MAX_HUMAN_INVENTORY_ITEMS
+from gqlsleuth.presentation.responses import ResponsePresentation
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.models import ReportFormat, ReportIssue
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection, technical_sections
@@ -222,6 +223,76 @@ def test_generic_collection_bounds_are_explicit_and_idempotent():
     assert "Showing 10 of 50 available detail sections" in " ".join(bounded.paragraphs)
     assert bound_section(bounded) == bounded
     assert len(source.entries) == 50
+
+
+@pytest.mark.parametrize("kind", ["GraphQL Multiplicity", "Query Depth"])
+def test_capability_inventory_preserves_rows_details_and_defaults(base, kind):
+    _, _, report, _ = base
+    source = ReportSection(
+        f"Controlled {kind} Validation",
+        entries=(
+            ReportEntry(
+                "probe",
+                details=(
+                    ("Operation", "query items"),
+                    ("Decision", "NOT_SELECTED"),
+                    ("Endpoint", "https://example.com/graphql"),
+                    ("Baseline depth", "2"),
+                    ("Probe depth", "3"),
+                ),
+            ),
+            ReportEntry("missing metadata"),
+            ReportEntry(
+                "attempted",
+                details=(("Decision", "EXECUTED"), ("Observation", "ACCEPTED")),
+                response=ResponsePresentation("SUCCESS", 200, 0.1, None),
+                request_blocks=(("graphql", "query { health }"),),
+            ),
+        ),
+    )
+    before = deepcopy(source)
+    view = scale_operations(report, (source,))[0]
+    depth_headers = ("Baseline depth", "Probe depth") if kind == "Query Depth" else ()
+    depth_values = ("2", "3") if depth_headers else ()
+    missing_depth = ("-", "-") if depth_headers else ()
+    assert view.table_headers == (
+        "Operation / probe",
+        *depth_headers,
+        "Decision",
+        "Observation",
+        "Endpoint",
+    )
+    assert view.table_rows == (
+        (
+            "probe / query items",
+            *depth_values,
+            "NOT_SELECTED",
+            "Not executed",
+            "https://example.com/graphql",
+        ),
+        ("missing metadata", *missing_depth, "NOT_RUN", "Not executed", ""),
+        ("attempted", *missing_depth, "EXECUTED", "ACCEPTED", ""),
+    )
+    assert view.entries == source.entries[1:]
+    assert source == before
+
+
+@pytest.mark.parametrize("kind", ["GraphQL Multiplicity", "Query Depth"])
+def test_capability_inventory_keeps_late_attempt_details_within_bounds(base, kind):
+    _, _, report, _ = base
+    exceptions = tuple(
+        ReportEntry(f"probe{i}", details=(("Decision", "DECLINED"),)) for i in range(30)
+    )
+    attempted = ReportEntry(
+        "attempted", response=ResponsePresentation("GRAPHQL_ERROR", 200, 0.1, None)
+    )
+    source = ReportSection(f"Controlled {kind} Validation", entries=exceptions + (attempted,))
+    view = scale_operations(report, (source,))[0]
+    assert len(view.table_rows) == MAX_HUMAN_INVENTORY_ITEMS
+    assert view.entries == exceptions[: MAX_HUMAN_DETAIL_ITEMS - 1] + (attempted,)
+    assert "Showing 20 of 31 capability results" in " ".join(view.paragraphs)
+    assert "Showing 10 of 31" in " ".join(view.paragraphs)
+    assert len(source.entries) == 31
 
 
 def test_table_styling_does_not_rewrite_operation_names():

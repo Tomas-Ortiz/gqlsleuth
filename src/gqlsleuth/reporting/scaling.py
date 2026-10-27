@@ -367,33 +367,33 @@ def scale_operations(
                 if section.title == "Controlled Query Depth Validation"
                 else ()
             )
-            entries = tuple(
-                replace(entry, title=entry.title + " / " + dict(entry.details)["Operation"])
-                if "Operation" in dict(entry.details)
-                else entry
-                for entry in section.entries
-            )
+            probe_rows: list[tuple[str, ...]] = []
+            probe_details: list[ReportEntry] = []
+            protected_titles: set[str] = set()
+            for entry in section.entries:
+                metadata = dict(entry.details)
+                if "Operation" in metadata:
+                    entry = replace(entry, title=entry.title + " / " + metadata["Operation"])
+                probe_rows.append(
+                    (
+                        entry.title,
+                        *(metadata.get(column, "-") for column in depth_columns),
+                        metadata.get("Decision", "NOT_RUN"),
+                        metadata.get("Observation", "Not executed"),
+                        metadata.get("Endpoint", ""),
+                    )
+                )
+                if entry.response is not None or metadata.get("Decision") != "NOT_SELECTED":
+                    probe_details.append(entry)
+                if entry.response is not None:
+                    protected_titles.add(entry.title)
             section = _inventory(
                 section,
                 ("Operation / probe", *depth_columns, "Decision", "Observation", "Endpoint"),
-                tuple(
-                    (
-                        entry.title,
-                        *(dict(entry.details).get(column, "-") for column in depth_columns),
-                        dict(entry.details).get("Decision", "NOT_RUN"),
-                        dict(entry.details).get("Observation", "Not executed"),
-                        dict(entry.details).get("Endpoint", ""),
-                    )
-                    for entry in entries
-                ),
-                tuple(
-                    entry
-                    for entry in entries
-                    if entry.response is not None
-                    or dict(entry.details).get("Decision") != "NOT_SELECTED"
-                ),
+                tuple(probe_rows),
+                tuple(probe_details),
                 "capability results",
-                frozenset(entry.title for entry in entries if entry.response is not None),
+                frozenset(protected_titles),
             )
         replacements.append(section)
     return tuple(replacements)
