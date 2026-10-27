@@ -289,6 +289,8 @@ def test_visibility_executes_only_common_paths(controlled):
 
 @pytest.mark.parametrize("cross_origin", [False, True])
 def test_phase14_redirect_scope_preserved(controlled, monkeypatch, cross_origin):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     safe = run(entries=ENTRIES[:4])
     sent = []
 
@@ -306,13 +308,16 @@ def test_phase14_redirect_scope_preserved(controlled, monkeypatch, cross_origin)
 
     monkeypatch.setattr("httpx._client.HTTPTransport", transport)
     nested = execute_nested_authorization(
-        safe, contexts=map_auth_context_inputs(ENTRIES[:4]), enabled=True
+        safe,
+        contexts=map_auth_context_inputs(ENTRIES[:4]),
+        enabled=True,
+        http_settings=HttpClientSettings(redirect_consent=RedirectConsent(lambda _: True)),
     )
     assert nested.request_count == 6 and len(sent) == 12
     for i in range(0, 12, 2):
         header = "authorization" if i % 4 == 0 else "cookie"
         assert header in sent[i].headers
-        assert (header in sent[i + 1].headers) is not cross_origin
+        assert sent[i + 1].headers[header] == sent[i].headers[header]
 
 
 def test_programmatic_active_and_context_count_rejected(controlled):

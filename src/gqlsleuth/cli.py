@@ -3,6 +3,7 @@
 import math
 import re
 import sys
+from contextlib import nullcontext
 from copy import copy
 from dataclasses import replace
 from pathlib import Path
@@ -88,6 +89,7 @@ from gqlsleuth.domain.sequential_discovery import (
 from gqlsleuth.domain.subscriptions import SubscriptionSecurityResult
 from gqlsleuth.graphql.subscriptions import parse_subscription_object
 from gqlsleuth.infrastructure.http import HttpClientSettings
+from gqlsleuth.infrastructure.redirect_consent import RedirectConsent, RedirectNotice
 from gqlsleuth.infrastructure.upload_file import read_upload_file
 from gqlsleuth.presentation.abuse_controls import render_abuse_controls
 from gqlsleuth.presentation.authentication import PROBE_LABELS, render_authentication
@@ -95,6 +97,7 @@ from gqlsleuth.presentation.authorization_policy import render_authorization_pol
 from gqlsleuth.presentation.completed import render_completed_assessment
 from gqlsleuth.presentation.console import (
     CONSOLE_THEME,
+    ScanActivity,
     activity_status,
     render_active_gate,
     render_ai,
@@ -102,6 +105,7 @@ from gqlsleuth.presentation.console import (
     render_error,
     render_mutations,
     render_pre_active_context,
+    render_redirect_notice,
     render_reports,
     render_root_help,
     render_scan_header,
@@ -770,10 +774,25 @@ def scan(
         raise typer.Exit(code=2) from None
     if mode is ScanMode.ACTIVE:
         render_active_gate(console)
+    activity: ScanActivity | None = None
+
+    def confirm_redirect(notice: RedirectNotice) -> bool:
+        with activity.paused() if activity is not None else nullcontext():
+            render_redirect_notice(console, notice)
+            try:
+                return typer.confirm(
+                    "Allow redirect and credential forwarding to this origin?", default=False
+                )
+            except (typer.Abort, EOFError, KeyboardInterrupt):
+                redirect_consent.cancel()
+                _cancel_scan()
+
+    redirect_consent = RedirectConsent(confirm_redirect if _interactive_stdin() else None)
     try:
         http_settings = map_target_http_inputs(
             headers=headers, timeout=timeout, verify_tls=verify_tls, proxy=proxy
         )
+        http_settings = http_settings.model_copy(update={"redirect_consent": redirect_consent})
         if auth_security_review:
             bearer_token(http_settings)
         idor_context_label = None
@@ -786,7 +805,7 @@ def scan(
                 style="gql.warning",
             )
         result: DifferentialScanResult | SafeExecutionScanResult
-        with activity_status(console, "Scanning target, please wait..."):
+        with activity_status(console, "Scanning target, please wait...") as activity:
             if object_auth_review:
                 result = run_object_authorization_scan(
                     target,
@@ -824,6 +843,9 @@ def scan(
                         mode=mode,
                     ),
                 )
+    except KeyboardInterrupt:
+        redirect_consent.cancel()
+        _cancel_scan()
     except GQLSleuthError as error:
         render_error(error_console, str(error))
         raise typer.Exit(code=2) from None

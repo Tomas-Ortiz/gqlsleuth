@@ -77,7 +77,9 @@ def context_http_settings(
     try:
         return tuple(
             HttpClientSettings(
-                **base.model_dump(exclude={"custom_headers"}), custom_headers=context.headers
+                **base.model_dump(exclude={"custom_headers"}),
+                custom_headers=context.headers,
+                redirect_consent=base.redirect_consent,
             )
             for context in contexts
         )

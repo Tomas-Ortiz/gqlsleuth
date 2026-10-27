@@ -18,6 +18,7 @@ from gqlsleuth.domain.exceptions import (
     HttpTransportError,
     ResponseTooLargeError,
 )
+from gqlsleuth.infrastructure.redirect_consent import HttpOrigin, RedirectConsent, RedirectNotice
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_DISCOVERY_TIMEOUT_SECONDS = 8.0
@@ -79,7 +80,9 @@ def _validate_proxy(value: str | None) -> str | None:
 class HttpClientSettings(BaseModel):
     """Conservative settings for the reusable synchronous HTTP client."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, hide_input_in_errors=True)
+    model_config = ConfigDict(
+        extra="forbid", frozen=True, hide_input_in_errors=True, arbitrary_types_allowed=True
+    )
 
     timeout_seconds: float = Field(default=DEFAULT_TIMEOUT_SECONDS, gt=0, allow_inf_nan=False)
     discovery_timeout_seconds: float = Field(
@@ -94,6 +97,7 @@ class HttpClientSettings(BaseModel):
         gt=0,
     )
     proxy: str | None = Field(default=None, repr=False)
+    redirect_consent: RedirectConsent | None = Field(default=None, repr=False, exclude=True)
 
     @field_validator("custom_headers")
     @classmethod
@@ -110,28 +114,39 @@ class HttpClientSettings(BaseModel):
 class _RedirectHeaderScope:
     """Per-send state, isolated from concurrent discovery requests and other origins."""
 
-    origin: tuple[str, str, int | None]
-    names: frozenset[str]
-    cookies: tuple[tuple[str, str], ...]
-    crossed_origin: bool = False
+    origin: HttpOrigin
+    previous: HttpOrigin
+    headers: tuple[tuple[str, str], ...]
+    consent: RedirectConsent
 
 
 def _restrict_redirect_headers(request: httpx.Request) -> None:
     scope = request.extensions.get("gqlsleuth_header_scope")
     if not isinstance(scope, _RedirectHeaderScope):
         return
-    origin = (request.url.scheme, request.url.host, request.url.port)
+    scope.consent.check_cancelled()
+    origin = HttpOrigin.from_url(request.url)
+    if origin.scheme not in {"http", "https"}:
+        raise HttpTransportError("HTTP transport request failed: unsupported redirect scheme.")
     if origin != scope.origin:
-        scope.crossed_origin = True
-    if scope.crossed_origin:
-        for name in scope.names | {"authorization", "cookie", "proxy-authorization"}:
+        scope.consent.authorize(
+            RedirectNotice(
+                source=scope.previous,
+                destination=origin,
+                has_configured_headers=bool(scope.headers),
+                has_cookies="cookie" in request.headers
+                or any(name.lower() == "cookie" for name, _ in scope.headers),
+            )
+        )
+    # HTTPX strips Authorization across origins and explicit Cookie on any redirect.
+    # Restore only this send's caller headers, after consent; leave body framing and
+    # domain/path/Secure selection of learned cookies entirely to HTTPX.
+    for name in dict.fromkeys(name.lower() for name, _ in scope.headers):
+        values = tuple((key, value) for key, value in scope.headers if key.lower() == name)
+        if tuple(request.headers.get_list(name)) != tuple(value for _, value in values):
             request.headers.pop(name, None)
-    elif scope.cookies and tuple(request.headers.get_list("cookie")) != tuple(
-        value for _, value in scope.cookies
-    ):
-        # HTTPX removes an explicit Cookie header on redirects, even on the same origin.
-        request.headers.pop("cookie", None)
-        request.headers = httpx.Headers([*request.headers.multi_items(), *scope.cookies])
+            request.headers = httpx.Headers([*request.headers.multi_items(), *values])
+    scope.previous = origin
 
 
 @dataclass(frozen=True)
@@ -187,6 +202,7 @@ class HttpClient:
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.settings = settings or HttpClientSettings()
+        self._redirect_consent = self.settings.redirect_consent or RedirectConsent()
         self._client = httpx.Client(
             timeout=self.settings.timeout_seconds,
             verify=self.settings.verify_tls,
@@ -205,14 +221,14 @@ class HttpClient:
         timeout = request.timeout_seconds or self.settings.timeout_seconds
         headers = self._request_headers(request)
         url = httpx.URL(request.url)
-        scope = (
-            _RedirectHeaderScope(
-                (url.scheme, url.host, url.port),
-                frozenset(name.lower() for name, _ in headers),
-                tuple((name, value) for name, value in headers if name.lower() == "cookie"),
-            )
-            if headers
-            else None
+        origin = HttpOrigin.from_url(url)
+        scope = _RedirectHeaderScope(
+            origin,
+            origin,
+            tuple(
+                (name, value) for name, value in headers if name.lower() not in _TRANSPORT_HEADERS
+            ),
+            self._redirect_consent,
         )
         try:
             with self._client.stream(

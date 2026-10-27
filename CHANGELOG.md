@@ -6,6 +6,10 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- Cross-origin HTTP redirects now require per-scan, default-NO consent before transmission.
+  Approval also authorizes the current request context's configured credentials and eligible
+  cookies; non-interactive runs block new origins. Same-origin redirects remain automatic,
+  discovery prompts run on the main thread, and Ctrl+C cancels the scan and releases waiters.
 - Schema retrieval now makes one reduced introspection fallback when introspection is enabled
   but the standard full query is explicitly rejected by a query depth/complexity/cost limit.
   Successful fallbacks are labeled PARTIAL and continue through deterministic analysis without

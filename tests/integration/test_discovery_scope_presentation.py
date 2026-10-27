@@ -20,7 +20,8 @@ from gqlsleuth.application.schema_parsing import parse_introspection_schemas
 from gqlsleuth.discovery.endpoint_candidates import BUNDLED_ENDPOINT_PATHS
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType, ScanMode, Target
 from gqlsleuth.graphql.introspection import FULL_INTROSPECTION_QUERY, MINIMAL_INTROSPECTION_QUERY
-from gqlsleuth.infrastructure.http import HttpClient
+from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings
+from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
 from gqlsleuth.presentation.completed import render_completed_assessment
 from gqlsleuth.presentation.console import CONSOLE_THEME, render_pre_active_context
 from gqlsleuth.presentation.discovery_scope import discovery_scope_notes
@@ -53,7 +54,10 @@ def scan(target_url, *, mode=ScanMode.SAFE, retained_path="/graphql", redirect=F
             return httpx.Response(200, json={"data": schema})
         return httpx.Response(200, json={"data": {"health": "ok"}})
 
-    with HttpClient(transport=httpx.MockTransport(handler)) as client:
+    with HttpClient(
+        HttpClientSettings(redirect_consent=RedirectConsent(lambda _: True)),
+        transport=httpx.MockTransport(handler),
+    ) as client:
         detection = discover_and_detect_graphql(Target.parse(target_url), mode=mode, client=client)
         if redirect:
             return detection, requests
@@ -140,7 +144,7 @@ def test_actual_scope_across_console_reports_and_unchanged_scan_facts(
             assert "Retained GraphQL endpoints" in text
             assert origin + "/graphql" in text
             assert "scheme, host and effective port" in text
-            assert "may lead to another origin" in text
+            assert "to another origin only after explicit consent" in text
         assert text.rfind("Safety Notice") > text.rfind("GraphQL Discovery and Confirmation")
     scope = discovery_scope_notes(report.target, report.evidence)
     if supplied is None:
@@ -179,7 +183,7 @@ def test_cross_origin_redirect_is_not_described_as_same_origin_traffic():
     assert detection.detections[0].candidate_url == "https://example.com/graphql"
     notes = discovery_scope_notes(detection.discovery.target, detection.evidence)
     assert notes[1] == "Additional same-origin paths checked: /graphql."
-    assert "candidate URLs; HTTP redirects are followed and may lead to another origin" in notes[2]
+    assert "candidate URLs; same-origin redirects are followed automatically" in notes[2]
 
 
 @pytest.mark.parametrize("retained_paths", [("/graphql", "/api/graphql"), ()])

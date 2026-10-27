@@ -259,6 +259,8 @@ def test_reports_ai_and_console_do_not_send_or_leak(phase_ten_scan, monkeypatch)
 
 
 def test_redirect_credential_scope_and_cookie_isolation(phase_ten_scan, monkeypatch):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     safe = phase_ten_scan(SDL)[0]
     requests = []
 
@@ -273,11 +275,9 @@ def test_redirect_credential_scope_and_cookie_isolation(phase_ten_scan, monkeypa
                     "set-cookie": "learned=private",
                 },
             )
-        assert (
-            "cookie" not in request.headers
-            and "authorization" not in request.headers
-            and "x-tenant-id" not in request.headers
-        )
+        assert request.headers["cookie"] == SECRET
+        assert request.headers["authorization"] == SECRET
+        assert request.headers["x-tenant-id"] == SECRET
         payload = json.loads(request.content)
         return httpx.Response(200, json={"data": {"order": {"id": payload["variables"]["id"]}}})
 
@@ -291,7 +291,8 @@ def test_redirect_credential_scope_and_cookie_isolation(phase_ten_scan, monkeypa
         seeds=parse_discovery_seeds(["order:id=123"]),
         enabled=True,
         http_settings=HttpClientSettings(
-            custom_headers=(("Cookie", SECRET), ("Authorization", SECRET), ("X-Tenant-ID", SECRET))
+            custom_headers=(("Cookie", SECRET), ("Authorization", SECRET), ("X-Tenant-ID", SECRET)),
+            redirect_consent=RedirectConsent(lambda _: True),
         ),
     )
     result = workflow.execute(preview=workflow.preview, confirmed=True)

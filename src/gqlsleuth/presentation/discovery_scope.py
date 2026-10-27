@@ -58,5 +58,6 @@ def discovery_scope_notes(target: Target, evidence: tuple[Evidence, ...]) -> tup
         notice,
         scope,
         "Same origin means the supplied scheme, host and effective port. This describes "
-        "candidate URLs; HTTP redirects are followed and may lead to another origin.",
+        "candidate URLs; same-origin redirects are followed automatically. Redirects may lead "
+        "to another origin only after explicit consent to destination and credential forwarding.",
     )

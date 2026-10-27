@@ -355,6 +355,8 @@ def test_reports_exact_evidence_and_ai_exclusion(phase_ten_scan, selected, confi
 
 @pytest.mark.parametrize("cross_origin", [False, True])
 def test_depth_retains_redirect_header_protection(phase_ten_scan, cross_origin):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     headers = []
 
     def handler(request):
@@ -365,7 +367,10 @@ def test_depth_retains_redirect_header_protection(phase_ten_scan, cross_origin):
             )
         return httpx.Response(200, json={"data": {"album": None}})
 
-    settings = HttpClientSettings(custom_headers=(("Authorization", "PHASE18_FAKE_SECRET"),))
+    settings = HttpClientSettings(
+        custom_headers=(("Authorization", "PHASE18_FAKE_SECRET"),),
+        redirect_consent=RedirectConsent(lambda _: True),
+    )
     with HttpClient(settings, transport=httpx.MockTransport(handler)) as client:
         result = execute_query_depth(
             prepare_query_depth(phase_ten_scan(SDL)[0]),
@@ -374,7 +379,7 @@ def test_depth_retains_redirect_header_protection(phase_ten_scan, cross_origin):
             client=client,
         )
     assert "authorization" in headers[0]
-    assert ("authorization" in headers[1]) is not cross_origin
+    assert headers[1]["authorization"] == "PHASE18_FAKE_SECRET"
     assert len(result.evidence) == 1
 
 

@@ -75,9 +75,8 @@ def wire(monkeypatch):
         if controls["redirect"] and request.url.host == "example.com" and number > 1:
             return httpx.Response(307, headers={"location": "https://other.example/graphql"})
         if request.url.host == "other.example":
-            assert "authorization" not in request.headers
-            assert "cookie" not in request.headers
-            assert "x-tenant" not in request.headers
+            for name in ("authorization", "cookie", "x-tenant"):
+                assert request.headers.get(name) == requests[-2].headers.get(name)
             return httpx.Response(200, json={"data": {"currentUser": {"id": "1"}}})
         if number in controls["override"]:
             status, body = controls["override"][number]
@@ -104,7 +103,7 @@ def wire(monkeypatch):
     return requests, controls, configurations
 
 
-def settings(token=TOKEN):
+def settings(token=TOKEN, redirect_consent=None):
     return HttpClientSettings(
         custom_headers=(
             ("aUtHoRiZaTiOn", "Bearer " + token),
@@ -115,13 +114,14 @@ def settings(token=TOKEN):
         timeout_seconds=3,
         verify_tls=False,
         proxy="http://fake:" + PROXY + "@proxy.example:8888",
+        redirect_consent=redirect_consent,
     )
 
 
 def session(active, probes=BOTH, token=TOKEN, **kwargs):
     return application.AuthenticationSecuritySession(
         active,
-        http_settings=settings(token),
+        http_settings=settings(token, kwargs.pop("redirect_consent", None)),
         selected_index=1,
         selected_probes=probes,
         enabled=True,
@@ -365,12 +365,20 @@ def test_supplied_unsigned_no_duplicate_probe_and_opaque_control(active, wire):
         assert [f.finding_type.value for f in result.findings] == kinds
 
 
-def test_cross_origin_strips_generated_tokens_and_never_attributes_access(active, wire):
+@pytest.mark.parametrize("approve", [False, True])
+def test_cross_origin_requires_consent_and_never_attributes_access(active, wire, approve):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     wire[1]["redirect"] = True
-    workflow = session(active)
+    workflow = session(active, redirect_consent=RedirectConsent(lambda _: approve))
     result = workflow.execute(preview=workflow.preview, confirmed=True)
-    assert result.attempted_request_count == 3 and len(wire[0]) == 5
-    assert all(e.outcome is NestedOutcome.INDETERMINATE for e in result.evidence[1:])
+    assert result.attempted_request_count == 3 and len(wire[0]) == (5 if approve else 3)
+    assert all(
+        e.outcome is (NestedOutcome.INDETERMINATE if approve else NestedOutcome.NETWORK_FAILURE)
+        for e in result.evidence[1:]
+    )
+    if not approve:
+        assert all(e.error_type == "HttpRedirectDeniedError" for e in result.evidence[1:])
     assert not result.findings
 
 

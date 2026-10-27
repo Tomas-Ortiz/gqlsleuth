@@ -37,6 +37,10 @@ class HttpRedirectError(HttpError):
     """Raised when HTTP redirect handling cannot complete."""
 
 
+class HttpRedirectDeniedError(HttpRedirectError):
+    """A redirect was blocked locally before transmission for lack of consent."""
+
+
 class ResponseTooLargeError(HttpError):
     """Raised when a streamed response exceeds the configured body limit."""
 

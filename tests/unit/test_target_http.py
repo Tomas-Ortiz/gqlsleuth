@@ -184,7 +184,9 @@ def test_initial_custom_header_order_including_explicit_cookie_is_preserved():
         "https://example.com:8443/next",
     ],
 )
-def test_redirects_keep_same_origin_headers_and_strip_cross_origin_canaries(destination):
+def test_redirects_keep_request_context_headers_after_explicit_approval(destination):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     seen = []
 
     def handler(request):
@@ -196,7 +198,10 @@ def test_redirects_keep_same_origin_headers_and_strip_cross_origin_canaries(dest
         return httpx.Response(200, json={"data": None})
 
     with HttpClient(
-        HttpClientSettings(custom_headers=HEADERS), transport=httpx.MockTransport(handler)
+        HttpClientSettings(
+            custom_headers=HEADERS, redirect_consent=RedirectConsent(lambda _: True)
+        ),
+        transport=httpx.MockTransport(handler),
     ) as client:
         response = client.send(
             HttpRequest(
@@ -211,11 +216,8 @@ def test_redirects_keep_same_origin_headers_and_strip_cross_origin_canaries(dest
         assert request.headers["content-type"] == "application/json"
     assert CANARY in str(seen[0].headers.multi_items())
     for request in seen[1:]:
-        if destination == "https://example.com/next":
-            for name, value in HEADERS:
-                assert request.headers[name] == value
-        else:
-            assert CANARY not in str(request.headers.multi_items())
+        for name, value in HEADERS:
+            assert request.headers[name] == value
 
 
 @pytest.mark.parametrize(

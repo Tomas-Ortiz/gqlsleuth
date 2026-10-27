@@ -78,8 +78,8 @@ def wire(monkeypatch):
                 307, headers={"location": behavior["redirect"], "set-cookie": "learned=NO"}
             )
         if behavior["redirect"] and "other.example" in str(request.url):
-            assert "authorization" not in request.headers and "cookie" not in request.headers
-            assert "x-api-key" not in request.headers
+            for name in ("authorization", "cookie", "x-api-key"):
+                assert request.headers[name] == requests[-2].headers[name]
         else:
             assert request.headers["authorization"] == "Bearer " + SECRET
             assert request.headers["cookie"] == "session=PHASE28_COOKIE_CANARY"
@@ -121,6 +121,7 @@ def session(safe, file, **kwargs):
             proxy="http://fake:PHASE28_PROXY_CANARY@proxy.example:8888",
             timeout_seconds=2,
             verify_tls=False,
+            redirect_consent=kwargs.pop("redirect_consent", None),
         ),
         **kwargs,
     )
@@ -472,13 +473,20 @@ def test_multipart_request_cannot_mix_json_or_nonpost():
 
 
 @pytest.mark.parametrize("origin", ["example.com", "other.example"])
-def test_redirect_protection(safe, file, wire, origin):
+@pytest.mark.parametrize("approve", [False, True])
+def test_redirect_protection(safe, file, wire, origin, approve):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     wire[1]["redirect"] = f"https://{origin}/next"
-    workflow = session(safe, file)
+    workflow = session(safe, file, redirect_consent=RedirectConsent(lambda _: approve))
     result = workflow.execute(preview=workflow.preview, confirmed=True)
-    assert len(wire[0]) == 2
+    assert len(wire[0]) == (1 if origin == "other.example" and not approve else 2)
     assert result.attempts[0].outcome.value == (
-        "upload_accepted" if origin == "example.com" else "indeterminate"
+        "upload_accepted"
+        if origin == "example.com"
+        else "indeterminate"
+        if approve
+        else "network_failure"
     )
 
 

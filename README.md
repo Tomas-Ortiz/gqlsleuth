@@ -124,9 +124,10 @@ is also accepted; a direct GraphQL URL is tried before fallback endpoint discove
 When discovery checks additional paths, console and human reports disclose the actual paths
 checked and distinguish the supplied target from retained GraphQL endpoints. A root target starts
 at `/graphql`, not a probe of `/` itself. A confirmed/probable first candidate stops expansion;
-otherwise common paths use the same scheme, host and effective port. Redirects are still followed
-and may lead to another origin; this boundary describes generated candidate URLs, not redirect
-destinations. Verbose output and the human reports include this context with discovery details.
+otherwise common paths use the same scheme, host and effective port. Same-origin redirects are
+automatic; another origin requires explicit consent. This boundary describes generated candidate
+URLs, not redirect destinations. Verbose output and the human reports include this context with
+discovery details.
 
 Introspection support and schema retrieval are shown separately. The normal full query remains
 the first choice. If introspection is enabled and the full query explicitly exceeds a query
@@ -261,8 +262,21 @@ and duplicate names use the last supplied value. Transport-controlled headers su
 Content-Length and Proxy-Authorization are rejected. GraphQL JSON requests use the scanner's
 JSON Content-Type.
 
-Supplied headers remain on same-origin redirects. If scheme, host or port changes, they are
-removed and not restored later in that redirect chain—even if it returns to the original origin.
+Same-origin redirects remain automatic. A change of scheme, normalized host or effective port
+requires interactive confirmation **before** the redirected request is sent, defaulting to **NO**.
+**YES authorizes both the destination and forwarding the current request context's configured
+credentials/custom headers**, including Authorization, API keys and explicit Cookies. GraphQL
+bodies and variables may also be forwarded according to HTTP redirect semantics. HTTPX-managed
+cookies retain their domain/path/Secure eligibility; approval does not copy the whole cookie jar.
+HTTPS-to-HTTP redirects show an additional plaintext warning. Operators must authorize every
+destination for testing, even related subdomains or HTTP-to-HTTPS upgrades.
+
+Approval or denial is remembered for that exact origin for this scan only. Each additional origin
+requires separate approval; returning to the request's original origin does not. Named contexts
+share destination decisions, never headers or cookie jars. **NO/Enter blocks** that redirect and
+continues independent work. **Ctrl+C cancels the scan**. Non-interactive runs never prompt or
+approve a cross-origin redirect; they retain a controlled local rejection instead. ACTIVE mode
+alone does not approve redirects, and redirect consent does not replace ACTIVE execution consent.
 There is no automatic login, token refresh, credential acquisition or browser-cookie access.
 
 ### Named contexts for differential review

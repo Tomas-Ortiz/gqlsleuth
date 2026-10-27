@@ -304,8 +304,9 @@ budget. No expansion notice is emitted when only the normalized supplied candida
 Root targets start with `/graphql`; the root itself is not a discovery candidate. A supplied
 non-root candidate preserves its query string; bundled paths do not inherit that query string.
 The disclosure explicitly distinguishes same-origin candidate generation (scheme, host, effective
-port) from followed redirects, which may cross origins under the existing header-stripping
-policy. Retained endpoint URLs remain candidate URLs, not rewritten redirect destinations.
+port) from followed redirects, which require explicit destination/credential-forwarding consent
+before crossing origins. Retained endpoint URLs remain candidate URLs, not rewritten redirect
+destinations.
 This projection changes neither canonical JSON schema version 2 nor evidence or request behavior.
 
 Future versions may support:
@@ -451,13 +452,39 @@ Content-Type and body length, ignoring supplied Content-Type on those requests. 
 Content-Length, Transfer-Encoding, Connection, Keep-Alive, Proxy-Connection, Proxy-Authorization,
 TE, Trailer, and Upgrade are rejected as transport-controlled fields.
 
-The centralized adapter scopes supplied headers to the original request origin (scheme, host,
-port) with per-request redirect state, safe for concurrent discovery. Same-origin redirects
-retain authentication, including explicit Cookies. Crossing origins strips supplied headers
-and credentials for the rest of that redirect chain, including redirects back; it never
-reapplies them to unrelated destinations. HTTPX retains ownership of redirects, method/body
-handling, and limits. Offline tests verify arbitrary API-key/custom header canaries as well
-as Authorization/Cookie behavior; HTTPX's default Authorization stripping alone is insufficient.
+The centralized adapter gates every redirected request before transport, including requests
+with no explicit headers that acquire HTTPX-managed cookies. Same origin means equal scheme,
+normalized hostname and effective port. Same-origin redirects are automatic. A new destination
+origin requires one main-thread interactive confirmation, default NO; YES authorizes both the
+destination and forwarding the originating request context's eligible credentials/custom
+headers and HTTPX-preserved body. The notice uses origins/boolean metadata only, never header
+values, URL paths/query strings or bodies. HTTPS-to-HTTP adds a plaintext warning; HTTP-to-HTTPS,
+related subdomains and different ports also require consent. Non-interactive/default API use
+denies without prompting. ACTIVE acknowledgement is not redirect consent.
+
+Per-scan `RedirectConsent` runtime state caches decisions by exact destination origin, excluded
+from settings serialization/repr and never persisted in reports or AI. Named contexts share
+decisions but maintain independent headers, clients and cookie jars. Each send retains only its
+own caller headers; after approval the request hook restores headers HTTPX removed, including
+Authorization and explicit Cookie. Explicit Cookie takes precedence over jar-generated Cookie
+without duplicate headers. Learned cookies remain subject to HTTPX domain/path/Secure selection;
+the jar is never copied wholesale. Transport-controlled framing/proxy headers are not restored.
+Returning to the original request origin requires no new decision; another hop does.
+
+Discovery retains its four-worker synchronous executor and stable result order. Workers publish
+one safe pending notice per origin and wait on a condition; the main-thread future wait services
+notices without polling, additional pools or worker input. Pending notices are bounded by the
+worker count. Prompting pauses the CLI spinner. Cancellation notifies all waiters, cancels queued
+work before executor shutdown, prevents subsequent sends and retains CLI exit 130. Already-sent
+requests cannot be withdrawn; transport timeouts still bound their completion.
+
+Denied redirects produce `HttpRedirectDeniedError` before destination transmission, preserving
+the original attempted-request failure through existing evidence/results; no remote response or
+Finding is fabricated. Independent work may continue. HTTPX still owns allowed redirect method/
+body changes (301/302/303 versus 307/308), limits, timeout and body-size handling. No new request,
+retry or redirect crawl is added. ACTIVE selection/confirmation and existing post-response
+origin checks remain independent. WebSocket and Ollama behavior is unchanged. Canonical report
+schema 2 and AI contract 2 are unchanged.
 
 ## 12. Introspection
 
@@ -2844,8 +2871,8 @@ failures, with no retries/concurrency/fallbacks. Existing centralized redirect h
 
 The ordinary Phase 14 HTTP context is reused (no supplied headers or repeated `-H`), with a fresh
 isolated client/cookie jar per attempt. TLS, timeout, proxy, trust_env=False, response limits,
-same-origin credentials and cross-origin stripping are unchanged. Supplied headers are described
-as request context, not proof of authentication. Named auth contexts cannot
+same-origin credentials and consent-gated cross-origin forwarding apply. Supplied headers are
+described as request context, not proof of authentication. Named auth contexts cannot
 be combined with Phase 22. No outgoing header values or settings objects enter its result models.
 
 Classifications are exactly Phase 20's TARGET_RETURNED / EXPLICIT_DENIAL / INDETERMINATE /
@@ -3158,8 +3185,8 @@ maximum requests, returned-data notice and policy limitation. Separate default-N
 Non-interactive, declined, disabled and unsupported cases add zero IDOR probes.
 
 HTTP uses the centralized client unchanged: timeout/proxy/TLS, trust_env=False, response limits,
-same-origin credentials and cross-origin stripping remain intact. Each probe has a fresh client
-and cookie state. Phase 20 exact root-ID classification is reused: matching text/integer JSON can
+same-origin credentials and consent-gated cross-origin forwarding apply. Each probe has a fresh
+client and cookie state. Phase 20 exact root-ID classification is reused: matching text/integer JSON can
 confirm access; Boolean/float/missing/null/mismatched IDs cannot. No business-body comparisons.
 
 Frozen project-owned models in `domain/idor.py` retain context, seeds, bounded plans, confirmation,
@@ -3229,8 +3256,9 @@ An originally unsigned token needs no equivalent replay. Claims are never modifi
 concurrency, alternate operations, claim fuzzing or token discovery occurs.
 
 Fresh centralized HttpClient instances preserve all existing timeout, TLS, proxy, trust_env=False,
-body limits and redirect/header protections. Generated variants cannot cross the original target
-origin. Cross-origin final responses remain INDETERMINATE. Transport failures consume attempts;
+body limits and redirect/header protections. Generated variants require explicit destination/
+credential-forwarding consent to cross origins. Cross-origin final responses remain INDETERMINATE.
+Transport failures consume attempts;
 the session cannot replay attempted work. Control failure/access/ambiguity skips selected variants.
 A failed optional probe does not prevent a later independently eligible selected probe.
 
@@ -3322,8 +3350,8 @@ selection, safety and unchanged target settings. Caller-modified previews cannot
 Literal confirmation is required; a completed or declined session cannot restart. Requests are
 sequential identical POST payloads without operationName. Fresh centralized clients prevent
 response Cookies from changing the next request context. Phase 14 timeouts, proxy, TLS,
-trust_env=False, body limits and redirect/header stripping apply unchanged. Cross-origin final
-responses are indeterminate. Network attempts consume the budget. No retries, replacement
+trust_env=False, body limits, redirect consent and context-specific header forwarding apply.
+Cross-origin final responses are indeterminate. Network attempts consume the budget. No retries, replacement
 attempts, sleeps, concurrency, additional operations, credential guesses, header/token rotation,
 automatic login, threshold ramps or changed variables are supported.
 
@@ -3407,8 +3435,8 @@ restricted to POST without a JSON body. HTTPX frames the multipart boundary/cont
 caller Content-Type cannot override it. Logical GraphQL `operations` and `map` JSON plus file part
 `0` follow the multipart convention, without operationName. Existing JSON requests are unchanged.
 TLS, timeout, proxy, trust_env=False, User-Agent, custom headers, body limits, redirect limits,
-same-origin credentials and cross-origin stripping remain centralized. Cross-origin final upload
-responses are indeterminate. No upload-response URL or ID causes additional requests.
+same-origin credentials and consent-gated cross-origin forwarding remain centralized. Cross-origin
+final upload responses are indeterminate. No upload-response URL or ID causes additional requests.
 
 The ACTIVE CLI inserts File Upload Security after generic Mutation interaction and before the
 existing abuse-control stage. Generic Mutation execution is not a prerequisite. A local plan
@@ -3529,7 +3557,7 @@ order. Attempts include failures; one failed probe does not prevent the other se
 are no retries, concurrency, enumeration, key guessing, ID mutation, multi-representation requests,
 response-derived IDs, SDL-driven follow-ups, subgraph discovery or vendor-specific checks. Existing
 timeout, proxy, TLS, redirect and response bounds remain intact. Cross-origin final responses cannot
-establish access; existing credential stripping and request-context response capture are reused.
+establish access; centralized redirect consent and request-context response capture are reused.
 
 Only attempted requests create `FEDERATION_SECURITY_PROBE` Evidence with ACTIVE mode, selected
 endpoint/probe, Phase 16 and schema source references, exact query/variables, timestamp, POST,

@@ -35,7 +35,7 @@ API_KEY = "PHASE27_API_CANARY"
 PROXY = "PHASE27_PROXY_CANARY"
 
 
-def settings():
+def settings(redirect_consent=None):
     return HttpClientSettings(
         custom_headers=(
             ("Authorization", "Bearer " + SECRET),
@@ -47,6 +47,7 @@ def settings():
         timeout_seconds=3,
         verify_tls=False,
         proxy="http://fake:" + PROXY + "@proxy.example:8888",
+        redirect_consent=redirect_consent,
     )
 
 
@@ -85,10 +86,8 @@ def wire(monkeypatch):
         if redirect and request.url.path == "/graphql":
             return httpx.Response(307, headers={"Location": redirect})
         if redirect and request.url.host == "other.example":
-            assert all(
-                name not in request.headers
-                for name in ("authorization", "cookie", "x-api-key", "x-forwarded-for")
-            )
+            for name in ("authorization", "cookie", "x-api-key", "x-forwarded-for"):
+                assert request.headers[name] == requests[-2].headers[name]
         payload = json.loads(request.content)
         status, body = control["override"].get(
             attempt,
@@ -115,7 +114,11 @@ def session(active, kind="query", **kwargs):
     preview = application.prepare_abuse_controls(active, enabled=True)
     index = next(item.index for item in preview.candidates if item.operation.kind.value == kind)
     return application.AbuseControlSession(
-        active, http_settings=settings(), enabled=True, selected_index=index, **kwargs
+        active,
+        http_settings=settings(kwargs.pop("redirect_consent", None)),
+        enabled=True,
+        selected_index=index,
+        **kwargs,
     )
 
 
@@ -363,13 +366,16 @@ def test_destructive_mutation_is_rechecked_even_with_forged_execution(active):
 
 
 @pytest.mark.parametrize("target", ["https://example.com/next", "https://other.example/next"])
-def test_redirect_headers_and_cookie_isolation(active, wire, target):
+@pytest.mark.parametrize("approve", [False, True])
+def test_redirect_headers_and_cookie_isolation(active, wire, target, approve):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     wire[1]["redirect"] = target
-    workflow = session(active)
+    workflow = session(active, redirect_consent=RedirectConsent(lambda _: approve))
     result = workflow.execute(preview=workflow.preview, confirmed=True)
     expected = 1 if "other.example" in target else 5
     assert result.attempted_request_count == expected
-    assert len(wire[0]) == 2 * expected  # Central transport redirects, not planned repeats.
+    assert len(wire[0]) == (1 if "other.example" in target and not approve else 2 * expected)
     if "other.example" not in target:
         assert all(req.headers["authorization"] == "Bearer " + SECRET for req in wire[0])
 

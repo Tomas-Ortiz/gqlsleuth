@@ -321,6 +321,8 @@ def test_single_bare_exception_does_not_weaken_normal_contexts():
 
 @pytest.mark.parametrize("cross_origin", [False, True])
 def test_redirect_scope_and_target_settings_unchanged(retained, monkeypatch, cross_origin):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     _, scan = retained
     sent = []
     configured = []
@@ -343,14 +345,16 @@ def test_redirect_scope_and_target_settings_unchanged(retained, monkeypatch, cro
         cases=parse_object_cases(["clienteA:order:id=123"], tuple(item.name for item in CONTEXTS)),
         contexts=CONTEXTS,
         enabled=True,
-        http_settings=HttpClientSettings(timeout_seconds=3, verify_tls=False),
+        http_settings=HttpClientSettings(
+            timeout_seconds=3, verify_tls=False, redirect_consent=RedirectConsent(lambda _: True)
+        ),
     )
     assert result.attempted_request_count == 3 and len(sent) == 6
     assert all(item.timeout_seconds == 3 and item.verify_tls is False for item in configured)
     assert len({id(item) for item in configured}) == 3
     for index, header in ((0, "authorization"), (2, "cookie")):
         assert header in sent[index].headers
-        assert (header in sent[index + 1].headers) is not cross_origin
+        assert sent[index + 1].headers[header] == sent[index].headers[header]
     assert all(
         "authorization" not in item.headers and "cookie" not in item.headers for item in sent[4:]
     )

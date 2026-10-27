@@ -10,6 +10,7 @@ from rich import box
 from rich.console import Console, Group
 from rich.padding import Padding
 from rich.panel import Panel
+from rich.status import Status
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
@@ -32,6 +33,7 @@ from gqlsleuth.domain.security_review import (
     SecurityCandidateType,
 )
 from gqlsleuth.infrastructure.http import HttpResponse
+from gqlsleuth.infrastructure.redirect_consent import RedirectNotice
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.differential import present_differential
 from gqlsleuth.presentation.discovery_scope import discovery_scope_notes
@@ -206,17 +208,84 @@ def render_scan_header(console: Console, version: str) -> None:
     )
 
 
+class ScanActivity:
+    """Callable progress update with a scoped pause for main-thread redirect consent."""
+
+    def __init__(self, update: Callable[[str], None], status: Status | None = None) -> None:
+        self._update = update
+        self._status = status
+        self.active = True
+
+    def __call__(self, message: str) -> None:
+        self._update(message)
+
+    @contextmanager
+    def paused(self) -> Iterator[None]:
+        status = self._status if self.active else None
+        if status is not None:
+            status.stop()
+        try:
+            yield
+        finally:
+            if status is not None:
+                status.start()
+
+
 @contextmanager
-def activity_status(console: Console, message: str) -> Iterator[Callable[[str], None]]:
+def activity_status(console: Console, message: str) -> Iterator[ScanActivity]:
     """Animate only on terminals, and always stop before subsequent output or prompts."""
     if not console.is_terminal:
         console.print(message, markup=False)
-        yield lambda updated: console.print(updated, markup=False)
+        activity = ScanActivity(lambda updated: console.print(updated, markup=False))
+        try:
+            yield activity
+        finally:
+            activity.active = False
         return
     # ASCII frames also work on legacy Windows terminals. Rich removes the transient
     # status on exit, including when the workflow raises a controlled error.
     with console.status(Text(message), spinner="line", spinner_style="gql.metadata") as status:
-        yield lambda updated: status.update(Text(updated))
+        activity = ScanActivity(lambda updated: status.update(Text(updated)), status)
+        try:
+            yield activity
+        finally:
+            activity.active = False
+
+
+def render_redirect_notice(console: Console, notice: RedirectNotice) -> None:
+    """Explain destination AND credential consent using origins/booleans only."""
+    _section(console, "Cross-origin redirect")
+    console.print(Text(f"Original origin: {notice.source}", style="gql.metadata"))
+    console.print(Text(f"Redirected origin: {notice.destination}", style="gql.metadata"))
+    changed = [
+        label
+        for label, left, right in (
+            ("scheme", notice.source.scheme, notice.destination.scheme),
+            ("hostname", notice.source.host, notice.destination.host),
+            ("port", notice.source.port, notice.destination.port),
+        )
+        if left != right
+    ]
+    console.print(Text("The redirect changes the " + ", ".join(changed) + "."))
+    console.print(
+        "Approval also authorizes forwarding this request context's configured credentials "
+        "and custom headers, including tokens, explicit Cookies and eligible managed cookies. "
+        "GraphQL bodies and variables may also be forwarded. Ensure the destination is "
+        "authorized for testing.",
+        markup=False,
+    )
+    console.print(
+        "Request headers/cookies are present."
+        if notice.has_configured_headers or notice.has_cookies
+        else "No configured headers or eligible cookies are present on this request.",
+        style="gql.secondary",
+    )
+    if notice.source.scheme == "https" and notice.destination.scheme == "http":
+        console.print(
+            "WARNING: This redirect changes HTTPS to unencrypted HTTP. Approval may transmit "
+            "credentials and GraphQL request data without TLS protection.",
+            style="gql.warning",
+        )
 
 
 def render_active_gate(console: Console) -> None:

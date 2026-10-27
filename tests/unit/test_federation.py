@@ -58,7 +58,8 @@ def wire(monkeypatch):
         if behavior["redirect"] and request.url.host == "example.com":
             return httpx.Response(307, headers={"location": behavior["redirect"]})
         if request.url.host == "other.example":
-            assert not {"authorization", "cookie", "x-api-key"} & set(request.headers)
+            for name in ("authorization", "cookie", "x-api-key"):
+                assert request.headers[name] == requests[-2].headers[name]
         status, body = behavior["override"].get(
             index, response_for(request.method, request.content, behavior["scenario"])
         )
@@ -418,7 +419,10 @@ def test_privacy_reports_ai_and_disabled_semantics(safe, wire):
         assert SECRET not in text and "PHASE29_PROXY_CANARY" not in text
 
 
-def test_echo_withheld_and_cross_origin_indeterminate(safe, wire):
+@pytest.mark.parametrize("approve", [False, True])
+def test_echo_withheld_and_cross_origin_indeterminate(safe, wire, approve):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     wire[1]["override"][1] = (200, {"data": {"_service": {"sdl": SECRET}}})
     current = session(
         safe, http_settings=HttpClientSettings(custom_headers=(("Authorization", SECRET),))
@@ -435,11 +439,14 @@ def test_echo_withheld_and_cross_origin_indeterminate(safe, wire):
                 ("Authorization", SECRET),
                 ("Cookie", "session=fake"),
                 ("X-API-Key", SECRET),
-            )
+            ),
+            redirect_consent=RedirectConsent(lambda _: approve),
         ),
     )
     result = current.execute(preview=select(current, (FederationProbe.SERVICE,)), confirmed=True)
-    assert result.attempts[0].outcome is FederationOutcome.INDETERMINATE
+    assert result.attempts[0].outcome is (
+        FederationOutcome.INDETERMINATE if approve else FederationOutcome.NETWORK_FAILURE
+    )
     assert not result.findings
 
 

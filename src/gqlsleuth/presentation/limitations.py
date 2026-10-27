@@ -20,6 +20,10 @@ _TRANSPORT = {
     "HttpTimeoutError": ("timeouts", "Check network reachability and the target timeout setting."),
     "HttpProxyError": ("proxy failures", "Check the proxy configuration and reachability."),
     "HttpRedirectError": ("redirect-limit failures", "Check the target URL and redirects."),
+    "HttpRedirectDeniedError": (
+        "cross-origin redirects blocked locally (destination not approved)",
+        "Interactive per-origin consent is required before following cross-origin redirects.",
+    ),
 }
 _OUTCOMES = {"graphql_error", "http_error", "invalid_response"}
 

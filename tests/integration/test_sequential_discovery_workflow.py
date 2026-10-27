@@ -255,6 +255,8 @@ def test_direct_reports_console_and_ai_exclusion(phase_ten_scan, monkeypatch, su
 
 
 def test_redirect_header_scope_and_fresh_cookies(phase_ten_scan, monkeypatch):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     safe = phase_ten_scan(SDL)[0]
     requests = []
 
@@ -267,8 +269,9 @@ def test_redirect_header_scope_and_fresh_cookies(phase_ten_scan, monkeypatch):
                 return httpx.Response(307, headers={"location": "/same"})
             assert request.headers["cookie"] == "session=" + SECRET
             return httpx.Response(307, headers={"location": "https://other.example/graphql"})
-        assert "authorization" not in request.headers and "cookie" not in request.headers
-        assert "x-api-key" not in request.headers
+        assert request.headers["authorization"] == SECRET
+        assert request.headers["cookie"] == "session=" + SECRET
+        assert request.headers["x-api-key"] == SECRET
         identifier = json.loads(request.content)["variables"]["id"]
         return httpx.Response(
             200,
@@ -291,7 +294,8 @@ def test_redirect_header_scope_and_fresh_cookies(phase_ten_scan, monkeypatch):
                 ("Authorization", SECRET),
                 ("Cookie", "session=" + SECRET),
                 ("X-API-Key", SECRET),
-            )
+            ),
+            redirect_consent=RedirectConsent(lambda _: True),
         ),
     )
     assert result.attempted_request_count == 3

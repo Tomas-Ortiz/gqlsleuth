@@ -90,7 +90,19 @@ def probe_endpoint_candidates(
                 executor.submit(_probe_candidate, candidate_url, client)
                 for candidate_url in candidate_urls
             ]
-            probes = tuple(future.result() for future in futures)
+            consent = client.settings.redirect_consent
+            completed = False
+            try:
+                probes = tuple(
+                    consent.wait_for(future) if consent else future.result() for future in futures
+                )
+                completed = True
+            finally:
+                if not completed:
+                    if consent:
+                        consent.cancel()
+                    for future in futures:
+                        future.cancel()
 
     return EndpointDiscoveryResult(
         target=target,

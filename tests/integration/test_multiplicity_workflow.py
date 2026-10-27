@@ -242,6 +242,8 @@ def test_reports_evidence_ai_and_phase_sixteen_isolation(phase_ten_scan, selecte
 
 @pytest.mark.parametrize("cross_origin", [False, True])
 def test_batch_redirect_header_protection_and_normal_classifier(phase_ten_scan, cross_origin):
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
+
     preview = prepare_multiplicity(phase_ten_scan(SDL)[0])
     headers = []
 
@@ -253,11 +255,14 @@ def test_batch_redirect_header_protection_and_normal_classifier(phase_ten_scan, 
             )
         return httpx.Response(200, json=[{"data": None}] * 2)
 
-    settings = HttpClientSettings(custom_headers=(("Authorization", "PHASE17_TEST_SECRET"),))
+    settings = HttpClientSettings(
+        custom_headers=(("Authorization", "PHASE17_TEST_SECRET"),),
+        redirect_consent=RedirectConsent(lambda _: True),
+    )
     with HttpClient(settings, transport=httpx.MockTransport(handler)) as client:
         result = execute_multiplicity(preview, selected_indices=(2,), confirmed=True, client=client)
     assert "authorization" in headers[0]
-    assert ("authorization" in headers[1]) is not cross_origin
+    assert headers[1]["authorization"] == "PHASE17_TEST_SECRET"
     assert len(result.evidence) == 1
     assert (
         classify_execution_response(200, b'[{"data":null},{"data":null}]').status.value

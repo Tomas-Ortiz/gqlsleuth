@@ -474,10 +474,13 @@ def test_cookie_jars_never_cross_context_boundaries(monkeypatch):
     assert any("cookie" in request.headers for request in seen)
 
 
-def test_context_redirects_keep_same_origin_and_strip_cross_origin(controlled):
+def test_context_redirects_keep_only_own_headers_after_shared_approval(controlled):
     from gqlsleuth.infrastructure.http import HttpRequest
+    from gqlsleuth.infrastructure.redirect_consent import RedirectConsent
 
     seen = []
+    notices = []
+    consent = RedirectConsent(lambda notice: notices.append(notice) or True)
     for context in map_auth_context_inputs(ENTRIES):
         current = []
 
@@ -493,18 +496,19 @@ def test_context_redirects_keep_same_origin_and_strip_cross_origin(controlled):
             return httpx.Response(200)
 
         with HttpClient(
-            HttpClientSettings(custom_headers=context.headers),
+            HttpClientSettings(custom_headers=context.headers, redirect_consent=consent),
             transport=httpx.MockTransport(handler),
         ) as client:
             client.send(HttpRequest(method="GET", url="https://example.com/start"))
-        for request in current[:2]:
+        for request in current:
             for name, value in context.headers:
                 assert request.headers[name] == value
-        for request in current[2:]:
-            assert all(name not in request.headers for name, _ in context.headers)
-            assert "authorization" not in request.headers and "cookie" not in request.headers
+            for secret in CANARIES:
+                if secret not in str(context.headers):
+                    assert secret not in str(request.headers)
         seen.extend(current)
     assert len(seen) == 12
+    assert len(notices) == 1
 
 
 def test_raw_body_changes_do_not_create_differences_and_human_views_omit_echoes(controlled):
