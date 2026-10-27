@@ -145,16 +145,14 @@ def _parse_url(value: str) -> SplitResult:
     if not parsed.scheme:
         raise InvalidUrlError("Target URL must include an HTTP or HTTPS scheme.")
     if parsed.scheme not in {"http", "https"}:
-        raise UnsupportedSchemeError(
-            f"Unsupported target scheme '{parsed.scheme}'; use http or https."
-        )
+        raise UnsupportedSchemeError("Unsupported target scheme; use http or https.")
     if not parsed.netloc or parsed.hostname is None:
         raise InvalidUrlError("Target URL must include a host.")
 
     try:
         _ = parsed.port
-    except ValueError as error:
-        raise InvalidUrlError(f"Invalid target URL: {error}.") from None
+    except ValueError:
+        raise InvalidUrlError("Invalid target URL: invalid port.") from None
 
     return parsed
 

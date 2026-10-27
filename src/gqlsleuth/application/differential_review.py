@@ -12,6 +12,7 @@ from gqlsleuth.application.safe_execution import (
     SafeExecutionScanResult,
     run_safe_execution_scan,
 )
+from gqlsleuth.application.scan_configuration import map_scan_inputs
 from gqlsleuth.domain.analysis import OperationKind
 from gqlsleuth.domain.authorization_policy import AuthorizationPolicyResult
 from gqlsleuth.domain.differential import (
@@ -96,7 +97,7 @@ def run_differential_scan(
     nested_auth_review: bool = False,
 ) -> DifferentialScanResult:
     """Validate all configuration before scanning; never share clients or cookie jars."""
-    target = Target.parse(target_url)
+    target, _ = map_scan_inputs(target_url, mode=mode)
     validate_context_names(tuple(context.name for context in contexts))
     base = http_settings or HttpClientSettings()
     if mode is not ScanMode.SAFE:

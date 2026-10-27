@@ -13,6 +13,7 @@ from gqlsleuth.infrastructure.http import (
     DEFAULT_TIMEOUT_SECONDS,
     HttpClientSettings,
     validate_target_header,
+    validate_target_url_compatibility,
 )
 
 
@@ -115,4 +116,6 @@ def map_scan_inputs(
     mode: ScanMode = ScanMode.SAFE,
 ) -> tuple[Target, ApplicationSettings]:
     """Validate a target and map the selected mode to application settings."""
-    return Target.parse(target_url), ApplicationSettings(mode=mode)
+    target = Target.parse(target_url)
+    validate_target_url_compatibility(target.original_url)
+    return target, ApplicationSettings(mode=mode)

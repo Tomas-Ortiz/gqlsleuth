@@ -282,6 +282,15 @@ parser, including username-only and percent-encoded credentials. Errors do not e
 credentials. Authentication remains explicit through `--header` or supported `--auth-context`
 options; embedded credentials are never converted to headers or silently stripped to proceed.
 
+Application input mapping also checks the target with HTTPX's URL parser through the infrastructure
+adapter, without changing retained URL components or discovery normalization. The CLI performs this
+local check before starting scan workflows or creating target clients. Transport-incompatible input
+(including unsupported IDNA hostnames or HTTPX's URL-length restriction) produces a value-free
+invalid-input error and exit code 2; there is no additional project-defined URL-length limit.
+The domain parser remains independent of HTTPX. Invalid request URLs reaching the adapter, including
+malformed server redirect destinations, use normalized transport failures rather than target-input
+errors; no supplied URL or header values are included in those messages.
+
 Candidates are deduplicated in their stable generation order and probed with safe HTTP GET
 requests through the centralized HTTP client. All HTTP status responses are retained. A
 normalized transport failure is recorded for its candidate without preventing later candidates

@@ -16,6 +16,7 @@ from gqlsleuth.domain.exceptions import (
     HttpRedirectError,
     HttpTimeoutError,
     HttpTransportError,
+    InvalidUrlError,
     ResponseTooLargeError,
 )
 from gqlsleuth.infrastructure.redirect_consent import HttpOrigin, RedirectConsent, RedirectNotice
@@ -40,6 +41,14 @@ _TRANSPORT_HEADERS = frozenset(
         "upgrade",
     }
 )
+
+
+def validate_target_url_compatibility(value: str) -> None:
+    """Check HTTPX URL support locally without normalizing the retained target."""
+    try:
+        httpx.URL(value)
+    except httpx.InvalidURL:
+        raise InvalidUrlError("Target URL is not supported by the HTTP transport.") from None
 
 
 def validate_target_header(name: str, value: str) -> tuple[str, str]:
@@ -223,17 +232,19 @@ class HttpClient:
         started_at = perf_counter()
         timeout = request.timeout_seconds or self.settings.timeout_seconds
         headers = self._request_headers(request)
-        url = httpx.URL(request.url)
-        origin = HttpOrigin.from_url(url)
-        scope = _RedirectHeaderScope(
-            origin,
-            origin,
-            tuple(
-                (name, value) for name, value in headers if name.lower() not in _TRANSPORT_HEADERS
-            ),
-            self._redirect_consent,
-        )
         try:
+            url = httpx.URL(request.url)
+            origin = HttpOrigin.from_url(url)
+            scope = _RedirectHeaderScope(
+                origin,
+                origin,
+                tuple(
+                    (name, value)
+                    for name, value in headers
+                    if name.lower() not in _TRANSPORT_HEADERS
+                ),
+                self._redirect_consent,
+            )
             with self._client.stream(
                 request.method,
                 request.url,
@@ -264,6 +275,8 @@ class HttpClient:
                 )
         except ResponseTooLargeError:
             raise
+        except httpx.InvalidURL:
+            raise HttpTransportError("HTTP transport request failed: invalid URL.") from None
         except httpx.TimeoutException as error:
             raise HttpTimeoutError("HTTP request timed out.") from error
         except httpx.ProxyError as error:

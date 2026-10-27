@@ -47,7 +47,11 @@ from gqlsleuth.application.object_authorization import run_object_authorization_
 from gqlsleuth.application.query_depth import execute_query_depth, prepare_query_depth
 from gqlsleuth.application.reporting import generate_reports
 from gqlsleuth.application.safe_execution import SafeExecutionScanResult, run_safe_execution_scan
-from gqlsleuth.application.scan_configuration import map_auth_context_inputs, map_target_http_inputs
+from gqlsleuth.application.scan_configuration import (
+    map_auth_context_inputs,
+    map_scan_inputs,
+    map_target_http_inputs,
+)
 from gqlsleuth.application.sensitive_input import SensitiveInputSession
 from gqlsleuth.application.sequential_discovery import (
     execute_sequential_discovery,
@@ -649,6 +653,7 @@ def scan(
         render_error(error_console, "--output / -o requires at least one --format / -f.")
         raise typer.Exit(code=2)
     try:
+        map_scan_inputs(target, mode=mode)
         selected_upload_case = None
         if (
             subscription_expect_deny
