@@ -1,5 +1,7 @@
 """Generate minimal operation documents using shared finite input/output rules."""
 
+from dataclasses import dataclass
+
 from graphql import GraphQLError, OperationType, parse
 from pydantic import JsonValue
 
@@ -21,6 +23,29 @@ from gqlsleuth.graphql.collection_schema import collection_paths, iter_bounding_
 from gqlsleuth.rules.operation_analysis import normalize_terms
 
 DEFAULT_MAX_SELECTION_DEPTH = 3
+# Input type traversal includes NON_NULL/LIST wrappers, independently of output depth.
+_MAX_INPUT_DEPTH = 64
+_MAX_INPUT_VISITS = 2048
+
+
+@dataclass
+class _InputExpansion:
+    """Count placeholder work across all arguments, including optional bound attempts."""
+
+    visits: int = 0
+
+    def enter(self, depth: int) -> None:
+        if depth >= _MAX_INPUT_DEPTH:
+            raise QueryGenerationError(
+                f"Input generation depth limit exceeded ({_MAX_INPUT_DEPTH} levels)."
+            )
+        if self.visits >= _MAX_INPUT_VISITS:
+            raise QueryGenerationError(
+                f"Input generation expansion limit exceeded ({_MAX_INPUT_VISITS} visits)."
+            )
+        self.visits += 1
+
+
 _BUILTIN_PLACEHOLDERS: dict[str, JsonValue] = {
     "String": "test",
     "ID": "1",
@@ -128,18 +153,20 @@ def _generate_field_document(
         )
         variables: dict[str, JsonValue] = {}
         adjustments: list[str] = []
+        expansion = _InputExpansion()
         for argument in required_arguments:
             value, argument_adjustments = _placeholder(
                 schema,
                 argument.type,
                 input_name=argument.name,
                 active_input_types=frozenset(),
+                expansion=expansion,
             )
             variables[argument.name] = value
             adjustments.extend(argument_adjustments)
 
         if kind is OperationType.QUERY:
-            bound = generate_collection_bound(schema, field)
+            bound = _generate_collection_bound(schema, field, expansion)
             if bound is not None:
                 argument, value, bound_adjustments = bound
                 variables[argument.name] = value
@@ -189,6 +216,12 @@ def generate_collection_bound(
     schema: ParsedSchema, field: SchemaField
 ) -> tuple[SchemaArgument, JsonValue, tuple[str, ...]] | None:
     """Populate at most one Int quantity control; unsafe optional paths stay omitted."""
+    return _generate_collection_bound(schema, field, _InputExpansion())
+
+
+def _generate_collection_bound(
+    schema: ParsedSchema, field: SchemaField, expansion: _InputExpansion
+) -> tuple[SchemaArgument, JsonValue, tuple[str, ...]] | None:
     types = {item.name: item for item in schema.types}
     if not collection_paths(field, types):
         return None
@@ -203,9 +236,12 @@ def generate_collection_bound(
                 input_name=argument.name,
                 active_input_types=frozenset(),
                 bound_path=tuple(children),
+                expansion=expansion,
             )
         except QueryGenerationError:
             # Optional bounds must not break an otherwise generatable Query.
+            if expansion.visits >= _MAX_INPUT_VISITS:
+                return None
             continue
         return argument, value, adjustments
     return None
@@ -219,8 +255,24 @@ def generate_input_path(
     input_name: str,
 ) -> JsonValue:
     """Materialize one explicit input path using the existing required-input placeholders."""
+    return _generate_input_path(schema, reference, path, input_name, _InputExpansion(), 0)
+
+
+def _generate_input_path(
+    schema: ParsedSchema,
+    reference: TypeReference,
+    path: tuple[str, ...],
+    input_name: str,
+    expansion: _InputExpansion,
+    depth: int,
+) -> JsonValue:
     value, _ = _placeholder(
-        schema, reference, input_name=input_name, active_input_types=frozenset()
+        schema,
+        reference,
+        input_name=input_name,
+        active_input_types=frozenset(),
+        expansion=expansion,
+        depth=depth,
     )
     if not path:
         return value
@@ -230,7 +282,9 @@ def generate_input_path(
     child = next((item for item in named.input_fields if item.name == path[0]), None)
     if child is None:
         raise QueryGenerationError("Selected input path is unavailable.")
-    value[child.name] = generate_input_path(schema, child.type, path[1:], input_name=child.name)
+    value[child.name] = _generate_input_path(
+        schema, child.type, path[1:], child.name, expansion, depth + 1
+    )
     return value
 
 
@@ -240,8 +294,11 @@ def _placeholder(
     *,
     input_name: str,
     active_input_types: frozenset[str],
+    expansion: _InputExpansion,
+    depth: int = 0,
     bound_path: tuple[str, ...] | None = None,
 ) -> tuple[JsonValue, tuple[str, ...]]:
+    expansion.enter(depth)
     if reference.kind is TypeReferenceKind.NON_NULL:
         if reference.of_type is None:
             raise QueryGenerationError("Non-null input type is missing its wrapped type.")
@@ -251,6 +308,8 @@ def _placeholder(
             input_name=input_name,
             active_input_types=active_input_types,
             bound_path=bound_path,
+            expansion=expansion,
+            depth=depth + 1,
         )
     if reference.kind is TypeReferenceKind.LIST:
         if bound_path is not None:
@@ -262,6 +321,8 @@ def _placeholder(
             reference.of_type,
             input_name=input_name,
             active_input_types=active_input_types,
+            expansion=expansion,
+            depth=depth + 1,
         )
         return [item], adjustments
 
@@ -304,6 +365,8 @@ def _placeholder(
                 input_name=input_field.name,
                 active_input_types=next_active,
                 bound_path=bound_path[1:] if on_bound_path and bound_path else None,
+                expansion=expansion,
+                depth=depth + 1,
             )
             fields[input_field.name] = value
             input_adjustments.extend(field_adjustments)

@@ -10,7 +10,12 @@ from graphql.execution.values import get_variable_values
 from gqlsleuth.domain.analysis import OperationKind
 from gqlsleuth.domain.schema import TypeReference
 from gqlsleuth.domain.security_review import SecurityCandidateType
-from gqlsleuth.graphql.query_generation import _placeholder, generate_mutation, generate_query
+from gqlsleuth.graphql.query_generation import (
+    _InputExpansion,
+    _placeholder,
+    generate_mutation,
+    generate_query,
+)
 from gqlsleuth.graphql.schema_parser import parse_introspection_response
 from gqlsleuth.infrastructure.http import HttpClient
 from gqlsleuth.rules.loader import load_bundled_rules
@@ -209,6 +214,7 @@ def test_kebab_case_normalization_without_generating_invalid_graphql_names():
         TypeReference.named("String"),
         input_name="email-address",
         active_input_types=frozenset(),
+        expansion=_InputExpansion(),
     ) == ("test@example.com", ())
 
 

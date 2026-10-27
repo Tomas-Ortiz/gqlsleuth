@@ -862,7 +862,13 @@ Built-in placeholders default to `"test"` for String, `"1"` for ID, `1` for Int,
 `false` for Boolean. Enum generation chooses the alphabetically first non-deprecated value, lists
 contain one recursively generated item, and input objects contain required fields only. Custom
 scalars receive the conservative string `"test"` plus a manual-adjustment note. Cyclic required
-input objects produce an isolated generation failure.
+input objects produce an isolated generation failure. Shared input generation is also bounded
+to 64 type-traversal levels (including non-null and list wrappers) and 2,048 placeholder visits
+across an operation's arguments, including attempted optional quantity bounds. These internal
+limits prevent deep acyclic recursion and branching expansion; they are independent of output
+selection depth. Required-input exhaustion produces an isolated generation failure with no
+partial document or execution. Unsafe optional bounds remain omitted. Mutation generation and
+explicit input-path generation use the same bounds; ordinary supported placeholders are unchanged.
 
 For collection Queries only, generation may additionally populate one recognized schema quantity
 bound with `1`. The shared pure `graphql/collection_schema.py` inspection serves Phase 8 and
