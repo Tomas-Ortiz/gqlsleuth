@@ -212,7 +212,10 @@ class HttpClient:
             trust_env=False,
             headers={"User-Agent": DEFAULT_USER_AGENT},
             transport=transport,
-            event_hooks={"request": [_restrict_redirect_headers]},
+            event_hooks={
+                "request": [_restrict_redirect_headers],
+                "response": [self._read_redirect_body],
+            },
         )
 
     def send(self, request: HttpRequest) -> HttpResponse:
@@ -304,6 +307,15 @@ class HttpClient:
         traceback: TracebackType | None,
     ) -> None:
         self._client.__exit__(exc_type, exc_value, traceback)
+
+    def _read_redirect_body(self, response: httpx.Response) -> None:
+        """Bound intermediate bodies before HTTPX reads them to follow a redirect."""
+        if self.settings.follow_redirects and response.has_redirect_location:
+            # HTTPX calls read() after response hooks, before the next request hook.
+            # Its public content property is read-only: retain the bounded decoded
+            # bytes in the same cache used by Response.read(), so that read cannot
+            # consume the stream again. HTTPX closes responses on hook exceptions.
+            response._content = self._read_limited_body(response)
 
     def _read_limited_body(self, response: httpx.Response) -> bytes:
         body = bytearray()

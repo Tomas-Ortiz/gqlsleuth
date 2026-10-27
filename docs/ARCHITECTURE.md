@@ -410,6 +410,15 @@ and response models. It streams response bodies while enforcing the configured s
 returns HTTP 4xx and 5xx responses normally, and normalizes HTTPX request failures into
 project-specific exceptions. It does not parse JSON or GraphQL response content.
 
+The body limit counts HTTPX-decoded bytes separately for each response, including every
+intermediate redirect. A response hook uses the same bounded reader before HTTPX's automatic
+redirect read; an oversized body stops the chain before another request is sent. Under-limit
+bytes are retained in HTTPX's `Response._content` cache (the public content property has no
+setter), preserving its history/read behavior without replacing redirect handling or decoding.
+HTTPX closes the response on hook failure. Tests cover this narrow cache dependency, early
+stream termination, compressed bodies and unchanged consent/method/header behavior. The first
+chunk establishing an excess may already have been decoded; subsequent chunks are not consumed.
+
 Phase 2 does not expose HTTP options through the CLI. Beginning in Phase 3, the `scan` command
 uses this client for safe GET-only endpoint candidate probes. Discovery uses bounded synchronous
 concurrency; retries, rate limiting, and caching remain unimplemented.
