@@ -167,8 +167,8 @@ def test_cli_worker_redirect_cancel_releases_pool_before_exit(monkeypatch):
     barrier = Barrier(4, timeout=5)
     monkeypatch.setattr(cli, "_interactive_stdin", lambda: True)
     monkeypatch.setattr(
-        "gqlsleuth.application.graphql_detection.generate_endpoint_candidates",
-        lambda _: (TARGET, *(f"https://example.com/path{i}" for i in range(8))),
+        "gqlsleuth.application.graphql_detection.generate_endpoint_candidate_stages",
+        lambda _: ((TARGET, *(f"https://example.com/path{i}" for i in range(8))), ()),
     )
 
     def handler(request):

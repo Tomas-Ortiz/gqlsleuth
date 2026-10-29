@@ -9,7 +9,7 @@ from gqlsleuth.application.endpoint_discovery import (
     probe_endpoint_candidates,
 )
 from gqlsleuth.application.scan_configuration import map_scan_inputs
-from gqlsleuth.discovery.endpoint_candidates import generate_endpoint_candidates
+from gqlsleuth.discovery.endpoint_candidates import generate_endpoint_candidate_stages
 from gqlsleuth.domain.exceptions import HttpError
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType, ScanMode, Target
 from gqlsleuth.graphql.detection import (
@@ -71,32 +71,32 @@ def discover_and_detect_graphql(
     mode: ScanMode,
     client: HttpClient,
 ) -> GraphQLDetectionResult:
-    """Detect the preferred candidate before concurrently discovering the remainder."""
-    candidates = generate_endpoint_candidates(target)
+    """Confirm core candidates before extending discovery, preserving preferred early stops."""
+    core, extended = generate_endpoint_candidate_stages(target)
     preferred_discovery = probe_endpoint_candidates(
         target,
         mode=mode,
         client=client,
-        candidate_urls=candidates[:1],
+        candidate_urls=core[:1],
     )
-    preferred_detection = detect_graphql(preferred_discovery, client=client)
-    if _contains_graphql_endpoint(preferred_detection):
-        return preferred_detection
-
-    remaining_discovery = probe_endpoint_candidates(
-        target,
-        mode=mode,
-        client=client,
-        candidate_urls=candidates[1:],
-    )
-    remaining_detection = detect_graphql(remaining_discovery, client=client)
-    return GraphQLDetectionResult(
-        discovery=combine_discovery_results(preferred_discovery, remaining_discovery),
-        detections=preferred_detection.detections + remaining_detection.detections,
-        confirmation_evidence=(
-            preferred_detection.confirmation_evidence + remaining_detection.confirmation_evidence
-        ),
-    )
+    result = detect_graphql(preferred_discovery, client=client)
+    # Finish each subset's confirmation before dispatching the next. Each stage's
+    # preferred candidate can stop expansion; other GETs reuse the four-worker probe.
+    for candidates in (core[1:], extended[:1], extended[1:]):
+        if _contains_graphql_endpoint(result):
+            break
+        if not candidates:
+            continue
+        discovery = probe_endpoint_candidates(
+            target, mode=mode, client=client, candidate_urls=candidates
+        )
+        detection = detect_graphql(discovery, client=client)
+        result = GraphQLDetectionResult(
+            discovery=combine_discovery_results(result.discovery, discovery),
+            detections=result.detections + detection.detections,
+            confirmation_evidence=result.confirmation_evidence + detection.confirmation_evidence,
+        )
+    return result
 
 
 def _contains_graphql_endpoint(result: GraphQLDetectionResult) -> bool:

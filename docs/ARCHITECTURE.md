@@ -256,7 +256,8 @@ When the user supplies only an application base URL, GQLSleuth attempts to ident
 Phase 3 identifies endpoint candidates only. It does not submit GraphQL payloads or determine
 whether a response is GraphQL; that distinction belongs to Phase 4.
 
-The first version uses a bundled wordlist. Initial candidate paths include:
+The bundled inventory has exactly 27 unique executable endpoint candidates. Stage A retains
+the original 10 core paths in their original order:
 
 ```text
 /graphql
@@ -270,6 +271,31 @@ The first version uses a bundled wordlist. Initial candidate paths include:
 /query
 /api/query
 ```
+
+Stage B adds exactly these 17 extended paths, in order:
+
+```text
+/___graphql
+/api
+/graphql/api
+/graphql/graphql
+/server/api/graphql
+/je/graphql
+/graph
+/v1/api/graphql
+/v1/graph
+/v2/api/graphql
+/v2/graph
+/v3/graphql
+/v3/api/graphql
+/v3/graph
+/v4/graphql
+/v4/api/graphql
+/v4/graph
+```
+
+This is not generic directory crawling: no static assets, PHP, consoles or subscription-only
+paths are bundled. Explicitly supplied valid target URLs are not restricted by those exclusions.
 
 Discovery normalizes scheme and host casing, removes default HTTP and HTTPS ports, preserves
 non-default ports, and removes trailing path slashes for stable deduplication. It does not
@@ -301,9 +327,19 @@ Discovery GET probes default to an eight-second per-request timeout (an explicit
 `--timeout` overrides this). The preferred candidate is requested
 alone first. In the complete scan workflow, Phase 4 immediately analyzes and, when needed, probes
 that result before additional discovery begins. If it reaches `CONFIRMED` or `PROBABLE`, remaining
-candidates are never requested or represented in results. Otherwise, the remaining candidates are
-probed with a synchronous pool of at most four workers. Completion order does not affect the
+candidates are never requested or represented in results. Otherwise, the remaining core candidates
+are probed and confirmed before deciding whether to start Stage B. Any qualifying core result
+skips Stage B. If needed, the first unattempted extended candidate is checked alone with the same
+preferred-candidate early stop, followed by the remaining extended candidates. Supplied URLs
+are deduplicated across stages. Both stages reuse the existing synchronous probe with at most
+four workers; no stage runs in the background or concurrently with another stage. Completion order does not affect the
 stable candidate, result, or evidence order, and one candidate failure does not stop the others.
+The standalone Phase 3 GET-only service still probes the generated inventory without making
+Phase 4 confirmation decisions; the complete scan uses the staged confirmation workflow.
+A root target with no qualifying endpoint can consume 27 GETs and up to 27 eligible confirmation
+POSTs, plus HTTPX redirects. A distinct supplied endpoint can add one candidate. Failed GETs
+do not receive a fallback POST. All dispatched candidates remain in evidence; early-stop skips
+create no request evidence. Generic JSON/HTML and HTTP 200 do not qualify a stage for early stopping.
 
 Human discovery-scope disclosure is derived from retained `ENDPOINT_CANDIDATE` evidence, never
 from the list of candidates that could have been requested. Console (including pre-ACTIVE

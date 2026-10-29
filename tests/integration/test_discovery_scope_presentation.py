@@ -17,7 +17,7 @@ from gqlsleuth.application.operation_analysis import analyze_schema_results
 from gqlsleuth.application.query_generation import generate_analyzed_queries
 from gqlsleuth.application.safe_execution import execute_generated_queries
 from gqlsleuth.application.schema_parsing import parse_introspection_schemas
-from gqlsleuth.discovery.endpoint_candidates import BUNDLED_ENDPOINT_PATHS
+from gqlsleuth.discovery.endpoint_candidates import CORE_ENDPOINT_PATHS
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType, ScanMode, Target
 from gqlsleuth.graphql.introspection import FULL_INTROSPECTION_QUERY, MINIMAL_INTROSPECTION_QUERY
 from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings
@@ -93,9 +93,7 @@ def test_actual_scope_across_console_reports_and_unchanged_scan_facts(
     evidence_before = result.evidence
     request_before = tuple(requests)
     expected = (
-        tuple(
-            dict.fromkeys([origin + supplied] + [origin + path for path in BUNDLED_ENDPOINT_PATHS])
-        )
+        tuple(dict.fromkeys([origin + supplied] + [origin + path for path in CORE_ENDPOINT_PATHS]))
         if supplied and expanded
         else (origin + (supplied or "/graphql"),)
     )

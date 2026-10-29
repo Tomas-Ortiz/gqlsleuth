@@ -123,8 +123,15 @@ is also accepted; a direct GraphQL URL is tried before fallback endpoint discove
 
 When discovery checks additional paths, console and human reports disclose the actual paths
 checked and distinguish the supplied target from retained GraphQL endpoints. A root target starts
-at `/graphql`, not a probe of `/` itself. A confirmed/probable first candidate stops expansion;
-otherwise common paths use the same scheme, host and effective port. Same-origin redirects are
+at `/graphql`, not a probe of `/` itself. The bundled inventory has **27 unique paths**: the
+original **10 core paths** are checked first; **17 extended paths** are considered only if the
+core stage finds no confirmed/probable endpoint. A supplied endpoint retains first priority.
+Each stage checks its preferred candidate before expanding to at most four concurrent GETs.
+A confirmed/probable preferred result stops expansion; a qualifying core result skips the
+extended stage entirely. This is a curated inventory, not recursive directory crawling.
+With no endpoint found, a root target can require 27 GETs plus up to 27 confirmation POSTs;
+redirects can add requests. Unattempted paths are not reported as checked. Candidate paths
+use the same scheme, host and effective port. Same-origin redirects are
 automatic; another origin requires explicit consent. This boundary describes generated candidate
 URLs, not redirect destinations. Verbose output and the human reports include this context with
 discovery details.

@@ -6,6 +6,10 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- Expanded the curated GraphQL endpoint inventory from 10 to 27 paths. Core discovery runs
+  first; extended discovery starts only when no core endpoint is confirmed or probable.
+  Preferred endpoints retain early stopping, with four-worker bounds and unchanged confirmation
+  and redirect-consent safeguards. No-endpoint scans may make more discovery requests.
 - Cross-origin HTTP redirects now require per-scan, default-NO consent before transmission.
   Approval also authorizes the current request context's configured credentials and eligible
   cookies; non-interactive runs block new origins. Same-origin redirects remain automatic,

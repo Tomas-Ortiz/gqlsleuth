@@ -162,7 +162,7 @@ def test_unusable_json_keeps_existing_response_classifications(body):
 
 
 @pytest.mark.parametrize(
-    "failure,count", [(None, 5), ("detection", 20), ("minimal", 2), ("full", 3), ("execution", 5)]
+    "failure,count", [(None, 5), ("detection", 54), ("minimal", 2), ("full", 3), ("execution", 5)]
 )
 def test_mocked_cli_smokes_preserve_partial_results_and_exact_evidence(
     mocked_scan, tmp_path, failure, count
