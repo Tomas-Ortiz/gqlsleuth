@@ -70,9 +70,9 @@ def prepare_query_depth(safe: SafeExecutionScanResult) -> QueryDepthPreviewResul
             continue
         introspection = next(
             (
-                item.selected_schema_response
+                item.selected_schema_source
                 for item in schema_scan.introspection.introspections
-                if item.endpoint == endpoint.endpoint and item.selected_schema_response
+                if item.endpoint == endpoint.endpoint and item.selected_schema_source
             ),
             None,
         )

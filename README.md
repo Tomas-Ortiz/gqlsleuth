@@ -138,16 +138,73 @@ discovery details.
 
 Introspection support and schema retrieval are shown separately. The normal full query remains
 the first choice. If introspection is enabled and the full query explicitly exceeds a query
-depth, complexity or cost limit, GQLSleuth sends one static reduced introspection query: at most
-three introspection requests per eligible endpoint. A successful fallback is labeled
+depth, complexity or cost limit, GQLSleuth sends one static reduced introspection query.
+HTTP 413 is eligible only when a valid
+GraphQL error response explicitly identifies one of those limits; generic payload-size errors,
+HTML rejection pages, denials and mixed unrelated errors do not permit fallback.
+A successful fallback is labeled
 `Schema retrieval: PARTIAL`; analysis continues over retrieved content, with potentially
 incomplete operation/schema coverage. It does not establish that omitted operations are absent.
 Other rejections remain `BLOCKED` or `FAILED`; without a valid parsed schema, operation analysis
 cannot proceed. Retrieval outcomes are not vulnerability findings.
+Human operation counts show `Not assessed` without a parsed schema, or qualify known totals
+with `partial coverage` when retrieval is reduced or some endpoint schemas are unavailable.
+Canonical numeric counts still describe only parsed content.
 
-This compatibility fallback does not bypass disabled introspection or authentication/authorization
-denials. There are no retries, iterative type crawling or Clairvoyance/error-oracle requests.
+If both full and reduced retrieval receive eligible restrictions, bounded progressive recovery
+requests a shallow schema catalogue, then fixed `__type` selections using only server-supplied
+names. Dedicated shallow inventories of the declared roots request only identity and field names,
+without unrelated input-field or enum metadata. They run before detailed type requests, preserving
+verified operation names even if a later request stops recovery. Detail queries use only the
+fixed depth-8 then depth-6 alternatives after eligible rejections; other known types may also
+use the depth-3 inventory. No identical name/shape request is repeated.
+Roots and their referenced types take priority. At most **32 additional requests** are
+allowed per endpoint (35 introspection requests including minimal/full/reduced, excluding redirect
+hops). Rejected selections and compatible alternatives consume this budget; there are no repeated
+identical requests or concurrent recovery
+requests. Recovery also has a 60-second dispatch window, a 128-entry catalogue inspection limit,
+and a 16 MiB aggregate response budget. Existing per-request timeout and response-size limits
+remain in force; an in-flight request can finish after the dispatch window closes.
+
+For older introspection implementations, an exact unsupported `includeDeprecated` argument error
+can select a fixed compatible alternative. Only the rejected argument is omitted, on the identified
+`__Type.fields`, `__Type.inputFields`, `__Type.enumValues`, `__Field.args` or `__Directive.args`
+selection. The confirmed incompatibility is remembered only within that endpoint's current
+recovery, never across scans or authentication contexts. Compatible servers incur no extra requests.
+Generic validation errors, mixed unrelated errors and access denials do not authorize this fallback.
+Full and reduced retrieval queries remain unchanged.
+
+The Introspection section shows structured recovery rows: method, roots, known counts, incomplete
+types, request count, stop reason and last request shape/status. Overview keeps only a short
+recovery label. Verified partial counts are marked `partial coverage`; missing, malformed or
+contradictory inventories remain `Unknown`, rather than zero. A catalogue-declared absent root
+can truthfully show zero. Partial recovery does **not** enable automatic Query generation or execution.
+A locally assembled source becomes `RETRIEVED` only when all catalogued application types,
+roots, references, wrappers and directives are consistent and the existing strict schema parser
+accepts it, with no deprecated-element coverage gap introduced by a legacy alternative. Omitting
+`includeDeprecated` can hide deprecated elements: even a structurally valid legacy reconstruction
+remains `PARTIAL` and cannot enable automatic Query execution or ACTIVE candidates. The structured
+Introspection detail records the legacy fallback and coverage limitation; canonical evidence retains
+both the original rejection and exact compatible request. Assembly is identified separately from
+original response evidence. Descriptions are
+not requested; wrappers deeper than three `ofType` relationships remain unresolved. Large schemas
+or stricter server limits may therefore still yield only partial coverage.
+
+This compatibility recovery does not bypass disabled introspection or authentication/authorization
+denials. Denials, throttling, server errors, transport failures and unrelated/malformed responses
+stop all recovery; they do not authorize another query shape. Exhausting only recognized
+query-shape alternatives for one type can leave that type incomplete while other known types
+are inspected within the same budget. No names are guessed and no
+Clairvoyance/error-oracle requests are sent. Normal full/reduced success adds no progressive traffic.
 SAFE execution limits and ACTIVE selection/confirmation controls remain unchanged.
+
+For a recovery diagnosis, request `-f json -o ./reports`. In the canonical report, progressive
+`INTROSPECTION_RESULT` evidence with a `query` retains the exact document, `variables`, `endpoint`,
+`response_status_code` and original `response_body` (base64-encoded bytes). Notes identify the
+query shape and response classification; aggregate introspection notes record the recovery stop
+reason. Endpoint `schema_retrieval_reason` and `schema_retrieval_summary` retain the retrieval
+context. Inspect decoded GraphQL `errors` locally; reports may contain sensitive assessment data.
+Console request counts alone cannot establish why a live server rejected a query.
 
 To try the workflow without any external target, run the [local demo](examples/README.md):
 

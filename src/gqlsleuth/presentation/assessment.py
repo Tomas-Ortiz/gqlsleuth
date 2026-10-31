@@ -85,6 +85,22 @@ class AssessmentPresentationSummary:
         )
 
 
+def schema_count_label(report: ReportContext, count: int) -> str:
+    """Qualify human operation totals without changing canonical numeric counts."""
+    if not any(endpoint.schema_summary is not None for endpoint in report.endpoints):
+        return "Not assessed"
+    if any(
+        endpoint.schema_retrieval_status == "partial"
+        or (
+            endpoint.confidence in {ConfidenceLevel.CONFIRMED, ConfidenceLevel.PROBABLE}
+            and endpoint.schema_summary is None
+        )
+        for endpoint in report.endpoints
+    ):
+        return f"{count} (partial coverage)"
+    return str(count)
+
+
 def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
     """Group retained facts and human qualifications without recomputing any policy."""
     findings = _findings(report)
@@ -165,14 +181,20 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
             if retrieval
             else ()
         ),
-        ("Queries", str(sum(s.query_field_count for s in schemas))),
-        ("Mutations", str(sum(s.mutation_field_count for s in schemas))),
-        ("Subscriptions", str(sum(s.subscription_field_count for s in schemas))),
+        ("Queries", schema_count_label(report, sum(s.query_field_count for s in schemas))),
+        ("Mutations", schema_count_label(report, sum(s.mutation_field_count for s in schemas))),
+        (
+            "Subscriptions",
+            schema_count_label(report, sum(s.subscription_field_count for s in schemas)),
+        ),
     )
     overview += tuple(
         (
-            "Retrieval path" if len(meaningful) == 1 else f"Retrieval path: {endpoint.endpoint}",
-            endpoint.schema_retrieval_summary,
+            ("Recovery" if endpoint.recovery else "Retrieval path")
+            + (f": {endpoint.endpoint}" if len(meaningful) != 1 else ""),
+            f"PROGRESSIVE — {(endpoint.schema_retrieval_status or 'unknown').upper()}"
+            if endpoint.recovery
+            else endpoint.schema_retrieval_summary,
         )
         for endpoint in meaningful
         if endpoint.schema_retrieval_summary
@@ -202,7 +224,7 @@ def build_assessment(report: ReportContext) -> AssessmentPresentationSummary:
         limitations.append("Full schema retrieval was blocked or failed for at least one endpoint.")
     if any(e.schema_retrieval_status == "partial" for e in meaningful):
         limitations.append(
-            "Reduced schema retrieval was used for at least one endpoint; "
+            "Partial schema retrieval was used for at least one endpoint; "
             "operation and schema coverage may be incomplete."
         )
     if not schemas:

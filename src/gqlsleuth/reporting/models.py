@@ -28,6 +28,7 @@ from gqlsleuth.domain.sequential_discovery import SequentialDiscoveryResult
 from gqlsleuth.domain.subscriptions import SubscriptionSecurityResult
 from gqlsleuth.infrastructure.http import HttpResponse
 from gqlsleuth.presentation.object_lookup import ObjectLookupFollowUpHint
+from gqlsleuth.presentation.recovery import RecoveryPresentation
 
 
 class ReportFormat(StrEnum):
@@ -52,6 +53,8 @@ class EndpointReport:
     schema_retrieval_category: str | None = None
     schema_retrieval_reason: str | None = None
     schema_retrieval_summary: str | None = None
+    # Transient human projection. Canonical schema 2 retains the existing facts/evidence fields.
+    recovery: RecoveryPresentation | None = None
 
     @property
     def observed_introspection_status(self) -> str | None:

@@ -6,6 +6,26 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- Progressive introspection uses a dedicated root-name inventory and evidence-driven alternatives
+  for older servers rejecting `includeDeprecated` on recognized introspection selections. Exact
+  rejected and compatible requests remain evidence, share the existing budget and do not repeat
+  known incompatibilities within one endpoint recovery. Potentially omitted deprecated elements
+  keep reconstruction partial and non-executable, even if its structure validates.
+- Progressive recovery now captures shallow root-operation inventories before deeper type
+  requests. Eligible type-specific restrictions preserve prior facts and can continue to other
+  known types within the existing budget; denials and unrelated failures still stop globally.
+  Human Introspection output uses structured recovery/coverage/stop rows, with exact attempted
+  shapes and response classifications retained in existing canonical evidence notes.
+- Recognized GraphQL depth/complexity/cost errors on HTTP 413 now permit the existing single
+  reduced introspection fallback. Generic 413 responses and access denials do not. Human schema
+  operation totals distinguish unavailable data from zero operations and qualify partial coverage;
+  canonical numeric counts are unchanged.
+- When both full and reduced introspection receive recognized query-shape restrictions, schema
+  recovery uses a shallow catalogue and fixed known-name type selections, with at most 32 additional
+  sequential requests. Verified partial operation inventories remain visible without enabling
+  execution; only complete, strictly validated local assemblies enter normal schema analysis.
+  Original request/response evidence is retained separately from assembly provenance. Access
+  denials and unrelated failures stop recovery, and existing successful retrieval paths are unchanged.
 - Expanded the curated GraphQL endpoint inventory from 10 to 27 paths. Core discovery runs
   first; extended discovery starts only when no core endpoint is confirmed or probable.
   Preferred endpoints retain early stopping, with four-worker bounds and unchanged confirmation

@@ -113,9 +113,9 @@ def _retained(safe: SafeExecutionScanResult, endpoint: str) -> tuple[ParsedSchem
         if s.endpoint == endpoint and s.success and s.schema is not None
     )
     responses = tuple(
-        i.selected_schema_response
+        i.selected_schema_source
         for i in scan.introspection.introspections
-        if i.endpoint == endpoint and i.selected_schema_response is not None
+        if i.endpoint == endpoint and i.selected_schema_source is not None
     )
     if (
         len(schemas) != 1

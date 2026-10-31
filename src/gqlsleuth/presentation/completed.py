@@ -1,5 +1,7 @@
 """Completed assessment console, composed from pure shared human presentation."""
 
+from dataclasses import replace
+
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
@@ -28,7 +30,11 @@ from gqlsleuth.presentation.statuses import status_text, style_status_terms
 from gqlsleuth.reporting.assessment import grouped_technical_sections
 from gqlsleuth.reporting.builder import build_report
 from gqlsleuth.reporting.endpoint_context import group_endpoint_context
-from gqlsleuth.reporting.presentation import ReportSection, technical_sections
+from gqlsleuth.reporting.presentation import (
+    ReportSection,
+    introspection_section,
+    technical_sections,
+)
 from gqlsleuth.reporting.scaling import bound_section
 
 
@@ -99,6 +105,11 @@ def render_completed_assessment(
             console.print(Text(note), style="gql.secondary")
     _major_section(console, "GraphQL Overview")
     _rows(console, view.overview)
+    if not verbose and any(e.recovery for e in report.endpoints):
+        recovery_report = replace(
+            report, endpoints=tuple(e for e in report.endpoints if e.recovery)
+        )
+        _render_technical(console, introspection_section(recovery_report))
     _major_section(console, "Security Validation")
     _rows(console, view.validation_rows)
     if view.capabilities:

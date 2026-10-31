@@ -9,6 +9,7 @@ from gqlsleuth.domain.models import ConfidenceLevel, Evidence
 from gqlsleuth.domain.multiplicity import MULTIPLICITY_NOTICE
 from gqlsleuth.domain.query_depth import DEPTH_NOTICE
 from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
+from gqlsleuth.presentation.assessment import schema_count_label
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.discovery_scope import discovery_scope_notes
 from gqlsleuth.presentation.multiplicity import probe_guidance, probe_label, probe_response
@@ -55,6 +56,32 @@ class ReportSection:
     endpoint: str | None = None
 
 
+def introspection_section(report: ReportContext) -> ReportSection:
+    """Render retained introspection facts, including optional human recovery rows."""
+    return ReportSection(
+        "Introspection",
+        entries=tuple(
+            ReportEntry(
+                item.endpoint,
+                details=(
+                    ("Status", (item.observed_introspection_status or "not_attempted").upper()),
+                )
+                + (
+                    (("Schema retrieval", item.schema_retrieval_status.upper()),)
+                    if item.schema_retrieval_status
+                    else ()
+                )
+                + (item.recovery.rows if item.recovery else ()),
+                paragraphs=(*item.recovery.context, *item.recovery.inventory)
+                if item.recovery
+                else (item.schema_retrieval_reason or item.introspection_reason or "",),
+            )
+            for item in report.endpoints
+            if item.introspection_status
+        ),
+    )
+
+
 def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
     """Present recorded facts; response parsing is display-only, never classification."""
     scope_notes = discovery_scope_notes(report.target, report.evidence)
@@ -71,7 +98,15 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
         ),
         ReportSection(
             "Executive Scan Summary",
-            rows=tuple((_human_label(key), str(value)) for key, value in report.summary.items()),
+            rows=tuple(
+                (
+                    _human_label(key),
+                    schema_count_label(report, value)
+                    if key in {"query_count", "mutation_count", "subscription_count"}
+                    else str(value),
+                )
+                for key, value in report.summary.items()
+            ),
         ),
         ReportSection(
             "GraphQL Discovery and Confirmation",
@@ -106,25 +141,7 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 for item in report.endpoints
             ),
         ),
-        ReportSection(
-            "Introspection",
-            entries=tuple(
-                ReportEntry(
-                    item.endpoint,
-                    details=(
-                        ("Status", (item.observed_introspection_status or "not_attempted").upper()),
-                    )
-                    + (
-                        (("Schema retrieval", item.schema_retrieval_status.upper()),)
-                        if item.schema_retrieval_status
-                        else ()
-                    ),
-                    paragraphs=(item.schema_retrieval_reason or item.introspection_reason or "",),
-                )
-                for item in report.endpoints
-                if item.introspection_status
-            ),
-        ),
+        introspection_section(report),
         ReportSection(
             "Schema Summary",
             entries=tuple(

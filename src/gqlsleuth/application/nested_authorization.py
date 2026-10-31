@@ -219,9 +219,9 @@ def prepare_nested_authorization(result: DifferentialScanResult) -> NestedAuthor
                         retained = schema_scans[present_index].introspection.introspections
                         response = next(
                             (
-                                item.selected_schema_response
+                                item.selected_schema_source
                                 for item in retained
-                                if item.endpoint == endpoint and item.selected_schema_response
+                                if item.endpoint == endpoint and item.selected_schema_source
                             ),
                             None,
                         )
@@ -269,9 +269,9 @@ def prepare_nested_authorization(result: DifferentialScanResult) -> NestedAuthor
                     for retained_schema_scan in schema_scans:
                         response = next(
                             (
-                                item.selected_schema_response
+                                item.selected_schema_source
                                 for item in retained_schema_scan.introspection.introspections
-                                if item.endpoint == endpoint and item.selected_schema_response
+                                if item.endpoint == endpoint and item.selected_schema_source
                             ),
                             None,
                         )

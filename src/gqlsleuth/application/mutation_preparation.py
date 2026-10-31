@@ -41,9 +41,9 @@ def retained_mutation(
         if item.endpoint == operation.endpoint and item.success and item.schema is not None
     )
     responses = tuple(
-        item.selected_schema_response
+        item.selected_schema_source
         for item in scan.introspection.introspections
-        if item.endpoint == operation.endpoint and item.selected_schema_response is not None
+        if item.endpoint == operation.endpoint and item.selected_schema_source is not None
     )
     if (
         len(schemas) != 1

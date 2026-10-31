@@ -6,6 +6,10 @@ from gqlsleuth.application.graphql_detection import (
     GraphQLDetectionResult,
     discover_and_detect_graphql,
 )
+from gqlsleuth.application.progressive_introspection import (
+    ProgressiveRecoveryResult,
+    recover_schema,
+)
 from gqlsleuth.application.scan_configuration import map_scan_inputs
 from gqlsleuth.domain.exceptions import HttpError
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType, ScanMode
@@ -20,6 +24,7 @@ from gqlsleuth.graphql.introspection import (
     classify_introspection_response,
     reduced_introspection_fallback_reason,
 )
+from gqlsleuth.graphql.progressive_introspection import AssembledSchema
 from gqlsleuth.infrastructure.http import HttpClient, HttpClientSettings, HttpRequest, HttpResponse
 
 INTROSPECTION_SOURCE = "gqlsleuth.application.introspection"
@@ -27,7 +32,7 @@ INTROSPECTION_SOURCE = "gqlsleuth.application.introspection"
 
 @dataclass(frozen=True)
 class EndpointIntrospectionResult:
-    """Retained minimal/full outcomes and optional reduced-source provenance."""
+    """Retained retrieval outcomes, including optional reduced and progressive provenance."""
 
     endpoint: str
     status: IntrospectionStatus
@@ -44,6 +49,7 @@ class EndpointIntrospectionResult:
     reduced_error_type: str | None = None
     reduced_error_message: str | None = None
     fallback_reason: IntrospectionFallbackReason | None = None
+    progressive: ProgressiveRecoveryResult | None = None
 
     @property
     def minimal_result(self) -> IntrospectionResponseClassification:
@@ -87,6 +93,8 @@ class EndpointIntrospectionResult:
     @property
     def selected_schema_response(self) -> HttpResponse | None:
         """Select retained schema bytes; parsing remains a separate local stage."""
+        if self.progressive is not None:
+            return None
         if self.schema_retrieval_status is SchemaRetrievalStatus.PARTIAL:
             return self.reduced_response
         if self.status is IntrospectionStatus.ENABLED and not self.reduced_retrieval_attempted:
@@ -94,8 +102,20 @@ class EndpointIntrospectionResult:
         return None
 
     @property
+    def selected_schema_source(self) -> HttpResponse | AssembledSchema | None:
+        """Expose an explicit local source only after complete reconstruction validates."""
+        if self.progressive is not None:
+            return self.progressive.assembled
+        return self.selected_schema_response
+
+    @property
     def schema_retrieval_summary(self) -> str | None:
         """Describe exceptional retrieval paths without exposing target response text."""
+        if self.progressive is not None:
+            return (
+                "Full retrieval and reduced fallback rejected by query-shape limits. "
+                + self.progressive.summary
+            )
         full = self.full_result
         if full is None or full.status is IntrospectionStatus.ENABLED:
             return None
@@ -129,6 +149,8 @@ class EndpointIntrospectionResult:
 
     @property
     def schema_retrieval_status(self) -> SchemaRetrievalStatus:
+        if self.progressive is not None:
+            return self.progressive.status
         full = self.full_result
         if full is None:
             return SchemaRetrievalStatus.NOT_ATTEMPTED
@@ -194,6 +216,41 @@ def introspect_detected_endpoints(
         result = _introspect_endpoint(candidate.candidate_url, client)
         results.append(result)
         evidence.append(_introspection_evidence(detection, result))
+        if result.progressive is not None:
+            for attempt in result.progressive.attempts:
+                response = attempt.response
+                evidence.append(
+                    Evidence(
+                        evidence_type=EvidenceType.INTROSPECTION_RESULT,
+                        target=detection.discovery.target,
+                        endpoint=result.endpoint,
+                        timestamp=attempt.timestamp,
+                        summary=f"Progressive introspection request: {attempt.shape}.",
+                        source=INTROSPECTION_SOURCE,
+                        notes=(
+                            f"Recovery shape: {attempt.shape}",
+                            f"Response classification: {attempt.classification}",
+                            *(
+                                f"Unsupported includeDeprecated: {key}"
+                                for key in attempt.unsupported_arguments
+                            ),
+                            *(
+                                f"Compatibility omission: {key}.includeDeprecated"
+                                for key in attempt.omitted_arguments
+                            ),
+                            "Original server response; not locally assembled schema.",
+                        ),
+                        query=attempt.query,
+                        variables=attempt.variables,
+                        request_method="POST",
+                        response_status_code=response.status_code if response else None,
+                        response_headers=response.headers if response else None,
+                        response_body=response.body if response else None,
+                        duration_seconds=response.duration_seconds if response else None,
+                        error_type=attempt.error_type,
+                        error_message=attempt.error_message,
+                    )
+                )
 
     return IntrospectionScanResult(
         detection=detection,
@@ -289,7 +346,7 @@ def _introspect_endpoint(endpoint: str, client: HttpClient) -> EndpointIntrospec
             reason=prefix + f"One reduced fallback failed with {type(error).__name__}.",
         )
     reduced = classify_introspection_response(reduced_response.status_code, reduced_response.body)
-    return replace(
+    result = replace(
         result,
         reduced_retrieval_attempted=True,
         fallback_reason=fallback,
@@ -302,6 +359,23 @@ def _introspect_endpoint(endpoint: str, client: HttpClient) -> EndpointIntrospec
             else f"One reduced fallback did not retrieve a schema: {reduced.reason}"
         ),
     )
+    if (
+        reduced_introspection_fallback_reason(reduced_response.status_code, reduced_response.body)
+        is not None
+    ):
+        progressive = recover_schema(endpoint, client)
+        return replace(
+            result,
+            progressive=progressive,
+            reason=prefix
+            + f"Reduced retrieval: {reduced.reason} "
+            + progressive.summary
+            + " "
+            + progressive.last_result.reason
+            + " "
+            + " ".join(progressive.inventory_notes),
+        )
+    return result
 
 
 def _send_query(client: HttpClient, endpoint: str, query: str) -> HttpResponse:
@@ -340,6 +414,14 @@ def _introspection_evidence(
         notes.append(f"Minimal probe failure: {result.minimal_error_type}")
     if result.full_error_type is not None:
         notes.append(f"Full retrieval failure: {result.full_error_type}")
+    if result.progressive is not None:
+        notes.extend(
+            (
+                "Recovery method: PROGRESSIVE",
+                f"Recovery stop reason: {result.progressive.stop_reason}",
+                *result.progressive.inventory_notes,
+            )
+        )
 
     return Evidence(
         evidence_type=EvidenceType.INTROSPECTION_RESULT,
@@ -348,6 +430,7 @@ def _introspection_evidence(
         summary=(
             f"{result.schema_retrieval_status.value.upper()} — {result.reason}"
             if result.schema_retrieval_status is SchemaRetrievalStatus.PARTIAL
+            or result.progressive is not None
             else f"{result.status.value.upper()} — {result.reason}"
         ),
         source=INTROSPECTION_SOURCE,

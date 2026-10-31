@@ -165,6 +165,59 @@ def test_distinct_endpoint_overview_and_findings_remain_visible(whole):
     assert len(summary.findings) == 6
 
 
+@pytest.mark.parametrize(
+    "coverage", ["full", "partial", "missing", "parse_failure", "mixed", "none"]
+)
+def test_human_operation_counts_distinguish_unknown_partial_and_zero(phase_ten_scan, coverage):
+    report = build_report(phase_ten_scan("type Query { ping: String }")[0])
+    endpoint = report.endpoints[0]
+    if coverage == "partial":
+        endpoints = (replace(endpoint, schema_retrieval_status="partial"),)
+    elif coverage in {"missing", "parse_failure"}:
+        endpoints = (
+            replace(
+                endpoint,
+                schema_summary=None,
+                schema_retrieval_status=("blocked" if coverage == "missing" else "retrieved"),
+            ),
+        )
+    elif coverage == "mixed":
+        endpoints = (
+            endpoint,
+            replace(
+                endpoint,
+                endpoint="https://other.example/graphql",
+                schema_summary=None,
+                schema_retrieval_status="blocked",
+            ),
+        )
+    elif coverage == "none":
+        endpoints = ()
+    else:
+        endpoints = (endpoint,)
+    report = replace(report, endpoints=endpoints)
+    canonical_before = render_report(report, ReportFormat.JSON)
+    overview = dict(build_assessment(report).overview)
+    expected_queries = "1"
+    expected_absent_roots = "0"
+    if coverage in {"missing", "parse_failure", "none"}:
+        expected_queries = expected_absent_roots = "Not assessed"
+    elif coverage in {"partial", "mixed"}:
+        expected_queries = "1 (partial coverage)"
+        expected_absent_roots = "0 (partial coverage)"
+    assert overview["Queries"] == expected_queries
+    assert overview["Mutations"] == overview["Subscriptions"] == expected_absent_roots
+    executive = next(s for s in technical_sections(report) if s.title == "Executive Scan Summary")
+    assert dict(executive.rows)["Query count"] == expected_queries
+    assert dict(executive.rows)["Mutation count"] == expected_absent_roots
+    for format in (ReportFormat.MARKDOWN, ReportFormat.HTML):
+        rendered = render_report(report, format)
+        assert expected_queries in rendered.replace("\\", "")
+        assert rendered.count("Safety Notice") == 1
+    assert render_report(report, ReportFormat.JSON) == canonical_before
+    assert isinstance(report.summary["query_count"], int)
+
+
 @pytest.mark.parametrize("mode", [ScanMode.SAFE, ScanMode.ACTIVE])
 @pytest.mark.parametrize("width", [40, 100])
 @pytest.mark.parametrize("endpoint_count", [0, 1, 2])

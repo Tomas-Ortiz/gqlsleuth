@@ -17,6 +17,7 @@ from gqlsleuth.domain.analysis import InterestPriority, OperationCategory
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence, EvidenceType
 from gqlsleuth.domain.query_generation import OperationGenerationResult
 from gqlsleuth.presentation.object_lookup import object_lookup_follow_ups
+from gqlsleuth.presentation.recovery import present_recovery
 from gqlsleuth.reporting.models import (
     ActiveReport,
     EndpointReport,
@@ -105,7 +106,13 @@ def build_report(
         schema = next((item for item in schema_scan.schemas if item.endpoint == url), None)
         analyzed = next((item for item in analysis.endpoints if item.endpoint == url), None)
         retrieval = (
-            (introspected.reduced_result or introspected.full_result) if introspected else None
+            (
+                introspected.progressive.last_result
+                if introspected.progressive
+                else introspected.reduced_result or introspected.full_result
+            )
+            if introspected
+            else None
         )
         endpoints.append(
             EndpointReport(
@@ -130,6 +137,9 @@ def build_report(
                 else None,
                 schema_retrieval_summary=introspected.schema_retrieval_summary
                 if introspected
+                else None,
+                recovery=present_recovery(introspected.progressive)
+                if introspected and introspected.progressive
                 else None,
                 schema_summary=schema.summary if schema else None,
                 analyzed_operation_count=len(analyzed.operations)
@@ -349,7 +359,10 @@ def _issues(
     for item in introspection.introspections:
         if item.schema_retrieval_status.value == "partial":
             issues.append(ReportIssue("schema", item.endpoint, None, "partial", item.reason))
-        elif item.status.value != "enabled":
+        elif (
+            item.schema_retrieval_status.value not in {"retrieved", "partial"}
+            and item.status.value != "enabled"
+        ):
             issues.append(
                 ReportIssue("introspection", item.endpoint, None, item.status.value, item.reason)
             )
@@ -486,7 +499,8 @@ def _recommendations(context: ReportContext) -> tuple[str, ...]:
         )
     if any(item.code == "partial" for item in context.errors_and_limitations):
         recommendations.append(
-            "Account for incomplete schema and operation coverage when reviewing reduced retrieval."
+            "Account for incomplete schema and operation coverage "
+            "when reviewing partial schema retrieval."
         )
     if any(
         item.stage in {"introspection", "schema"} and item.code != "partial"

@@ -81,9 +81,9 @@ def prepare_federation(
                 if s.endpoint == source.endpoint and s.success and s.schema is not None
             )
             responses = tuple(
-                s.selected_schema_response
+                s.selected_schema_source
                 for s in scan.introspection.introspections
-                if s.endpoint == source.endpoint and s.selected_schema_response is not None
+                if s.endpoint == source.endpoint and s.selected_schema_source is not None
             )
             references = tuple(
                 e.evidence_id

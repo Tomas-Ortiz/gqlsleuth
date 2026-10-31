@@ -35,6 +35,7 @@ from gqlsleuth.graphql.introspection import (
     IntrospectionStatus,
     SchemaRetrievalStatus,
 )
+from gqlsleuth.graphql.progressive_introspection import CATALOGUE_QUERY
 from gqlsleuth.infrastructure.http import DEFAULT_TIMEOUT_SECONDS, HttpClient, HttpResponse
 from gqlsleuth.presentation.assessment import build_assessment
 from gqlsleuth.presentation.completed import render_completed_assessment
@@ -167,6 +168,7 @@ def test_enabled_probe_and_rejected_schema_remain_distinct_through_reports(messa
     expected_queries = [MINIMAL_INTROSPECTION_QUERY, FULL_INTROSPECTION_QUERY]
     if message == "Query depth limit exceeded.":
         expected_queries.append(REDUCED_INTROSPECTION_QUERY)
+        expected_queries.append(CATALOGUE_QUERY)
 
     def handler(request):
         requests.append(request)

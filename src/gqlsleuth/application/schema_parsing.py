@@ -62,7 +62,7 @@ def parse_introspection_schemas(introspection: IntrospectionScanResult) -> Schem
     evidence: list[Evidence] = []
 
     for endpoint_result in introspection.introspections:
-        response = endpoint_result.selected_schema_response
+        response = endpoint_result.selected_schema_source
         if response is None:
             continue
         try:
@@ -110,6 +110,14 @@ def _schema_evidence(
         roots.append(f"mutation={summary.mutation_root}")
     if summary.subscription_root is not None:
         roots.append(f"subscription={summary.subscription_root}")
+    recovered = next(
+        (
+            item
+            for item in introspection.introspections
+            if item.endpoint == result.endpoint and item.progressive is not None
+        ),
+        None,
+    )
     return Evidence(
         evidence_type=EvidenceType.SCHEMA_ARTIFACT,
         target=introspection.detection.discovery.target,
@@ -128,5 +136,18 @@ def _schema_evidence(
             f"Interfaces: {summary.interface_type_count}",
             f"Unions: {summary.union_type_count}",
             f"Schema retrieval: {result.schema_retrieval_status.value}",
+            *(
+                (
+                    "Source: locally assembled progressive schema; not a single server response.",
+                    "Source request evidence: "
+                    + ", ".join(
+                        str(e.evidence_id)
+                        for e in introspection.introspection_evidence
+                        if e.endpoint == result.endpoint and e.query is not None
+                    ),
+                )
+                if recovered
+                else ()
+            ),
         ),
     )

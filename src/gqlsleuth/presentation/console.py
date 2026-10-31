@@ -350,7 +350,17 @@ def render_pre_active_context(
         ):
             rows.add_row(label, str(count) if count is not None else "Not available")
         console.print(rows)
-        if probe and probe.schema_retrieval_summary:
+        if probe and probe.progressive:
+            from gqlsleuth.presentation.recovery import present_recovery
+
+            recovery = present_recovery(probe.progressive)
+            recovery_rows = Table.grid(padding=(0, 2))
+            for label, value in recovery.rows:
+                recovery_rows.add_row(Text(label), Text(value))
+            console.print(recovery_rows)
+            for paragraph in recovery.context:
+                console.print(Text(paragraph), style="gql.secondary")
+        elif probe and probe.schema_retrieval_summary:
             console.print(probe.schema_retrieval_summary, style="gql.secondary", markup=False)
         if probe and probe.schema_retrieval_status.value == "partial":
             console.print(

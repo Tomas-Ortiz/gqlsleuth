@@ -15,7 +15,12 @@ from pydantic import BaseModel, JsonValue
 from gqlsleuth.domain.exceptions import ReportingError
 from gqlsleuth.reporting.differential import differential_sections
 from gqlsleuth.reporting.endpoint_context import group_endpoint_context
-from gqlsleuth.reporting.models import DifferentialReportContext, ReportContext, ReportFormat
+from gqlsleuth.reporting.models import (
+    DifferentialReportContext,
+    EndpointReport,
+    ReportContext,
+    ReportFormat,
+)
 from gqlsleuth.reporting.presentation import human_sections
 from gqlsleuth.reporting.scaling import bound_section
 
@@ -80,6 +85,7 @@ def _json_value(value: object) -> JsonValue:
         return {
             field.name: _json_value(getattr(value, field.name))
             for field in fields(value)
+            if not (isinstance(value, EndpointReport) and field.name == "recovery")
             if not (
                 isinstance(value, (ReportContext, DifferentialReportContext))
                 and field.name

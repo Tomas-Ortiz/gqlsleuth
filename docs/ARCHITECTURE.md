@@ -602,13 +602,17 @@ SCHEMA-001 permits exactly one static reduced query after an `ENABLED` minimal p
 explicit GraphQL depth/complexity/cost rejection of the full query. A small pure matcher accepts
 bounded query-limit phrases and the codes `QUERY_TOO_DEEP`, `MAX_DEPTH_EXCEEDED`,
 `QUERY_TOO_COMPLEX`, `COMPLEXITY_LIMIT_EXCEEDED` and `COST_LIMIT_EXCEEDED`. Only HTTP 2xx,
-400 or 422 responses are eligible; every returned error must identify a recognized restriction.
+400, 413 or 422 responses are eligible; every returned error must identify a recognized restriction.
+HTTP 413 alone is insufficient: a JSON object with a nonempty GraphQL errors array is required,
+with no existing `data.__schema` object. Generic payload-size errors, CDN/WAF HTML and invalid
+JSON remain ineligible.
 Authentication/authorization/disabled-introspection denials take precedence, including mixed
-errors. Generic errors, 401/403, 413, 429, 5xx, malformed responses and transport failures never
+errors. Generic errors, 401/403, 429, 5xx, malformed responses and transport failures never
 trigger the fallback. Parsing or later analysis failures cannot trigger it either.
 
-The eligible endpoint budget is three introspection requests: minimal, full, reduced. There are
-no retries, adaptive variants, per-type requests, `__type` crawling, iteration or concurrency.
+The initial eligible endpoint path has three introspection requests: minimal, full, reduced.
+Successful full/reduced retrieval stops there. If reduced retrieval receives the same class of
+eligible restriction, progressive recovery described below can add up to 32 requests.
 This is compatibility with a demonstrated enabled introspection service, not a disabled-
 introspection/auth/authz bypass or Clairvoyance/error-oracle recovery.
 
@@ -617,25 +621,176 @@ types, fields/arguments, defaults, input fields, enum names, interfaces/possible
 directive structure. Field/enum deprecation facts remain available to deterministic review.
 Its TypeRef has three `ofType` relationships instead of seven (supporting `[String!]!`);
 expanded selection depth is nine rather than thirteen. It is never adapted to a response.
+Measured UTF-8 document sizes are 53 bytes (minimal, depth 3), 1,187 bytes (full, depth 13)
+and 799 bytes (reduced, depth 9), counting fields after fragment expansion. Three `ofType`
+relationships cannot represent deeper wrappers such as `[[String!]!]!`; parser validation
+rejects incomplete references instead of guessing them. The existing HTTP adapter retains
+its default 10-second timeout per request (overridden by explicit target `--timeout`), 5 MiB
+response-body limit and maximum five redirect hops, including body-limit enforcement on
+intermediate responses. Request ceilings count introspection POSTs, not redirect hops.
+Existing per-request transport timeout semantics remain unchanged.
+
+### Bounded progressive recovery
+
+`application/progressive_introspection.py` coordinates sequential recovery only after enabled
+minimal introspection and recognized full **and** reduced restrictions. The existing depth/
+complexity/cost eligibility matcher remains unchanged. Progressive requests additionally recognize
+the exact optional-argument incompatibilities described below. Denied access, mixed/unrelated
+errors, invalid JSON, 429, 5xx and transport failures stop further dispatch. No names are guessed,
+no identical requests are retried and no
+concurrency or arbitrary depth search is introduced. The shared HTTP client retains redirect
+consent, credential isolation, TLS, timeout and body-limit enforcement.
+
+`graphql/progressive_introspection.py` owns six fixed anonymous selections:
+
+- Catalogue: root identities and `types { name kind }`, expanded depth 3.
+- Root inventory: identity and `fields(includeDeprecated: true) { name }` only, depth 3;
+  no input-field or enum selections.
+- Detailed `__type(name: $name)`: fields, arguments, defaults, input fields, enum values,
+  relationships and three `ofType` relationships, expanded depth 8.
+- Shallower type selection: the same facts with one `ofType` relationship, depth 6.
+- Type inventory: identity and field/input/enum names only, depth 3.
+- Directives: names, locations, repeatability and typed arguments/defaults, depth 8.
+
+Measured UTF-8 document sizes in that order are 129, 101, 618, 492, 192 and 199 bytes (before JSON
+transport encoding). Type names are variables, never interpolated into a query document.
+
+Roots use the dedicated depth-3 root inventory **before** detailed retrieval (Query, Mutation,
+Subscription using actual server names). A successful inventory records names only; it does not
+make the type complete. Detailed retrieval then tries depth 8, with depth 6 permitted only by
+an eligible rejection. The already-attempted root inventory is never repeated. If the shallowest
+root inventory itself is rejected by an eligible restriction, that root remains unknown and no
+deeper query is attempted for it. Genuine denials/unrelated failures always stop globally.
+
+Non-root types retain the depth-8, depth-6, depth-3 sequence, advancing only after eligible
+restrictions. Successful incomplete details are retained without further probing. Exhausting all
+eligible alternatives for a type is local, not a global denial: other known types may continue,
+and a processed-name set prevents repeats. Roots are followed by known input/output references;
+remaining catalogued types follow in stable name order when budget permits, to establish
+completeness. Introspection system types are not fetched. A name/shape pair is never requested
+twice. The directives selection is attempted only after complete type coverage. All attempts
+share the unchanged 32-request budget; successful full reconstruction now costs one inventory
+request per distinct declared root in addition to detailed retrieval. No independent budget resets.
+
+Hard budgets per endpoint are 32 additional requests (including rejected selections, catalogue
+and directives), 128 catalogue entries examined, 256 fields/input fields/enum values per type,
+64 arguments per field/directive, 128 relationship entries, 256 directives and 255-character
+GraphQL names. Static query documents are capped at 2,048 UTF-8 bytes and depth 8. Existing
+5 MiB per-response limits apply; at most 16 MiB of raw progressive response bodies are retained.
+Before each request, reserve the configured per-response maximum from that aggregate budget;
+large configured limits can therefore stop recovery early. Parsed objects/local assembly also
+consume memory but remain bounded by these byte and structure limits. No request starts after
+60 seconds of recovery elapsed time; an in-flight request retains its normal timeout and can
+finish after that dispatch window. Thus 60 seconds is not an absolute wall-clock deadline.
+
+`RecoveryCatalogue` and `RecoveredType` retain verified identities, definitions, known field
+names, completeness and references separately from raw `RecoveryAttempt` responses. Malformed
+catalogue entries are ignored and mark coverage incomplete; contradictory identities or duplicate
+definitions stop recovery. A valid modern root field-name list inventories the exposed root at
+that moment; a legacy list may omit deprecated fields. The overall schema can remain partial.
+Missing/invalid inventories
+are unknown. A later conflicting root field list invalidates the derived count (both original
+responses remain evidence); the engine never chooses one inconsistent count as authoritative.
+If later details explicitly omit `__Type.fields.includeDeprecated` and return a strict subset of
+previously observed names, those earlier names remain known, without fabricated definitions or
+type completeness. Other contradictory inventories still invalidate the count.
+Exact LIST/NON_NULL wrappers are required: missing `ofType` data is
+unresolved, never replaced with a guessed scalar or weakened nullability. Deeper wrappers than
+three relationships remain partial. Descriptions are omitted, as with reduced retrieval.
+
+Local assembly requires the complete catalogue, all catalogued non-system types, declared roots,
+resolved named references, consistent field/argument/default and deprecation metadata, interface/
+union relationships and directive definitions. The existing strict `parse_introspection_response`
+(`build_client_schema` / `assert_valid_schema`) must accept the assembly; interface membership is
+also checked against observed possible types. No second schema parser or relaxed validation is
+introduced. `AssembledSchema` is an explicitly local source, never an `HttpResponse`.
+
+Partial recovery preserves root identities, known operation names/counts, observed definitions
+and unresolved references. It does not enter schema-dependent analysis, prioritization, Query
+generation/execution or ACTIVE candidate generation. Known zero roots are distinguished from
+unknown counts. Complete recovery with no legacy coverage omission enables the unchanged downstream pipeline, subject
+to all normal safety controls. Completeness describes the server's exposed catalogue, not hidden
+operations or security assurance. Offline fixtures do not prove recovery against a public API.
+
+### Optional introspection argument compatibility
+
+The former broad root inventory could fail on `inputFields(includeDeprecated: true)` even though
+root names required only `fields`. The dedicated root selection avoids that unrelated requirement.
+Full/reduced queries already omit `includeDeprecated` on input fields and arguments and are
+unchanged; normal success still sends no progressive requests. The catalogue has no optional
+arguments. Progressive detail/shallow selections request deprecated fields, input fields, enum
+values and field arguments; the directives selection requests deprecated directive arguments.
+
+`graphql/introspection_compatibility.py` recognizes only `includeDeprecated` rejections tied to
+`__Type.fields`, `__Type.inputFields`, `__Type.enumValues`, `__Field.args` or `__Directive.args`.
+Accepted messages identify both field and owner, either `on field "inputFields" of type "__Type"`
+or `on field "__Type.inputFields"` (single/double quotes and whitespace variants). The response
+must be a GraphQL error object without non-null data, on HTTP 2xx/400/413/422. Every error must
+identify an argument actually present in the request and a known compatible alternative. Optional
+extension codes must be absent or recognized GraphQL validation codes. Mixed errors, application
+fields, unknown operation names, unknown introspection fields, malformed JSON, HTML, generic HTTP
+errors, denials, throttling and server/transport failures never authorize compatibility fallback.
+Depth/complexity/cost errors remain governed separately by the unchanged restriction classifier.
+
+Fixed templates retain all selections except the exactly rejected argument. A local capability
+set records at most five unsupported locations for one endpoint recovery invocation. Multiple
+eligible errors are applied together; there is no proactive probing or combinatorial variant search.
+Only a newly established omission can cause another request, within the existing shared budgets.
+Later type selections use that omission directly. Rejection of an already omitted argument stops
+conservatively. State is never persisted or shared between endpoints, scans or authentication
+contexts; redirects still use the existing consent/credential-isolation transport.
+
+Each actual attempt retains its exact variant, identified unsupported arguments and applied
+omissions. Existing `INTROSPECTION_RESULT` evidence preserves original errors and compatible
+request/response facts. The recovery summary and structured human detail record which deprecated
+elements may be missing. No new canonical report fields, Evidence types or AI inputs are added.
+An omission is reported as used only after its request is attempted; budget exhaustion before
+dispatch does not falsely report a legacy request.
+
+Strict reconstruction still runs when the returned structure permits it. Parser success is recorded
+separately from exhaustive coverage: any applied legacy omission conservatively keeps recovery
+`PARTIAL`, with no selected schema source, no automatic Query execution and no ACTIVE candidates.
+Omitted elements are never invented. These five argument alternatives do not support arbitrary
+older introspection field layouts (for example missing `isRepeatable` or deprecation metadata),
+localized/ambiguous error messages, or optional-argument rejection during full/reduced retrieval.
+Those cases stop or remain partial under existing rules; live compatibility requires operator
+validation and is not established by offline fixtures.
+
+### Retrieval provenance and coverage
 
 The endpoint retains minimal, full and reduced responses/errors independently. `minimal_result`,
 `full_result` and `reduced_result` classify each retained stage locally. The legacy `status`
 still describes the minimal/full path, even when fallback succeeds. `fallback_reason` holds only
 the normalized restriction category; the rejected full response is never discarded.
-`schema_retrieval_status` distinguishes `RETRIEVED` (full), `PARTIAL` (reduced source selected),
+`schema_retrieval_status` distinguishes `RETRIEVED` (full or validated progressive assembly),
+`PARTIAL` (reduced source selected or verified progressive inventory without complete assembly),
 `BLOCKED` (rejection without a selected response), `FAILED` (transport/invalid response) and
 `NOT_ATTEMPTED`. Retrieval does not prove successful parsing; Phase 6 validates the source.
-`selected_schema_response` supplies exactly the retained full or reduced response to consumers.
+`selected_schema_response` still supplies only an actual retained full/reduced response.
+`selected_schema_source` supplies that response or a validated `AssembledSchema` to schema consumers;
+it is null for incomplete progressive recovery.
 
 Human console/reports use the minimal probe for availability. Successful fallback displays
 introspection `ENABLED` and retrieval `PARTIAL`, with an incomplete-coverage limitation and
 concise provenance in compact output and details. A rejected fallback displays `BLOCKED` and
-explicitly identifies the one reduced attempt, rejection and lack of a selected schema. When
+explicitly identifies the one reduced attempt, rejection and lack of a selected schema when
+progressive recovery cannot retain a catalogue. GraphQL Overview uses only `PROGRESSIVE — status`.
+The Introspection section has structured rows for method, declared roots, known operation counts,
+incomplete types, request count, stop reason and last request shape/HTTP status/classification.
+Known non-absent-root counts carry `partial coverage` until assembly succeeds; missing or
+contradictory inventory counts remain `Unknown`. Details include up to eight sorted field names
+per root and concise execution availability. Errors and Limitations retains technical retrieval
+context without repeating the complete narrative in Overview and Introspection. Multi-endpoint
+summaries remain endpoint-scoped. When
 full retrieval fails without an eligible fallback, output says the reduced fallback was not
 attempted (including the full HTTP status when available). Normal full success has no fallback
 message. These summaries derive from retained stage outcomes, without raw response text.
-It is not a vulnerability or Finding. Counts describe retrieved
-content, not complete server coverage. Canonical JSON retains legacy `introspection_status`
+It is not a vulnerability or Finding. Counts describe retrieved content, not complete server
+coverage. Human overview and executive-summary operation totals show `Not assessed` when no
+schema parsed successfully, even if retrieval returned a schema object. With reduced retrieval
+or a missing confirmed/probable endpoint schema, known totals are labeled `partial coverage`.
+A fully parsed schema can still truthfully report zero Mutations or Subscriptions. Canonical
+counts remain numeric and unchanged. Canonical JSON retains legacy `introspection_status`
 alongside `minimal_introspection_status`, `schema_retrieval_status`, `schema_retrieval_category`
 and `schema_retrieval_reason`. An additive optional `schema_retrieval_summary` projects the concise
 retrieval path for human presentation; it is null for normal full success or no full attempt.
@@ -643,13 +798,45 @@ Report schema v2 is unchanged: `partial` is an additive value in
 the existing status field, not a new report structure. The category classifies the final retrieval
 attempt; the reason explains the fallback when attempted, or explicitly records non-attempt
 after unsuccessful full retrieval. Bounded target failure reasons remain in details.
-Safety Notice remains final once.
+Progressive information uses these existing summary/reason fields and Evidence notes, without new
+canonical fields or an AI contract change. `EndpointReport.recovery` is a transient typed human
+projection explicitly excluded by the canonical serializer; it is built from structured recovery
+facts, never parsed from console prose. Complete per-request progressive facts remain in the
+canonical Evidence collection; human output does not dump all bodies. Safety Notice remains final once.
 
-Phase 5 retains the existing `HttpResponse` objects for all attempted stages, including the raw full
-introspection JSON body. It does not convert that JSON into schema models, extract operations,
-or add `graphql-core`; those responsibilities begin in Phase 6. Each processed endpoint creates
-`INTROSPECTION_RESULT` evidence, with additional fallback/status notes when applicable; no new
-Evidence type or fabricated request evidence is introduced.
+Phase 5 retains the existing `HttpResponse` objects for attempted stages, including the raw full
+introspection body. Progressive recovery additionally retains parsed facts and calls the existing
+strict parser locally to establish assembly eligibility; Phase 6 still owns downstream schema
+models. Each processed endpoint creates aggregate `INTROSPECTION_RESULT` evidence. Each progressive
+attempt additionally creates that existing Evidence type with exact document, variables, timestamp,
+method, response status/headers/body/duration or normalized transport failure. Assembly is not a
+new HTTP attempt. The later `SCHEMA_ARTIFACT` identifies local assembly and references source
+request Evidence IDs. No new Evidence type or fabricated server response is introduced.
+
+### Progressive stop diagnosis
+
+The Phase 1B sequence was catalogue, detailed root, shallower root, root inventory. All three
+type shapes already used the same restriction matcher as full/reduced retrieval, including HTTP
+413. A reproduced four-request stop used two eligible depth rejections followed by an unrelated
+inventory error: the global noneligible branch was correct. A four-request console result alone
+does not establish the live response cause; no live-server fix is claimed from that reproduction.
+
+Global stops cover request/time/aggregate-body budgets, transport/response-size errors, denied or
+noneligible responses, malformed/missing data, inconsistent schema facts and cancellation.
+Catalogue rejection stops without probing other shapes. Recognized type-specific restrictions
+alone can exhaust fixed alternatives without cancelling other known types. Root inventory now
+runs first to retain useful names before later global stops, without relaxing eligibility.
+
+`ProgressiveRecoveryResult.stop_reason` distinguishes request budget, recovery time budget,
+aggregate response budget, response-size limit, transport failure, HTTP access denial, rate
+limiting, server error, disabled introspection, malformed response/schema data, noneligible
+response, depth/complexity/cost limitation, incomplete references, deprecated-element coverage
+incompleteness and complete reconstruction.
+The last response classification is separate: `data_received` describes an envelope, not proof
+of a valid or complete schema. Original GraphQL errors remain available in canonical response
+bodies. Each progressive Evidence record retains shape/classification in notes; the aggregate
+record retains the stop reason. JSON evidence supplies endpoint, exact query/variables, HTTP
+status and base64 response bytes for local diagnosis. Outgoing credential headers are not copied.
 
 ## 13. Schema parsing
 
@@ -677,8 +864,8 @@ The parser should model:
 
 The internal representation must be independent from the raw introspection JSON so it can later support additional schema sources.
 
-Phase 6 consumes Phase 5's selected retained full or reduced response. It sends no HTTP requests.
-Both use the same parser without normalization: graphql-core already accepts omitted descriptions.
+Phase 6 consumes Phase 5's selected full/reduced response or explicitly local validated progressive
+assembly. It sends no HTTP requests. All use the same parser: graphql-core accepts omitted descriptions.
 The response JSON `data` object is passed to
 `graphql-core` for client-schema construction and schema validation, then mapped into immutable
 GQLSleuth-owned models. Neither raw introspection dictionaries nor `graphql-core` objects are

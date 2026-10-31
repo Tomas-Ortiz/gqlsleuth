@@ -189,7 +189,9 @@ def reduced_introspection_fallback_reason(
     status_code: int, body: bytes
 ) -> IntrospectionFallbackReason | None:
     """Recognize explicit GraphQL request limits; denials/outages take precedence."""
-    if not (200 <= status_code < 300 or status_code in {400, 422}):
+    # A 413 is eligible only through the same explicit GraphQL restriction checks
+    # below; a generic payload-size/CDN rejection is not a query-shape signal.
+    if not (200 <= status_code < 300 or status_code in {400, 413, 422}):
         return None
     document = response_json_object(body)
     if document is None or _has_schema_object(document):

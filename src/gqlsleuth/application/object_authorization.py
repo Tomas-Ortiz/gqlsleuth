@@ -173,10 +173,10 @@ def prepare_object_authorization(
                 )
                 response = next(
                     (
-                        item.selected_schema_response
+                        item.selected_schema_source
                         for item in schema_scan.introspection.introspections
                         if item.endpoint == artifact.endpoint
-                        and item.selected_schema_response is not None
+                        and item.selected_schema_source is not None
                     ),
                     None,
                 )
