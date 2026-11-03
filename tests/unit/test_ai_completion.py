@@ -15,6 +15,7 @@ from gqlsleuth.ai.prompt import (
     collect_interpretation_quality_warnings,
     validate_interpretation,
 )
+from gqlsleuth.ai.quality import INCOMPLETE_PROSE
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.infrastructure.ollama import OllamaClient
 
@@ -86,7 +87,7 @@ def test_complete_quoted_prose_is_preserved(prepared, ending):
     assert validate_interpretation(json.dumps(payload), context).limitations[0].text == text
 
 
-def test_old_500_character_limitation_is_retained_with_advisory_warning(prepared):
+def test_old_500_character_limitation_is_withheld_without_retry(prepared):
     scan, context, payload = prepared
     before = deepcopy(scan)
     bad = deepcopy(payload)
@@ -115,5 +116,7 @@ def test_old_500_character_limitation_is_retained_with_advisory_warning(prepared
     assert result.validation_failures == ()
     assert result.quality_warnings == ("incomplete_prose",)
     assert result.attempt_count == len(requests) == 1
-    assert result.interpretation.limitations[0].text == bad_text
+    assert result.interpretation.limitations[0].text == INCOMPLETE_PROSE
+    assert bad_text not in result.interpretation.model_dump_json()
+    assert len(result.withheld_fields) == 1
     assert scan == before and scan.evidence == before.evidence

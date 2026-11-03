@@ -1,4 +1,4 @@
-"""Usable structured AI output survives advisory concerns without another inference."""
+"""Grounding concerns withhold prose without another inference; other flags stay advisory."""
 
 import html
 import json
@@ -20,6 +20,7 @@ from gqlsleuth.ai.prompt import (
     collect_interpretation_quality_warnings,
     validate_interpretation,
 )
+from gqlsleuth.ai.quality import INCOMPLETE_PROSE, WITHHELD_PROSE
 from gqlsleuth.ai.regeneration import corrective_instruction
 from gqlsleuth.ai.sections import QUALITY_WARNING_DESCRIPTIONS, quality_warning_description
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
@@ -94,7 +95,12 @@ def test_each_quality_family_is_success_without_retry(prepared, monkeypatch, fie
     assert result.attempt_count == len(calls) == 1
     assert result.validation_failures == () and result.error_code is None
     assert code in result.quality_warnings
-    assert result.interpretation.model_dump(mode="json") == payload
+    if code.startswith("incomplete_"):
+        assert INCOMPLETE_PROSE in result.interpretation.model_dump_json()
+        assert text not in result.interpretation.model_dump_json()
+    else:
+        assert text not in result.interpretation.model_dump_json()
+        assert WITHHELD_PROSE in result.interpretation.model_dump_json()
     assert corrective_instruction(code, 2) is None
     assert corrective_instruction(("invalid_json", code), 2) is None
     assert set(result.quality_warnings) <= QUALITY_WARNING_CODES
@@ -153,7 +159,7 @@ def test_notice_precedes_any_generated_console_prose(prepared, monkeypatch, verb
     assert (
         output.index(AI_NOTICE)
         < output.index("INTERPRETIVE SUMMARY")
-        < output.index("The target appears secure.")
+        < output.index(WITHHELD_PROSE)
     )
     assert "AI quality checks flagged 1 potential issue." in output
     assert "unsupported_security_assurance" not in output
@@ -176,18 +182,18 @@ def test_reports_warn_before_prose_and_serialize_advisory_separately(prepared, m
         rendered = render_report(report, format)
         normalized = re.sub(r"\\([\W_])", lambda match: match[1], html.unescape(rendered))
         assert normalized.index(AI_NOTICE) < normalized.index("Interpretive Summary")
-        assert normalized.index(AI_NOTICE) < normalized.index("The target appears secure.")
+        assert normalized.index(AI_NOTICE) < normalized.index(WITHHELD_PROSE)
         assert "Heuristic quality flags, not deterministic Findings" in normalized
         assert normalized.index("AI-Assisted Interpretation") < normalized.index(
             quality_warning_description("unsupported_security_assurance")
         )
         assert "unsupported_security_assurance" not in normalized
         assert rendered.count("Safety Notice") == 1
-        assert normalized.rfind("Safety Notice") > normalized.index("The target appears secure.")
+        assert normalized.rfind("Safety Notice") > normalized.index(WITHHELD_PROSE)
         assert "\x1b" not in rendered
         if format is ReportFormat.HTML:
             assert "<script>fake</script>" not in rendered
-            assert "&lt;script&gt;fake&lt;/script&gt;" in rendered
+            assert "&lt;script&gt;fake&lt;/script&gt;" not in rendered
     assert len(calls) == 1
 
 

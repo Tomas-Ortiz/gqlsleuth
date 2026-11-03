@@ -12,6 +12,7 @@ from uuid import UUID
 from jinja2 import Environment, PackageLoader, StrictUndefined, TemplateError
 from pydantic import BaseModel, JsonValue
 
+from gqlsleuth.ai.models import AIInterpretationResult, AIOperation
 from gqlsleuth.domain.exceptions import ReportingError
 from gqlsleuth.reporting.differential import differential_sections
 from gqlsleuth.reporting.endpoint_context import group_endpoint_context
@@ -80,12 +81,17 @@ def _json_value(value: object) -> JsonValue:
         return str(value)
     if isinstance(value, BaseModel):
         # Serialize declared fields directly to retain subclass evidence fields and raw bytes.
-        return {name: _json_value(getattr(value, name)) for name in type(value).model_fields}
+        return {
+            name: _json_value(getattr(value, name))
+            for name in type(value).model_fields
+            if not (isinstance(value, AIOperation) and name == "schema_structure")
+        }
     if is_dataclass(value) and not isinstance(value, type):
         return {
             field.name: _json_value(getattr(value, field.name))
             for field in fields(value)
             if not (isinstance(value, EndpointReport) and field.name == "recovery")
+            if not (isinstance(value, AIInterpretationResult) and field.name == "withheld_fields")
             if not (
                 isinstance(value, (ReportContext, DifferentialReportContext))
                 and field.name

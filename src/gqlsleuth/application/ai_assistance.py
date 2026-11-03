@@ -18,7 +18,8 @@ from gqlsleuth.ai.models import (
     AIReferenceProjection,
     AIServiceError,
 )
-from gqlsleuth.ai.prompt import collect_interpretation_quality_warnings, execution_summary
+from gqlsleuth.ai.prompt import execution_summary
+from gqlsleuth.ai.quality import enforce_interpretation_grounding
 from gqlsleuth.ai.regeneration import corrective_instruction
 from gqlsleuth.ai.usage import summarize_usage
 from gqlsleuth.application.active_execution import ActiveExecutionScanResult
@@ -147,6 +148,9 @@ def interpret_completed_scan(
                 attempts=tuple(attempts),
                 usage=summarize_usage(tuple(attempts), accepted=False),
             )
+        interpretation, quality_warnings, withheld_fields = enforce_interpretation_grounding(
+            interpretation, context
+        )
         attempts.append(AIAttemptUsage(attempt, usage))
         if on_progress:
             on_progress(AIProgress(attempt, "accepted"))
@@ -157,7 +161,8 @@ def interpret_completed_scan(
             perf_counter() - started,
             context.metadata,
             interpretation=interpretation,
-            quality_warnings=collect_interpretation_quality_warnings(interpretation, context),
+            quality_warnings=quality_warnings,
+            withheld_fields=withheld_fields,
             attempt_count=attempt,
             validation_failures=tuple(failures),
             references=references,

@@ -122,7 +122,7 @@ def main() -> None:
     summary = result.interpretation.summary_interpretation.text
     print(
         f"Summary: {len(summary)} characters; structural ceiling: {MAX_AI_SUMMARY_CHARACTERS}; "
-        "hard structural checks passed; prose quality flags are advisory; "
+        "hard structural checks passed; unsupported/incomplete prose fields are withheld; "
         "deterministic scan unchanged."
     )
     print(AI_NOTICE)

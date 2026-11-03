@@ -523,7 +523,7 @@ def security_review_section(
 
 def ai_section(result: AIInterpretationResult) -> ReportSection:
     """Present an already-produced interpretation without modifying deterministic sections."""
-    from gqlsleuth.ai.sections import operation_metadata, usage_rows
+    from gqlsleuth.ai.sections import operation_metadata, quality_summary_lines, usage_rows
 
     entries: list[ReportEntry] = []
     interpretation = result.interpretation
@@ -610,6 +610,8 @@ def ai_section(result: AIInterpretationResult) -> ReportSection:
                 ),
             ),
         )
+    if quality_lines := quality_summary_lines(result):
+        entries.insert(0, ReportEntry("AI Quality Summary", paragraphs=quality_lines))
     entries.append(ReportEntry("AI Generation Metadata", details=usage_rows(result)))
     return ReportSection(
         "AI-Assisted Interpretation",

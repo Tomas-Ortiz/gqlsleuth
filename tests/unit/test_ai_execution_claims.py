@@ -10,6 +10,7 @@ from fixtures.ai_response import reference_items, security_answer_fields, set_op
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import AIAnalysisStatus
 from gqlsleuth.ai.prompt import collect_interpretation_quality_warnings, validate_interpretation
+from gqlsleuth.ai.quality import WITHHELD_PROSE
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.application.safe_execution import execute_generated_queries
 from gqlsleuth.domain.models import ScanMode
@@ -196,7 +197,7 @@ def test_generation_selection_or_preview_is_not_execution(scan, metadata):
     assert "unsupported_execution_claim" in warnings
 
 
-def test_execution_quality_warning_retains_prose_without_retry_or_target_requests(
+def test_execution_quality_warning_withholds_prose_without_retry_or_target_requests(
     scan, monkeypatch
 ):
     context = build_ai_context(scan)
@@ -230,13 +231,11 @@ def test_execution_quality_warning_retains_prose_without_retry_or_target_request
     assert result.validation_failures == ()
     assert "unsupported_execution_claim" in result.quality_warnings
     assert scan == before and scan.evidence == before.evidence
-    assert (
-        result.interpretation.summary_interpretation.text == bad["summary_interpretation"]["text"]
-    )
+    assert result.interpretation.summary_interpretation.text == WITHHELD_PROSE
     assert all(r["messages"][1]["content"] == serialize_context(context) for r in requests)
     assert "QUALITYEXECUTIONCANARY" not in json.dumps(requests)
     for format in ReportFormat:
-        assert "QUALITYEXECUTIONCANARY" in render_report(
+        assert "QUALITYEXECUTIONCANARY" not in render_report(
             build_report(scan, ai_interpretation=result), format
         )
     assert len(requests) == 1

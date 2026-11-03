@@ -522,15 +522,56 @@ unknown. Output-limit termination triggers the same bounded regeneration with co
 guidance; the token limit never increases automatically. No prompt, rejected prose or reasoning
 is retained in this metadata. AI prose is best-effort and may be incomplete or inaccurate.
 A shared static notice appears before AI prose in compact/verbose console and human reports.
-Narrow prose/execution/completion checks produce advisory `quality_warnings`, not rejection or
-regeneration. These flags are not Findings or proof of incorrectness; no flags does not prove
+Narrow prose/execution checks withhold affected fields that contradict supplied facts or assert
+unsupported controls/security conclusions. A static `AI text withheld` notice replaces that field;
+valid sibling fields and exact references remain available. Rejected prose is not retained in
+the shared result, console or JSON/Markdown/HTML reports. Visibly incomplete fields are replaced
+with a distinct incomplete-text notice; complete neighboring fields remain available.
+All concerns retain safe `quality_warnings` without regeneration. These flags are not Findings
+or proof of incorrectness; no flags does not prove
 correctness. SUCCESS means usable structure, references and exact supplied-operation coverage,
 not factual assurance. Hard `validation_failures` remain separate from final-output quality flags.
 Verbose console and human reports explain quality flags in plain language; canonical JSON retains
 the original warning identifiers and order.
+The AI quality summary distinguishes warning categories, withheld text fields, affected operations
+and retained/withheld operation interpretations. Follow-ups, summaries, cross-operation themes and
+limitations are accounted for separately. Counts come from structured withholding decisions, not
+rendered text; this presentation-only accounting does not add canonical JSON fields.
+Generation guidance starts with supplied facts and a specific review focus, followed by the
+appropriate untested control or manual check. Operation context distinguishes root lists from
+single objects, includes bounded declared input paths and direct nested list fields, and retains
+the exact operation attribution of review candidates. Omitted structure remains unknown.
+Conditional risks such as "If target authorization is insufficient, deletion could affect an
+unauthorized account" are legitimate hypotheses, not observed weaknesses. Modal wording alone
+does not establish grounding; review the complete claim and its control dependency. A root-list
+recommendation must not be borrowed from a different operation. SUCCESS means no execution error
+was classified, not returned sensitive data, business success or authorization bypass.
+Factual checks apply across summaries, operation analysis, themes, follow-ups and limitations.
+Clear root-return statements are checked against the named root type and list shape; nested
+fields do not change that type. Candidate claims retain their exact operation attribution,
+and truncated input/fact inventories are not proof of absence. Normal Query execution is
+distinct from dedicated depth-control testing: an untested control does not make an executed
+Query unexecuted. Ownership recommendations need relevant inputs or scoped facts; an identifier
+lookup alone does not establish a user-ownership model. Neutral or conditional access-policy
+guidance is appropriate when ownership is unknown.
+Valid sibling fields survive, but a field mixing valid and unsupported
+claims is withheld as a whole rather than rewritten. An accurately scoped supplied Finding may
+still be described. The checks do not prove the truth of arbitrary model prose.
 Narrow grounding flags cover unsupported control-absence claims, contradictory partial-schema
 claims and cross-operation fact references. Untested or unobserved controls are not established
-as absent. These remain advisory checks, not general factual verification or automatic repair.
+as absent. Accepted aliases/depth cover the tested quantity only; SUCCESS establishes neither
+business success nor persisted changes. Review questions remain valid without escalating them
+to Findings. The checks are heuristic, not general factual verification or automatic repair.
+Equivalent leading, trailing and comma-delimited conditional hypotheses are supported where the
+supplied structure is relevant. Qualification does not exempt independent factual assertions.
+Generic descriptions such as "identifier argument" or "list of objects" are distinguished from
+explicit schema names; qualified apparent roles are not runtime evidence. Internal field decisions
+associate each withheld field with its triggering rule categories, without retaining rejected
+text or adding report fields. Developer inspection is documented in the
+[AI architecture](docs/ARCHITECTURE.md#22-optional-ai-assistance); no new CLI flag is required.
+AI coverage uses existing total/included/omitted counters: 12 supplied out of 32 means 20 remain
+outside interpretation. Increasing `--ai-timeout` does not expand context. Partial schema
+inventory without validated analysis remains excluded; unknown schema coverage is not zero.
 
 The allowlist excludes credentials/tokens, URLs, variables, object IDs, raw responses/errors,
 Evidence, upload material, SDL and WebSocket frames. Target HTTP settings never configure
@@ -545,7 +586,7 @@ interpretation. AI is optional and disabled without `--ai`.
 Developers can check the real local model without scanning a target:
 `uv run python scripts/check_ollama.py`. This optional acceptance script uses a mocked SAFE scan
 and up to ten real local inference attempts, validates the hard structured/reference
-contract including exact per-operation coverage, reports advisory quality flags, attempts, hard rejection codes
+contract including exact per-operation coverage, reports quality flags, attempts, hard rejection codes
 and token usage, and never
 downloads a model. It is not part of normal pytest/CI.
 

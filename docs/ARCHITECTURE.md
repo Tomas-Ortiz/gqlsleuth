@@ -882,9 +882,9 @@ Observed execution outcomes for common known Queries remain comparable.
 
 AI receives only `AISchemaSummary.schema_retrieval` (`retrieved` or `partial`) as extra safe
 input metadata. Partial counts describe retrieved content, and omissions do not establish absence.
-Raw restriction text/responses/URLs are excluded. AI output contract v2, best-effort hard/advisory
-validation, quality warnings, regeneration, token limits and 12-operation/12,000-byte caps are
-unchanged.
+Raw restriction text/responses/URLs are excluded. AI output contract v2, quality codes,
+regeneration, token limits and 12-operation/12,000-byte caps are unchanged. Shared prose
+withholding follows the grounding contract in Section 22.
 
 The Phase 6 representation includes named object, input-object, scalar, enum, interface, and
 union types; fields; arguments; input fields; enum values; directives; descriptions;
@@ -1544,6 +1544,17 @@ operations with the same field name remain independent. Phase 31 additionally pr
 security facts and capability coverage from retained single-context results through Phase 30
 (see the dedicated roadmap entry). No differential/named-context AI is enabled.
 
+Each operation may also carry a context-only `schema_structure`: exact root-list shape,
+at most eight declared argument/input paths through two input-object relationships, and at
+most four direct list-field names on the returned type. Projection uses bounded breadth-first
+schema order and path-local cycle protection. Truncation flags distinguish omitted structure
+from absence; unavailable parsed structure stays unknown. Only validated GraphQL identifiers
+are copied, never descriptions, default values or runtime input values. This metadata uses the
+existing 12,000-byte budget and ordinary-operation priority/truncation order; no capacity grows.
+It is excluded from public reference serialization, preserving canonical report and generated
+AI contract version 2. Review facts retain their exact endpoint/kind/name; a type-level fact
+without that relationship is not silently assigned to every root operation.
+
 Each security fact additionally retains an optional opaque endpoint alias, using the same
 alias map as operations and schema summaries. Together with its existing kind/name this gives
 exact operation identity across endpoints and Query/Mutation roots. Endpoint-wide facts retain
@@ -1571,15 +1582,16 @@ retrieval independently of `operations_total`, `operations_included`, `operation
 and `context_truncated`. A fully retrieved schema with 19 analyzed operations, 12 supplied
 and 7 omitted remains fully retrieved. The omissions bound AI interpretation only.
 
-The existing nonfatal advisory boundary also checks bounded control-absence assertion forms,
+The nonfatal prose-quality boundary also checks bounded control-absence assertion forms,
 partial-schema claims contradicting supplied full-retrieval metadata, and operation/fact
 reference scope. Unsupported control absence uses `unsupported_control_claim`; schema/scope
 contradictions use `unsupported_review_conclusion`. Control/outcome checks cannot borrow
 another operation's fact. Endpoint-wide control facts can support scoped global interpretation
 but do not establish a control for a referenced operation. Calibrated uncertainty and genuinely
 partial schemas remain valid. These are narrow heuristic checks, not general prose verification:
-warnings retain the interpretation unchanged and neither retry nor repair it. The AI-014 hard
-structural/reference errors, advisory split, retry budget and static notice remain unchanged.
+affected prose fields are withheld with a static unavailable notice, while valid sibling fields
+and references remain unchanged. No rejected claim is repaired, replayed or retained. Hard
+structural/reference errors, retry budget and static notice remain unchanged.
 
 The stable system prompt treats all target-derived strings as untrusted data and instructs the
 model to ignore embedded instructions, use only supplied facts, distinguish interest from
@@ -1602,8 +1614,9 @@ AI contract version 2 generates only:
   and 180-350 characters, with an 800-character hard safety ceiling.
 - `operation_interpretations`: exactly one entry for EVERY operation supplied in the bounded
   context (0-12). Each has one exact `operation` reference, an `interpretation` (maximum 300
-  characters) and `manual_follow_up` (maximum 220). Both request one short complete sentence,
-  preferably under 100 characters. No top-three selection or per-operation inference occurs.
+  characters) and `manual_follow_up` (maximum 220). Interpretation requests one to three concise
+  complete sentences; the follow-up is a specific non-destructive manual check, not repeated
+  interpretation. No top-three selection or per-operation inference occurs.
 - `review_insights`: zero to three global/cross-operation themes, each referencing two or three
   distinct supplied operation/security-fact references. Interpretation is bounded at 350
   characters and follow-up at 220. Different capability families are not required: a theme may
@@ -1641,15 +1654,117 @@ distinct reference cardinality and exact operation coverage. Provider `done_reas
 incomplete/invalid provider envelopes remain hard failures. These failures alone may trigger
 bounded regeneration.
 
-**Advisory quality checks** reuse the existing narrow prose detectors for unsupported assurance,
+**Prose-quality enforcement** reuses the existing narrow prose detectors for unsupported assurance,
 false absence, outcome/control/review conclusions, execution claims and visible completion.
 They produce stable, deduplicated static `quality_warnings` codes on the final accepted result:
 `unsupported_security_assurance`, `false_absence_claim`, `unsupported_outcome_inference`,
 `unsupported_control_claim`, `unsupported_review_conclusion`, `unsupported_execution_claim`,
 `incomplete_security_summary`, and `incomplete_prose`. Independent check families continue after
-a concern; collection is intentionally not exhaustive. Warnings never reject a structurally
-usable interpretation, change SUCCESS to INVALID_RESPONSE, hide prose or cause another inference.
-No new grammar parser, prose repair, rejected-text replay or context expansion is introduced.
+a concern; collection is intentionally not exhaustive. Grounding concerns withhold the affected
+summary, interpretation, follow-up or limitation field before constructing the public result.
+`ai/quality.py` evaluates fields with their original section/reference scope and substitutes only
+the static marker `AI text withheld: the supplied facts do not support this interpretation.`
+This is an explicit unavailable value, not repaired model guidance. Valid sibling fields survive.
+Each actual prose field is checked once in its original section/reference scope; there is no
+redundant whole-reply quality pass before field-level enforcement. Static warning categories are
+aggregated across fields in stable order. `AIWithheldField` records section, item index, field
+name and a stable tuple of triggering `rule_codes`, collected in the same validation pass.
+Codes are existing broad quality categories, not a subjective correctness score or an exhaustive
+list of individual assertions. Multiple codes do not multiply the field's identity/count.
+The optional application-owned `withheld_fields` metadata is deliberately excluded
+from canonical JSON; generated schema and AI/report contract versions remain unchanged.
+Human quality summaries count unique field decisions, unique affected operations, retained and
+withheld operation interpretations, and separately withheld follow-ups/summary/theme/limitation
+fields. Multiple categories may affect one field, and two fields may affect one operation.
+No counts are inferred by matching the marker in rendered or model-authored text. Legacy or
+unavailable results without accounting metadata do not invent zero withholding counts.
+The existing required fields and version-2 contracts remain intact. The result retains SUCCESS
+for structural usability plus quality warnings; withheld content does not cause another inference.
+Completion warnings also withhold their affected field, using the distinct static marker
+`AI text withheld: the model supplied incomplete text.` They do not trigger regeneration or
+invent an ending. All renderers consume this same enforced result; quality counters include
+these field decisions. No grammar parser, prose repair or rejected-text replay is introduced.
+
+Schema visibility and ownership-related input names justify manual review, never missing
+authorization, ownership or input validation. Cited Findings support their exact recorded cases,
+not blanket vulnerability conclusions. Narrow guards distinguish review questions and negated
+inferences from assertions; they withhold unsupported absence, universal alias/depth/batch claims,
+unobserved application success and contradictions with execution/coverage metadata. Numeric
+alias/depth outcome assertions require the cited probe's quantity, outcome and operation scope.
+Three accepted aliases or accepted depth five cannot prove unlimited support; one rejected batch
+cannot prove universal protection. SUCCESS does not establish business success or persisted state.
+AI context omissions are distinct from partial schema retrieval. Total/included/omitted counters
+remain authoritative and unchanged; timeout overrides do not expand the bounded context.
+Prompt and field guidance prefer one to three concise sentences connecting supplied structure to
+a specific review focus and untested runtime controls, with a separate actionable follow-up.
+Neither operation names nor illustrative examples authorize inventing input fields or business
+policy. Useful conditional risks are permitted: an explicit unverified control dependency tied
+to the referenced operation's structure can motivate potential impact and manual validation.
+Modal wording is not categorically forbidden, but does not itself establish grounding. Narrow
+control-dependent clauses and immediately preceding explicit uncertainty are distinguished from
+assertions that controls are missing. Ownership hypotheses use declared owner/user/tenant input
+paths; collection/complexity hypotheses use relevant list structure or exactly attributed facts.
+Root-list/result-size recommendations are checked against the specific operation, not endpoint
+adjacency. Nested-list considerations remain possible where supplied. Uncertain formulations
+can still attract warnings; this is not general semantic verification or a plausibility proof.
+Explicit review questions and locally negated inferences remain valid; exact
+cited object-probe Findings remain eligible only within their recorded scope. Completion without
+a classified execution error is checked against actual SUCCESS, not just HTTP 200 or an attempt.
+
+Phase 2D extends this same boundary with explicit root-return assertions (named base type and
+list/non-list shape), declared-input assertions and recorded result-size candidate attribution
+across all prose sections. Exact named operations, kinds and references determine the subject;
+ambiguous duplicate names and nested/type-field descriptions are not guessed to be root claims.
+Recognized collective claims are checked against the supplied operations; omitted operations
+are never reconstructed. Simple English plurals and GraphQL list notation are supported, not
+general language/type inference or nullability verification. A nested list does not change the
+root element type. Truncated input or security-fact inventories do not establish absence.
+Existing warning codes and field-level withholding are reused without another quality engine.
+
+Execution checks include infinitive statements such as "did not execute" and preserve exact
+endpoint identity when review references identify ordinary operations. A transport failure
+does not prove that the server executed the request. Normal Query attempts remain separate from
+dedicated query-depth probes; a recorded scoped depth probe contradicts a clear "not tested"
+claim, but still does not prove adequate enforcement. The factual premise "the absence of
+query depth controls" requires support; "if controls are insufficient" remains a hypothesis.
+No context fields or limits are added in Phase 2D.
+
+The final Phase 2 correction recognizes bounded leading, trailing and comma-delimited intermediate
+control dependencies. Qualification applies to the relevant predicate, not independent finite
+assertions joined by "and"; a review question cannot shelter a subsequent false type, input,
+control or execution claim. Generic descriptions such as "identifier argument" and "list of
+objects" are not exact schema names. Explicit names/paths and root list shape remain checked;
+the context does not contain argument scalar types, so generic type descriptions are not verified.
+Narrow qualified user/account schema roles can be supported by operation/type names without
+asserting actual response contents or successful state changes. These bounded heuristics do not
+parse arbitrary English or establish general factual accuracy.
+
+For an authorized developer test, inspect the already-returned application result, without another
+inference or retaining rejected text:
+
+```python
+for decision in result.withheld_fields or ():
+    operation = None
+    if decision.section == "operation_interpretations" and result.interpretation is not None:
+        operation = result.interpretation.operation_interpretations[decision.index].operation
+    print(decision.section, decision.index, decision.field, operation, decision.rule_codes)
+```
+
+This exposes only field identity, the existing opaque operation reference and rule categories;
+no rejected prose, credentials or response bodies are recorded in diagnostics. Summary/theme/
+limitation references are available on their corresponding retained section item. The current CLI
+does not expose these per-field codes; a future opt-in developer formatter of this same metadata
+would be the smallest live-CLI addition, and is not implemented here. Whole-field withholding may
+discard valid sentences, operation entries still cannot cite extra security facts, and omitted
+context and unrecognized paraphrases continue to require analyst judgment.
+
+Prompt guidance distinguishes operation IDs from security-fact IDs, identifies their exact
+source arrays, handles empty fact collections, and requires every supplied operation once,
+including unexecuted Mutations. Optional themes may be empty. Reference/coverage validation and
+retry/token budgets are unchanged; fewer live-model retries are not guaranteed. Follow-ups
+should use relevant inputs, return shape and scoped review facts, not prescribe ownership
+checks merely for an identifier lookup or repeat a generic security checklist. This improves
+generation guidance without inferring that reference-style data is public or access-controlled.
 
 AI prose is best-effort analyst assistance and may be incomplete or inaccurate. Deterministic
 facts, Evidence and Findings remain authoritative. The prompt guides calibrated review language:
@@ -1663,8 +1778,12 @@ correctness. AI availability must not depend on perfection of free-form prose.
 Hard prose ceilings remain safety bounds, not generation targets. Summary guidance is 2-4 concise
 complete sentences, normally 180-350 characters below its 800-character ceiling. Limitations
 normally target 150-300 characters below 500. Missing punctuation, ellipses or visible clipping
-within schema bounds produce advisory completion flags; hard schema minLength/maxLength and
-provider-level truncation remain fatal. Accepted prose is never clipped, repaired or rewritten.
+within schema bounds produce completion flags and field-level withholding; hard schema
+minLength/maxLength and provider-level truncation remain fatal. Parsing and rendering do not
+truncate the stored interpretation. Offline fragments reproduce completion handling, but a
+historical `done_reason=stop` below the token limit alone cannot identify whether a model fragment
+originated in generation or structured-schema decoding. No output budget is increased.
+Accepted prose is never clipped, repaired or rewritten.
 
 Ordinary Phase 9/10 execution totals are calculated from complete results before truncation;
 specialized probe outcomes remain separate security facts and coverage counts. A canonical
@@ -1676,8 +1795,8 @@ Model interpretation must still preserve execution distinctions and never treat 
 GraphQL errors, skips or mere attempts as successful execution.
 
 Canonical execution grounding compares narrow free-prose execution assertions with supplied
-operation facts and complete aggregate counts. Contradictions produce advisory
-`unsupported_execution_claim`, never regeneration. Application-rendered execution facts remain
+operation facts and complete aggregate counts. Contradictions produce
+`unsupported_execution_claim` and field withholding, never regeneration. Application-rendered facts remain
 unchanged and authoritative regardless of prose. A scanner safety skip is not target denial;
 ordinary totals remain separate from specialized probes. This bounded lexical diagnostic is
 not general fact checking.
@@ -1755,16 +1874,18 @@ interrupted reads/writes and other request failures use `transport_failed`, with
 an OS or resource-exhaustion cause. Inference timeouts retain the separate `timeout` code.
 Post-response hard validation covers JSON parsing, strict typed schema, exact supplied
 references and operation coverage; normalized errors expose no model text or Pydantic input dumps.
-After acceptance, advisory quality checks assess narrow prose assertions, execution consistency
-and completion. Invalid hard output remains non-fatal to scanning; after ten rejected attempts
+After structural acceptance, shared quality enforcement assesses narrow prose assertions and
+execution consistency and visible completion, withholding affected fields without regeneration.
+Invalid hard output remains non-fatal to scanning; after ten rejected attempts
 no interpretation is retained. Provider failures stop immediately. Quality concerns never enter
 that rejection path or trigger an additional model request.
 
 For optional real-model acceptance, run `uv run python scripts/check_ollama.py` with an already
 running local Ollama and installed `qwen3:8b`. The script uses a synthetic fully mocked SAFE scan,
 makes one to ten real local inferences per invocation and checks the structured/typed output,
-supplied references and exact operation coverage, and records advisory prose/execution/completion
-quality flags separately from hard failures. It verifies the deterministic scan/Evidence remain unchanged and
+supplied references and exact operation coverage, and records prose/execution/completion
+quality flags separately from hard failures. Unsupported or incomplete fields are withheld with
+static notices, not merely accompanied by advisory flags. It verifies the deterministic scan/Evidence remain unchanged and
 displays the accepted typed fixture interpretation and summary length/ceiling for manual inspection.
 Acceptance records attempt counts, safe validation codes and token counters, checks exact
 operation coverage, and displays only accepted typed prose. The fixture validation helper also
@@ -1779,7 +1900,7 @@ and application-owned references are explicitly identified by report schema vers
 Compact/verbose CLI and Markdown/HTML place the same centralized static AI_NOTICE before any
 AI-generated prose. It warns of incomplete/inaccurate/unsupported interpretation, requires manual
 validation against deterministic facts/evidence and disclaims Evidence/Findings/vulnerability
-confirmation. Compact output shows a quality-warning count; verbose and human reports list safe
+confirmation. Compact output shows quality categories and field/operation accounting; verbose and human reports list safe
 codes as heuristic flags outside deterministic Findings. Safety Notice remains the final human
 report section. HTML escapes model text. Deterministic sections,
 counts, evidence, recommendations, and Errors and Limitations are unchanged; AI failures stay
@@ -3968,7 +4089,8 @@ each supplied operation (300/220 characters, at most 12 operations), up to three
 guidance, 500-character ceiling). Context reduction and its privacy allowlist are unchanged.
 Exact operation coverage and strict schema/reference requirements remain hard gates. Provider
 output-limit termination remains hard and retryable. Existing prose/execution/completion checks
-are now advisory only: safe deduplicated quality_warnings accompany usable interpretations and
+now use shared field-level withholding for unsupported/contradictory assertions and visibly
+incomplete fragments, with distinct notices. Safe deduplicated quality_warnings accompany usable interpretations and
 never trigger regeneration. SUCCESS means structural usability, not factual correctness. AI prose
 may be inaccurate and requires manual validation against authoritative deterministic facts.
 A shared static warning precedes every human AI result. No general NLP proof system is introduced.
@@ -3984,7 +4106,8 @@ The application allows at most ten attempts only after hard structural validatio
 safe category corrections and one accepted interpretation maximum (Section 22). Invalid
 projection, unavailable provider or invalid output is non-fatal to scanning and reporting.
 Hard-rejected output is not rewritten, repaired, replayed or retained in results.
-Structurally accepted prose is retained unchanged even when advisory flags are present. The local
+Unflagged prose is retained unchanged; unsupported assertions are withheld with a static notice
+before the result reaches console or canonical/human reports. The local
 `scripts/check_ollama.py` acceptance path described in Section 22 exercises this same contract
 with mocked target requests and bounded loopback regeneration; it downloads no model and retains
 no raw model reply. No generic redaction is introduced.

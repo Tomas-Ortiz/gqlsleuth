@@ -1,6 +1,7 @@
 """Allowlisted AI input and bounded interpretation models, separate from Evidence."""
 
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -195,6 +196,18 @@ class AICapabilityCoverage(AIModel):
     attempts: Count = 0
 
 
+class AIOperationStructure(AIModel):
+    """Bounded schema identifiers only, never input values or schema descriptions."""
+
+    returns_list: bool
+    input_paths: tuple[
+        Annotated[tuple[GraphQLName, ...], Field(min_length=1, max_length=3)], ...
+    ] = Field(default=(), max_length=8)
+    inputs_truncated: bool = False
+    nested_list_fields: tuple[GraphQLName, ...] = Field(default=(), max_length=4)
+    nested_lists_truncated: bool = False
+
+
 class AIOperation(AIModel):
     """Only structural identifiers, deterministic rankings, and normalized states."""
 
@@ -214,6 +227,8 @@ class AIOperation(AIModel):
     selectable: bool
     selected: bool
     mutation_decision: MutationDecision | None
+    # Context-only schema projection; omitted from public reference/report serialization.
+    schema_structure: AIOperationStructure | None = None
 
 
 class AISchemaSummary(AIModel):
@@ -310,8 +325,10 @@ class AIOperationInterpretation(AIModel):
             strict=True,
             min_length=1,
             max_length=300,
-            description="One short complete sentence about the apparent review role, "
-            "not a metadata recap. Interest is not risk/severity; "
+            description="One to three concise complete sentences grounding the review role in "
+            "supplied facts and distinguishing untested controls, not a metadata recap. "
+            "Conditional unauthorized effects are not established facts. "
+            "Interest is not risk/severity; "
             "schema roles are not runtime observations.",
         ),
     ]
@@ -397,6 +414,19 @@ class AISessionUsage:
 
 
 @dataclass(frozen=True)
+class AIWithheldField:
+    """Content-free field decision for human quality accounting, not generated AI data."""
+
+    section: Literal[
+        "summary_interpretation", "operation_interpretations", "review_insights", "limitations"
+    ]
+    index: int
+    field: Literal["text", "interpretation", "manual_follow_up"]
+    # Codes explain this decision without changing its field identity/counting.
+    rule_codes: tuple[str, ...] = dataclass_field(default=(), compare=False)
+
+
+@dataclass(frozen=True)
 class AIInterpretationResult:
     status: AIAnalysisStatus
     model: str
@@ -414,6 +444,9 @@ class AIInterpretationResult:
     attempts: tuple[AIAttemptUsage, ...] = ()
     usage: AISessionUsage | None = None
     quality_warnings: tuple[str, ...] = ()
+    # None means accounting was not performed (provider failure or older caller).
+    # Presentation-only: excluded from canonical report serialization.
+    withheld_fields: tuple[AIWithheldField, ...] | None = None
 
 
 @dataclass(frozen=True)

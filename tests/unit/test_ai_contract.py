@@ -161,7 +161,7 @@ def test_report_resolves_every_operation_and_safe_usage(phase_ten_scan, format):
         assert ai["interpretation"]["summary_interpretation"] == payload["summary_interpretation"]
         assert set(ai["interpretation"]["summary_interpretation"]) == {"text", "references"}
         assert ai["references"]["operations"] == [
-            o.model_dump(mode="json") for o in context.operations
+            o.model_dump(mode="json", exclude={"schema_structure"}) for o in context.operations
         ]
         assert ai["attempts"][0]["usage"]["completion_tokens"] == 713
         assert ai["usage"]["total_completion_tokens"] == 713

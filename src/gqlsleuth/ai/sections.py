@@ -35,6 +35,39 @@ def quality_warning_description(code: str) -> str:
     )
 
 
+def quality_summary_lines(result: AIInterpretationResult) -> tuple[str, ...]:
+    """Count recorded field decisions, never model wording or rendered output.
+
+    These presentation-only counters do not change the canonical result schema. A field
+    with several warning categories is counted once; two fields may affect one operation.
+    """
+    if result.interpretation is None or result.withheld_fields is None:
+        return ()
+    withheld = set(result.withheld_fields)
+    operations = {item.index for item in withheld if item.section == "operation_interpretations"}
+    interpretation_count = sum(
+        item.section == "operation_interpretations" and item.field == "interpretation"
+        for item in withheld
+    )
+    follow_up_count = sum(
+        item.section == "operation_interpretations" and item.field == "manual_follow_up"
+        for item in withheld
+    )
+    total = len(result.interpretation.operation_interpretations)
+    warning_count = len(set(result.quality_warnings))
+    category = "category" if warning_count == 1 else "categories"
+    summary_count = sum(item.section == "summary_interpretation" for item in withheld)
+    theme_count = sum(item.section == "review_insights" for item in withheld)
+    limitation_count = sum(item.section == "limitations" for item in withheld)
+    return (
+        f"AI quality: {warning_count} warning {category}; {len(withheld)} text fields withheld.",
+        f"Operation interpretations: {total - interpretation_count} retained / {total} supplied; "
+        f"{interpretation_count} withheld; {len(operations)} operations affected.",
+        f"Other withheld fields: {follow_up_count} operation follow-ups; "
+        f"{summary_count} summary; {theme_count} cross-operation; {limitation_count} limitations.",
+    )
+
+
 def operation_metadata(
     result: AIInterpretationResult, reference: str
 ) -> tuple[tuple[str, str], ...]:

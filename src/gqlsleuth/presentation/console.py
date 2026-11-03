@@ -917,8 +917,10 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
 
 
 def _render_ai_quality(console: Console, result: AIInterpretationResult, *, verbose: bool) -> None:
-    from gqlsleuth.ai.sections import quality_warning_description
+    from gqlsleuth.ai.sections import quality_summary_lines, quality_warning_description
 
+    for line in quality_summary_lines(result):
+        console.print(line, markup=False, style="gql.secondary")
     if not result.quality_warnings:
         return
     count = len(result.quality_warnings)

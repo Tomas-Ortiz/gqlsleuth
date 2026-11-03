@@ -17,6 +17,7 @@ from gqlsleuth.ai.prompt import (
     collect_interpretation_quality_warnings,
     validate_interpretation,
 )
+from gqlsleuth.ai.quality import INCOMPLETE_PROSE
 from gqlsleuth.application.ai_assistance import interpret_completed_scan
 from gqlsleuth.domain.models import ScanMode
 from gqlsleuth.infrastructure.ollama import OllamaClient
@@ -257,7 +258,13 @@ def test_prose_failure_is_nonfatal_single_inference_and_preserves_scan(completed
     assert result.status is AIAnalysisStatus.SUCCESS and result.error_code is None
     assert code in result.quality_warnings
     assert result.validation_failures == ()
-    assert result.interpretation.summary_interpretation.text == text and len(calls) == 1
+    assert len(calls) == 1
+    if code.startswith("incomplete_"):
+        assert result.interpretation.summary_interpretation.text == INCOMPLETE_PROSE
+        assert text not in result.interpretation.model_dump_json()
+    else:
+        assert text not in result.interpretation.model_dump_json()
+        assert result.interpretation.summary_interpretation.text.startswith("AI text withheld:")
     assert completed == before and completed.evidence == before.evidence
     assert text not in str(result.quality_warnings)
 

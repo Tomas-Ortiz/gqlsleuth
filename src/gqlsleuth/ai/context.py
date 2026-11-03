@@ -1,6 +1,7 @@
 """Construct AI input from an explicit allowlist, without serializing scan objects."""
 
 import json
+from collections import deque
 
 from gqlsleuth.ai.identifiers import identifier as _identifier
 from gqlsleuth.ai.models import (
@@ -9,6 +10,7 @@ from gqlsleuth.ai.models import (
     AIContext,
     AIContextMetadata,
     AIOperation,
+    AIOperationStructure,
     AISchemaSummary,
 )
 from gqlsleuth.ai.security_context import ordered_security_context
@@ -17,6 +19,63 @@ from gqlsleuth.application.safe_execution import SafeExecutionScanResult
 from gqlsleuth.domain.analysis import PRIORITY_RANK, OperationKind
 from gqlsleuth.domain.execution import QueryExecutionStatus
 from gqlsleuth.domain.models import EvidenceType
+from gqlsleuth.domain.schema import ParsedSchema, SchemaArgument, SchemaInputField
+
+
+def _operation_structure(
+    schema: ParsedSchema | None, kind: OperationKind, name: str
+) -> AIOperationStructure | None:
+    """Project at most eight input paths (two object levels) and four direct list fields.
+
+    Breadth-first schema order is stable. Path-local cycle protection permits shared input
+    types under different arguments, while the path/entry bounds prevent expansion.
+    Truncation means unknown remaining structure, never absent input or nested fields.
+    """
+    if schema is None:
+        return None
+    root_name = schema.query_root if kind is OperationKind.QUERY else schema.mutation_root
+    root = schema.type_named(root_name) if root_name else None
+    field = next((item for item in root.fields if item.name == name), None) if root else None
+    if field is None:
+        return None
+    queue: deque[tuple[SchemaArgument | SchemaInputField, tuple[str, ...], tuple[str, ...]]] = (
+        deque((argument, (), ()) for argument in field.arguments[:9])
+    )
+    truncated = len(field.arguments) > 8
+    paths: list[tuple[str, ...]] = []
+    while queue and len(paths) < 8:
+        item, parent, seen = queue.popleft()
+        if _identifier(item.name) is None:
+            truncated = True
+            continue
+        path = (*parent, item.name)
+        paths.append(path)
+        named = schema.type_named(item.type.named_type)
+        if named and named.input_fields:
+            if len(path) >= 3 or named.name in seen:
+                truncated = True
+                continue
+            available = max(0, 9 - len(paths) - len(queue))
+            truncated |= len(named.input_fields) > available
+            queue.extend(
+                (child, path, (*seen, named.name)) for child in named.input_fields[:available]
+            )
+    output = schema.type_named(field.type.named_type)
+    nested: list[str] = []
+    nested_truncated = False
+    for child in output.fields if output else ():
+        if child.type.is_list:
+            if len(nested) == 4 or _identifier(child.name) is None:
+                nested_truncated = True
+                break
+            nested.append(child.name)
+    return AIOperationStructure(
+        returns_list=field.type.is_list,
+        input_paths=tuple(paths),
+        inputs_truncated=truncated or bool(queue),
+        nested_list_fields=tuple(nested),
+        nested_lists_truncated=nested_truncated,
+    )
 
 
 def serialize_context(context: AIContext) -> str:
@@ -45,6 +104,7 @@ def build_ai_context(result: SafeExecutionScanResult | ActiveExecutionScanResult
         endpoints.setdefault(item.endpoint, f"endpoint_{len(endpoints) + 1}")
     security_facts, coverage = ordered_security_context(safe, active, endpoints)
     security_facts_total = len(security_facts)
+    parsed = {item.endpoint: item.schema for item in schema_scan.schemas}
     operations = [operation for item in analysis.endpoints for operation in item.operations]
     # Stable sort preserves retained Phase 7 order within equal priorities/scores.
     operations.sort(key=lambda item: (PRIORITY_RANK[item.priority], -item.interest_score))
@@ -109,6 +169,9 @@ def build_ai_context(result: SafeExecutionScanResult | ActiveExecutionScanResult
                 selectable=candidate.selectable if candidate else False,
                 selected=mutation.selected if mutation else False,
                 mutation_decision=mutation.decision if mutation else None,
+                schema_structure=_operation_structure(
+                    parsed.get(operation.endpoint), operation.kind, name
+                ),
             )
         )
     schemas = []

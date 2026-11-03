@@ -21,8 +21,9 @@ _ASSERTION = re.compile(
     r"|\b(?P<not_selected>not_selected)\b"
     r"|\b(?P<declined>declined)\b"
     r"|\b(?P<not_run>not_run|unexecuted)\b"
-    r"|\b(?P<success>success(?:ful(?:ly)?)?|succeeded)\b"
-    r"|\b(?P<attempted>attempted|executed|ran|run|sent)\b"
+    r"|\b(?P<success>success(?:ful(?:ly)?)?|succeeded|accepted|"
+    r"completed\s+without\s+(?:a\s+)?(?:classified\s+)?(?:execution|graphql)\s+error)\b"
+    r"|\b(?P<attempted>attempted|execute[sd]?|ran|run|sent)\b"
     r"|\b(?P<failure>failed|failure|errored)\b"
     r"|\b(?P<skipped>skipped)\b"
     r"|\b(?P<blocked>blocked|denied|rejected)\b"
@@ -86,6 +87,7 @@ def _entries(
                 and f.category == "review_candidate"
                 and f.name == o.name
                 and f.kind == o.kind.value
+                and f.endpoint == o.operation.split("/", 1)[0]
                 for f in context.security_facts
             )
         )
@@ -229,6 +231,12 @@ def validate_execution_claims(interpretation: AIInterpretation, context: AIConte
                 state = assertion.lastgroup
                 assert state is not None
                 lower = clause.casefold()
+                # Bounded probe acceptance/rejection is checked against cited security
+                # facts by the scope guard, not borrowed from ordinary Query execution.
+                if assertion[0].casefold() in {"accepted", "rejected"} and re.search(
+                    r"\b(?:alias(?:es)?|batch(?:ing)?|depth)\b", lower
+                ):
+                    continue
                 # A general denial of inference is not a claim that this operation ran.
                 if re.match(
                     r"\s*(?:success(?:ful execution)?|graphql_error|http_error)\s+"
@@ -253,7 +261,14 @@ def validate_execution_claims(interpretation: AIInterpretation, context: AIConte
                         prefix,
                         re.I,
                     )
-                )
+                ) or bool(state in _ERRORS and re.search(r"\bno\s+$", prefix, re.I))
+                if (
+                    state == "attempted"
+                    and not negated
+                    and re.search(r"\b(?:server|resolver)\s+(?:actually\s+)?execute[sd]?\b", lower)
+                    and any(o.execution_status == "network_failure" for o in scope)
+                ):
+                    raise AIValidationError("facts", "unsupported_execution_claim")
                 if scope:
                     supported = all(_operation_supports(o, state) != negated for o in scope)
                 else:

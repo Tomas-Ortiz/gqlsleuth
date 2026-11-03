@@ -14,6 +14,7 @@ from fixtures.whole_scan_ai import CANARIES, SDL, assemble
 from gqlsleuth.ai.context import build_ai_context, serialize_context
 from gqlsleuth.ai.models import MAX_CONTEXT_BYTES, AIAnalysisStatus, AISecurityFact
 from gqlsleuth.ai.prompt import collect_interpretation_quality_warnings, validate_interpretation
+from gqlsleuth.ai.quality import WITHHELD_PROSE
 from gqlsleuth.application import ai_assistance
 from gqlsleuth.application.graphql_detection import discover_and_detect_graphql
 from gqlsleuth.application.introspection import introspect_detected_endpoints
@@ -343,7 +344,8 @@ def test_new_quality_warnings_remain_nonfatal_without_regeneration(phase_ten_sca
         "unsupported_control_claim",
         "unsupported_review_conclusion",
     }
-    assert result.interpretation.model_dump(mode="json") == payload
+    assert result.interpretation.limitations[0].text == WITHHELD_PROSE
+    assert payload["limitations"][0]["text"] not in result.interpretation.model_dump_json()
 
 
 def test_same_name_on_two_endpoints_does_not_share_facts(phase_ten_scan):

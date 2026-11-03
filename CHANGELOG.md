@@ -6,6 +6,28 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- AI grounding now handles equivalent conditional word orders and generic schema descriptions
+  more consistently while checking independent contradictions after review/conditional clauses.
+  Consolidated guidance preserves exact coverage and safety boundaries. Internal content-free
+  field diagnostics associate withholding with existing rule categories without changing reports.
+
+- AI factual checks now cover explicit root-type contradictions, operation-specific review
+  attribution and "did not execute" claims across all interpretation sections. Normal Query
+  execution remains distinct from dedicated control testing. Guidance clarifies exact reference
+  sets and relevant manual follow-ups while preserving grounded conditional security hypotheses.
+
+- AI guidance now favors supplied facts and specific manual checks, withholds unsupported
+  factual security claims, and preserves grounded conditional hypotheses. Bounded input paths,
+  root-list shape and direct nested-list fields improve operation-specific recommendations.
+  Incomplete model fragments receive a distinct notice without rewriting or another inference.
+  Human quality summaries count
+  withheld fields and affected operations separately from warning categories, using content-free
+  decisions without adding canonical JSON fields or extra model calls.
+- AI interpretation now withholds unsupported security/control assertions and execution/coverage
+  contradictions before console or report rendering, retaining valid sibling guidance and safe
+  quality diagnostics. Schema visibility, bounded probe acceptance and successful execution do
+  not establish absent controls, unlimited support or business success. Existing context bounds,
+  inference budgets, deterministic Findings/Evidence and report/AI version-2 contracts are unchanged.
 - Progressive introspection uses a dedicated root-name inventory and evidence-driven alternatives
   for older servers rejecting `includeDeprecated` on recognized introspection selections. Exact
   rejected and compatible requests remain evidence, share the existing budget and do not repeat
