@@ -86,17 +86,15 @@ def test_counts_membership_and_order_preserve_existing_selection(review_state):
     assert view.review_candidate_count == len(expected) == expected_count
     assert dict(view.validation_rows)["Prioritized review items"] == str(expected_count)
     sections = {s.title: s for s in technical_sections(report)}
-    assert dict(sections["Executive Scan Summary"].rows)["Operation review candidate count"] == str(
-        len(report.review_candidates)
-    )
+    assert "Executive Scan Summary" not in sections
     assert dict(sections["GraphQL Security Review"].rows)["Structural review candidates"] == str(
         len(structural)
     )
-    assert [e.title for e in sections["Operation Review Candidates"].entries] == [
-        f"Query {op.name}" for op in report.review_candidates
+    assert [e.title for e in sections["Operation Review"].entries] == [
+        f"Query: {op.name}" for op in report.review_candidates
     ]
     if not report.review_candidates:
-        assert "None recorded." in sections["Operation Review Candidates"].paragraphs
+        assert "None recorded." in sections["Operation Review"].paragraphs
 
 
 @pytest.mark.parametrize("verbose", [False, True])
@@ -115,8 +113,8 @@ def test_console_terminology_without_selection_or_data_changes(review_state, mon
     assert "Manual review candidates" not in text
     assert "Security Review Candidates" not in text
     if verbose:
-        assert "OPERATION REVIEW CANDIDATES" in text
-        assert f"Operation review candidate count {len(report.review_candidates)}" in text
+        assert "OPERATION REVIEW" in text
+        assert "Operation review candidate count" not in text
         assert (
             f"Structural review candidates {len(report.graphql_security_review.candidates)}" in text
         )
@@ -130,12 +128,12 @@ def test_human_report_terms_and_canonical_json_are_independent(review_state, for
     canonical = render_report(report, ReportFormat.JSON)
     text = render_report(report, format).replace("\\", "")
     assert "Prioritized Review" in text and "Prioritized review items" in text
-    assert "Operation Review Candidates" in text and "Operation review candidate count" in text
+    assert "Operation Review" in text and "Operation review candidate count" not in text
     assert "Structural review candidates" in text
     assert PRIORITIZED_REVIEW_NOTICE in text
     assert "Manual review candidates" not in text and "Security review candidate count" not in text
     assert "8 of 15" not in text
-    assert text.rfind("Safety Notice") > text.rfind("Operation Review Candidates")
+    assert text.rfind("Safety Notice") > text.rfind("Operation Review")
     data = json.loads(canonical)
     assert data["report_schema_version"] == 2
     assert data["summary"]["security_review_candidate_count"] == len(report.review_candidates)

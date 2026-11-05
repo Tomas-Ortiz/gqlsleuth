@@ -133,12 +133,12 @@ def test_all_human_formats_share_terms_without_changing_data(accessible_report, 
             verbose=True,
         )
         text = stream.getvalue()
-        assert "ATTACK SURFACE" in text and "OPERATION REVIEW CANDIDATES" in text
+        assert "ATTACK SURFACE" in text and "OPERATION REVIEW" in text
         assert "deleteAllPastes\nEXECUTION\n" in text
         assert "\nREQUEST\nGraphQL document:" in text and "\nRESPONSE\nMETADATA\n" in text
     else:
         text = unescape(render_report(report, ReportFormat(format))).replace("\\", "")
-        assert "Attack Surface" in text and "Operation Review Candidates" in text
+        assert "Attack Surface" in text and "Operation Review" in text
         assert text.count("Safety Notice") == 1
     plain = " ".join(text.split())
     for label in ("Credentials and secrets", "Tokens and sessions", "Read-only business data"):
@@ -150,7 +150,9 @@ def test_all_human_formats_share_terms_without_changing_data(accessible_report, 
     ):
         assert candidate_label(kind) == label and label in plain
         assert kind.value in canonical
-    assert "argument.password" in plain and '"password"' in plain and "(+3)" in plain
+    assert "Matched terms:" in plain and "password" in plain
+    assert "argument.password" in canonical and '"weight": 3' in canonical
+    assert "(+3)" not in plain
     assert "password_credentials:" not in plain
     assert "Execution attempted" in plain and "Attempted (execution evidence)" not in plain
     assert "as a precaution" in plain and '"delete"' in plain

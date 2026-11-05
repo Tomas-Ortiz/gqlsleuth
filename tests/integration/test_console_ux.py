@@ -208,7 +208,7 @@ def test_compact_and_verbose_leave_results_requests_and_all_report_formats_ident
     assert "query {" not in compact.stdout
     assert "Prioritized review items" in compact.stdout
     assert "Use --verbose for technical details" in compact.stdout
-    assert "Interest score" in verbose.stdout and "GENERATED QUERIES" in verbose.stdout
+    assert "Deterministic review:" in verbose.stdout and "GENERATED QUERIES" in verbose.stdout
     assert "canonical JSON report" in verbose.stdout
     assert "Safe Query execution skipped this query as a precaution" in verbose.stdout
     assert len(compact.stdout) < len(verbose.stdout)

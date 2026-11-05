@@ -1,6 +1,9 @@
 """Shared interpretation presentation and application-owned reference metadata."""
 
+from dataclasses import dataclass
+
 from gqlsleuth.ai.models import AIInterpretationResult
+from gqlsleuth.ai.quality import INCOMPLETE_PROSE, WITHHELD_PROSE
 from gqlsleuth.presentation.terminology import category_label
 
 QUALITY_WARNING_DESCRIPTIONS = {
@@ -35,14 +38,23 @@ def quality_warning_description(code: str) -> str:
     )
 
 
-def quality_summary_lines(result: AIInterpretationResult) -> tuple[str, ...]:
+def quality_summary_lines(
+    result: AIInterpretationResult, *, compact: bool = False
+) -> tuple[str, ...]:
     """Count recorded field decisions, never model wording or rendered output.
 
     These presentation-only counters do not change the canonical result schema. A field
     with several warning categories is counted once; two fields may affect one operation.
     """
-    if result.interpretation is None or result.withheld_fields is None:
+    if result.interpretation is None:
         return ()
+    total = len(result.interpretation.operation_interpretations)
+    if result.withheld_fields is None:
+        return (
+            (f"Operation interpretations: {total} supplied; withholding accounting unavailable.",)
+            if compact
+            else ()
+        )
     withheld = set(result.withheld_fields)
     operations = {item.index for item in withheld if item.section == "operation_interpretations"}
     interpretation_count = sum(
@@ -53,18 +65,32 @@ def quality_summary_lines(result: AIInterpretationResult) -> tuple[str, ...]:
         item.section == "operation_interpretations" and item.field == "manual_follow_up"
         for item in withheld
     )
-    total = len(result.interpretation.operation_interpretations)
     warning_count = len(set(result.quality_warnings))
     category = "category" if warning_count == 1 else "categories"
     summary_count = sum(item.section == "summary_interpretation" for item in withheld)
     theme_count = sum(item.section == "review_insights" for item in withheld)
     limitation_count = sum(item.section == "limitations" for item in withheld)
+    if compact:
+        return (
+            f"Operation interpretations: {total - interpretation_count}/{total} retained; "
+            f"{interpretation_count} withheld."
+            if total
+            else "No operation interpretations supplied.",
+            f"Quality: {warning_count} warning {category}; {len(withheld)} "
+            f"{'field' if len(withheld) == 1 else 'fields'} withheld."
+            if warning_count or withheld
+            else "Quality: no withholding recorded.",
+        )
     return (
-        f"AI quality: {warning_count} warning {category}; {len(withheld)} text fields withheld.",
+        f"AI quality: {warning_count} warning {category}; {len(withheld)} text "
+        f"{'field' if len(withheld) == 1 else 'fields'} withheld.",
         f"Operation interpretations: {total - interpretation_count} retained / {total} supplied; "
-        f"{interpretation_count} withheld; {len(operations)} operations affected.",
-        f"Other withheld fields: {follow_up_count} operation follow-ups; "
-        f"{summary_count} summary; {theme_count} cross-operation; {limitation_count} limitations.",
+        f"{interpretation_count} withheld; {len(operations)} "
+        f"{'operation' if len(operations) == 1 else 'operations'} affected.",
+        f"Other withheld fields: {follow_up_count} operation "
+        f"{'follow-up' if follow_up_count == 1 else 'follow-ups'}; "
+        f"{summary_count} summary; {theme_count} cross-operation; {limitation_count} "
+        f"{'limitation' if limitation_count == 1 else 'limitations'}.",
     )
 
 
@@ -75,11 +101,13 @@ def operation_metadata(
     if operation is None:
         return (("Metadata", "Reference projection unavailable"),)
     return (
-        ("Operation", operation.name),
-        ("Kind", operation.kind.value.title()),
         ("Review interest", operation.priority.value.upper().replace("_", " ")),
-        ("Categories", ", ".join(category_label(c.value) for c in operation.categories) or "None"),
-        ("Attempted", "Yes" if operation.attempted else "No"),
+        *(
+            (("Categories", ", ".join(category_label(c.value) for c in operation.categories)),)
+            if operation.categories
+            else ()
+        ),
+    ) + (
         (
             "Execution",
             (
@@ -125,28 +153,64 @@ def usage_rows(result: AIInterpretationResult) -> tuple[tuple[str, str], ...]:
     return rows
 
 
+def operation_label(result: AIInterpretationResult, reference: str) -> str:
+    """Resolve a supplied identity; opaque endpoint labels disambiguate multiple surfaces."""
+    operation = next((o for o in result.references.operations if o.operation == reference), None)
+    if operation is None:
+        return reference
+    label = f"{operation.kind.value.title()}: {operation.name}"
+    endpoints = {o.operation.split("/", 1)[0] for o in result.references.operations}
+    if len(endpoints) > 1:
+        label += " (" + reference.split("/", 1)[0] + ")"
+    return label
+
+
+def prose_label(text: str) -> str:
+    """Shorten only application-owned markers; never edit retained model prose."""
+    return {
+        WITHHELD_PROSE: "Withheld — unsupported by supplied facts",
+        INCOMPLETE_PROSE: "Withheld — incomplete model text",
+    }.get(text, text)
+
+
+@dataclass(frozen=True)
+class AIProseBlock:
+    """Human-only prose layout shared by the console and report projections."""
+
+    title: str = ""
+    details: tuple[tuple[str, str], ...] = ()
+    paragraphs: tuple[str, ...] = ()
+    references: tuple[str, ...] = ()
+
+
 def interpretation_sections(
     result: AIInterpretationResult,
-) -> tuple[tuple[str, tuple[tuple[tuple[str, ...], str], ...]], ...]:
+) -> tuple[tuple[str, tuple[AIProseBlock, ...]], ...]:
     interpretation = result.interpretation
     if interpretation is None:
         return ()
     summary = interpretation.summary_interpretation
     return (
-        ("Interpretive Summary", (((*summary.operations, *summary.security_facts), summary.text),)),
+        (
+            "Interpretive Summary",
+            (
+                AIProseBlock(
+                    paragraphs=(prose_label(summary.text),),
+                    references=(*summary.operations, *summary.security_facts),
+                ),
+            ),
+        ),
         (
             "Operation Analysis",
             tuple(
-                (
-                    (item.operation,),
-                    "\n".join(
-                        f"{label}: {value}"
-                        for label, value in operation_metadata(result, item.operation)
-                    )
-                    + "\nAI interpretation: "
-                    + item.interpretation
-                    + "\nManual follow-up: "
-                    + item.manual_follow_up,
+                AIProseBlock(
+                    title=operation_label(result, item.operation),
+                    details=operation_metadata(result, item.operation),
+                    paragraphs=(
+                        "Interpretation: " + prose_label(item.interpretation),
+                        "Manual follow-up: " + prose_label(item.manual_follow_up),
+                    ),
+                    references=(item.operation,),
                 )
                 for item in interpretation.operation_interpretations
             ),
@@ -154,9 +218,14 @@ def interpretation_sections(
         (
             "Cross-Operation Review Themes",
             tuple(
-                (
-                    (*item.operations, *item.security_facts),
-                    item.interpretation + "\nManual follow-up: " + item.manual_follow_up,
+                AIProseBlock(
+                    title="; ".join(operation_label(result, ref) for ref in item.operations)
+                    or "Security-fact review",
+                    paragraphs=(
+                        prose_label(item.interpretation),
+                        "Manual follow-up: " + prose_label(item.manual_follow_up),
+                    ),
+                    references=(*item.operations, *item.security_facts),
                 )
                 for item in interpretation.review_insights
             ),
@@ -164,7 +233,10 @@ def interpretation_sections(
         (
             "Limitations",
             tuple(
-                ((*item.operations, *item.security_facts), item.text)
+                AIProseBlock(
+                    paragraphs=(prose_label(item.text),),
+                    references=(*item.operations, *item.security_facts),
+                )
                 for item in interpretation.limitations
             ),
         ),

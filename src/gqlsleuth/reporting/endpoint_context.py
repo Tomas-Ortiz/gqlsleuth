@@ -11,6 +11,26 @@ def _endpoint(entry: ReportEntry) -> str | None:
     return endpoints[0] if len(endpoints) == 1 and endpoints[0] else None
 
 
+def inherit_review_endpoint(section: ReportSection, endpoint: str | None) -> ReportSection:
+    """Only final review sections may inherit a unique assessment-header endpoint."""
+    if endpoint is None:
+        return section
+
+    def omit(node: ReportSection) -> ReportSection:
+        return replace(
+            node,
+            endpoint=None if node.endpoint == endpoint else node.endpoint,
+            children=tuple(omit(child) for child in node.children),
+        )
+
+    if section.title in {"Prioritized Review", "Operation Review"}:
+        return omit(group_endpoint_context(section))
+    return replace(
+        section,
+        children=tuple(inherit_review_endpoint(child, endpoint) for child in section.children),
+    )
+
+
 def group_endpoint_context(section: ReportSection) -> ReportSection:
     """Preserve exceptional/unscoped entries locally; never infer endpoints from prose."""
     section = replace(section, children=tuple(group_endpoint_context(s) for s in section.children))

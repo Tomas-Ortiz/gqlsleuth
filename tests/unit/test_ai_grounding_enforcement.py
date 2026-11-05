@@ -169,15 +169,20 @@ def test_mocked_application_all_renderers_never_retain_rejected_prose(prepared, 
         )
         assert "REJECTED_TEXT_CANARY" not in stream.getvalue()
         if verbose or section == "summary":
-            assert "AI text withheld:" in " ".join(stream.getvalue().split())
+            assert "Withheld — unsupported by supplied facts" in " ".join(stream.getvalue().split())
     report = build_report(scan, ai_interpretation=result)
     for format in ReportFormat:
         rendered = render_report(report, format)
         assert "REJECTED_TEXT_CANARY" not in rendered
         normalized = re.sub(r"\\([\W_])", lambda match: match[1], rendered)
-        assert WITHHELD_PROSE in normalized
+        marker = (
+            WITHHELD_PROSE
+            if format is ReportFormat.JSON
+            else "Withheld — unsupported by supplied facts"
+        )
+        assert marker in normalized
         if format is not ReportFormat.JSON:
-            assert normalized.rfind("Safety Notice") > normalized.find(WITHHELD_PROSE)
+            assert normalized.rfind("Safety Notice") > normalized.find(marker)
     canonical = json.loads(render_report(report, ReportFormat.JSON))
     assert (
         canonical["report_schema_version"]

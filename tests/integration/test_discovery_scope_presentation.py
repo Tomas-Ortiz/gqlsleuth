@@ -128,10 +128,10 @@ def test_actual_scope_across_console_reports_and_unchanged_scan_facts(
             Console(file=output, width=width, theme=CONSOLE_THEME), result, verbose=verbose
         )
         text = " ".join(output.getvalue().split())
-        assert ("Additional same-origin paths checked:" in text) is expanded
+        assert ("Additional same-origin paths checked:" in text) is (expanded and verbose)
         assert "GraphQL endpoint:" in text
         assert origin + "/graphql" in text.replace(" ", "")
-        if expanded:
+        if expanded and verbose:
             assert "redirects are followed" in text
     for format in (ReportFormat.MARKDOWN, ReportFormat.HTML):
         text = unescape(render_report(report, format))

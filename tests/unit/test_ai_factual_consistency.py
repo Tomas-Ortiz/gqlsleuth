@@ -348,7 +348,12 @@ def test_mocked_application_preserves_reports_and_one_inference(factual, monkeyp
     for format in ReportFormat:
         rendered = render_report(build_report(scan, ai_interpretation=result), format)
         assert text not in rendered
-        assert WITHHELD_PROSE in html.unescape(rendered).replace("\\.", ".")
+        marker = (
+            WITHHELD_PROSE
+            if format is ReportFormat.JSON
+            else "Withheld — unsupported by supplied facts"
+        )
+        assert marker in html.unescape(rendered).replace("\\.", ".")
         if format is ReportFormat.JSON:
             assert json.loads(rendered)["report_schema_version"] == result.ai_contract_version == 2
             assert "schema_structure" not in rendered

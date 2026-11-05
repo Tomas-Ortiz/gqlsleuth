@@ -200,11 +200,10 @@ def test_json_preserves_arbitrary_response_bytes_and_existing_headers_without_re
 
 MAJOR_SECTIONS = [
     "Scan Overview",
-    "Executive Scan Summary",
     "GraphQL Discovery and Confirmation",
     "Introspection",
     "Schema Summary",
-    "Operation Review Candidates",
+    "Operation Review",
     "Generated Queries",
     "Safe Query Execution",
     "Evidence Summary",
@@ -232,8 +231,8 @@ def test_human_reports_share_sections_interest_labels_and_omit_raw_bodies(report
     assert "is vulnerable" not in rendered
     assert "Invalid placeholder" in rendered
     assert "query ($id: ID!)" in rendered
-    assert "GraphQL endpoint count" in rendered
-    assert "Query GraphQL error count" in rendered
+    assert "GraphQL endpoints" in rendered
+    assert "GRAPHQL_ERROR" in rendered.replace("\\", "")
     assert "Graphql endpoint count" not in rendered
     assert "Query graphql error count" not in rendered
     if format is ReportFormat.MARKDOWN:
@@ -261,17 +260,17 @@ def test_active_human_reports_show_executed_mutation_documents(report_results, f
 def test_human_sections_do_not_repeat_rule_or_mutation_reasons(report_results):
     active = build_report(report_results[1])
     sections = {section.title: section for section in technical_sections(active)}
-    review_entry = sections["Operation Review Candidates"].entries[0]
+    review_entry = sections["Operation Review"].entries[0]
     review_candidate = active.review_candidates[0]
     assert len(review_entry.paragraphs) == len(review_candidate.matched_rules)
     assert all(reason not in review_entry.paragraphs for reason in review_candidate.reasons)
     for paragraph, match in zip(
         review_entry.paragraphs, review_candidate.matched_rules, strict=True
     ):
-        assert "Matched" in paragraph and "Technical location" in paragraph
-        assert f"(+{match.weight})" in paragraph
+        assert "Matched terms:" in paragraph and match.reason in paragraph
+        assert f"(+{match.weight})" not in paragraph
         assert all(keyword in paragraph for keyword in match.matched_keywords)
-        assert all(location in paragraph for location in match.locations)
+        assert match.locations  # Retained in canonical analysis, omitted from the short reason.
 
     blocked = next(
         entry

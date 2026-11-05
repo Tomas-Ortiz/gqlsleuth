@@ -345,10 +345,12 @@ def test_human_ai_sections_escape_prose_and_preserve_deterministic_reports(whole
         text = render_report(after, kind)
         for title in (
             "Interpretive Summary",
-            "Operation Analysis",
-            "Cross-Operation Review Themes",
+            "Operation Review",
         ):
             assert title in text.replace("\\-", "-")
+        assert ("Cross-Operation Review Themes" in text.replace("\\-", "-")) is bool(
+            interpretation.interpretation.review_insights
+        )
         assert "<script>alert" not in text
         assert text.count("Safety Notice") == 1 and text.rfind("Safety Notice") > text.rfind(
             "AI-Assisted Interpretation"

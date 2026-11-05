@@ -91,6 +91,7 @@ def _json_value(value: object) -> JsonValue:
             field.name: _json_value(getattr(value, field.name))
             for field in fields(value)
             if not (isinstance(value, EndpointReport) and field.name == "recovery")
+            if not (isinstance(value, ReportContext) and field.name == "ai_endpoint_urls")
             if not (isinstance(value, AIInterpretationResult) and field.name == "withheld_fields")
             if not (
                 isinstance(value, (ReportContext, DifferentialReportContext))

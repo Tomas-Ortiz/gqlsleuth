@@ -27,12 +27,13 @@ def bound_section(section: ReportSection) -> ReportSection:
     """Cap collections before endpoint grouping, with explicit retained-data notices."""
     if section.title in {"AI-Assisted Interpretation", "Safety Notice"}:
         return section
+    detail_limit = (
+        MAX_HUMAN_INVENTORY_ITEMS if section.title == "Operation Review" else MAX_HUMAN_DETAIL_ITEMS
+    )
     notices = []
-    if len(section.entries) > MAX_HUMAN_DETAIL_ITEMS:
+    if len(section.entries) > detail_limit:
         notices.append(
-            showing_notice(
-                MAX_HUMAN_DETAIL_ITEMS, len(section.entries), "available detail sections"
-            )
+            showing_notice(detail_limit, len(section.entries), "available detail sections")
         )
     if len(section.table_rows) > MAX_HUMAN_INVENTORY_ITEMS:
         notices.append(
@@ -41,7 +42,7 @@ def bound_section(section: ReportSection) -> ReportSection:
     return replace(
         section,
         paragraphs=section.paragraphs + tuple(notices),
-        entries=section.entries[:MAX_HUMAN_DETAIL_ITEMS],
+        entries=section.entries[:detail_limit],
         table_rows=section.table_rows[:MAX_HUMAN_INVENTORY_ITEMS],
         children=tuple(bound_section(child) for child in section.children),
     )

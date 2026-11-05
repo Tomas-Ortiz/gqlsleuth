@@ -1,17 +1,21 @@
 """One human-readable section layout shared by Markdown and HTML templates."""
 
 import json
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, replace
 
 from gqlsleuth.ai.models import AI_NOTICE, AIInterpretationResult
 from gqlsleuth.ai.sections import quality_warning_description
 from gqlsleuth.domain.models import ConfidenceLevel, Evidence
 from gqlsleuth.domain.multiplicity import MULTIPLICITY_NOTICE
 from gqlsleuth.domain.query_depth import DEPTH_NOTICE
-from gqlsleuth.domain.security_review import SECURITY_REVIEW_NOTICE, GraphQLSecurityReviewResult
-from gqlsleuth.presentation.assessment import schema_count_label
+from gqlsleuth.domain.security_review import (
+    SECURITY_REVIEW_NOTICE,
+    GraphQLSecurityReviewResult,
+    SecurityCandidateType,
+)
 from gqlsleuth.presentation.capabilities import capability_wording
 from gqlsleuth.presentation.discovery_scope import discovery_scope_notes
+from gqlsleuth.presentation.limits import MAX_HUMAN_DETAIL_ITEMS, showing_notice
 from gqlsleuth.presentation.multiplicity import probe_guidance, probe_label, probe_response
 from gqlsleuth.presentation.object_lookup import (
     FOLLOW_UP_NOTICE,
@@ -23,11 +27,12 @@ from gqlsleuth.presentation.responses import (
     NULL_DATA_NOTICE,
     SUCCESS_NOTICE,
     ResponsePresentation,
+    compact_mutation_body,
     present_response,
     success_with_null_data,
 )
 from gqlsleuth.presentation.security_review import candidate_facts, candidate_label, review_wording
-from gqlsleuth.presentation.terminology import category_label, execution_reason, rule_explanation
+from gqlsleuth.presentation.terminology import category_label, execution_reason
 from gqlsleuth.reporting.models import OperationReport, ReportContext
 
 
@@ -41,6 +46,7 @@ class ReportEntry:
     response: ResponsePresentation | None = None
     evidence_references: tuple[tuple[str, str], ...] = ()
     execution: bool = False
+    references: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -84,6 +90,8 @@ def introspection_section(report: ReportContext) -> ReportSection:
 
 def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
     """Present recorded facts; response parsing is display-only, never classification."""
+    from gqlsleuth.reporting.operation_review import operation_review_section
+
     scope_notes = discovery_scope_notes(report.target, report.evidence)
     sections = [
         ReportSection(
@@ -94,18 +102,6 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                 ("Report timestamp (UTC)", report.generated_at.isoformat()),
                 ("GQLSleuth version", report.gqlsleuth_version),
                 ("Report schema version", str(report.report_schema_version)),
-            ),
-        ),
-        ReportSection(
-            "Executive Scan Summary",
-            rows=tuple(
-                (
-                    _human_label(key),
-                    schema_count_label(report, value)
-                    if key in {"query_count", "mutation_count", "subscription_count"}
-                    else str(value),
-                )
-                for key, value in report.summary.items()
             ),
         ),
         ReportSection(
@@ -156,44 +152,23 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
                         else ()
                     ),
                     details=tuple(
-                        (
-                            _human_label(field.name),
-                            str(getattr(item.schema_summary, field.name)),
+                        (label, str(value))
+                        for label, value in (
+                            ("Query root", item.schema_summary.query_root),
+                            ("Mutation root", item.schema_summary.mutation_root),
+                            ("Subscription root", item.schema_summary.subscription_root),
+                            ("Custom scalars", item.schema_summary.custom_scalar_type_count),
+                            ("Interfaces", item.schema_summary.interface_type_count),
+                            ("Unions", item.schema_summary.union_type_count),
                         )
-                        for field in fields(item.schema_summary)
-                    )
-                    + (("Analyzed root operations", str(item.analyzed_operation_count)),),
+                        if value
+                    ),
                 )
                 for item in report.endpoints
                 if item.schema_summary
             ),
         ),
-        ReportSection(
-            "Operation Review Candidates",
-            paragraphs=(
-                "Priority indicates manual-review interest, not vulnerability severity. "
-                "Operations remain in review-priority order, with the reasons for each score.",
-            )
-            + (("None recorded.",) if not report.review_candidates else ()),
-            entries=tuple(
-                ReportEntry(
-                    f"{item.kind.value.title()} {item.name}",
-                    details=(
-                        ("Endpoint", item.endpoint),
-                        ("Priority", item.priority.value.replace("_", " ").upper()),
-                        ("Interest score", str(item.interest_score)),
-                        (
-                            "Categories",
-                            ", ".join(
-                                category_label(category.value) for category in item.categories
-                            ),
-                        ),
-                    ),
-                    paragraphs=tuple(rule_explanation(match) for match in item.matched_rules),
-                )
-                for item in report.review_candidates
-            ),
-        ),
+        operation_review_section(report),
         *(
             [
                 security_review_section(
@@ -420,7 +395,7 @@ def technical_sections(report: ReportContext) -> tuple[ReportSection, ...]:
 
         sections.extend(abuse_control_sections(report.rate_limiting_abuse_controls))
     if report.ai_interpretation is not None:
-        sections.append(ai_section(report.ai_interpretation))
+        sections.append(ai_section(report.ai_interpretation, include_operations=False))
     sections.append(
         ReportSection(
             "Safety Notice",
@@ -495,6 +470,72 @@ def security_review_section(
         )
         for item in review.candidates
     )
+    # Apply the existing global detail cap before grouping, not independently per group.
+    visible = entries[:MAX_HUMAN_DETAIL_ITEMS]
+    groups: dict[tuple[str, str, str], list[int]] = {}
+    for index, candidate in enumerate(review.candidates[:MAX_HUMAN_DETAIL_ITEMS]):
+        if candidate.candidate_type is SecurityCandidateType.OBJECT_LOOKUP_REVIEW:
+            key = (candidate.endpoint, candidate.deterministic_reason, candidate.review_guidance)
+            groups.setdefault(key, []).append(index)
+    grouped: set[int] = set()
+    children = []
+    for (endpoint, reason, guidance), indices in groups.items():
+        if len(indices) < 2:
+            continue
+        grouped.update(indices)
+        shared: tuple[str, ...] = (
+            review_wording(reason),
+            "Manual review: " + review_wording(guidance),
+        )
+        if any(FOLLOW_UP_NOTICE in visible[i].paragraphs for i in indices):
+            shared += (FOLLOW_UP_NOTICE,)
+        rows = []
+        details = []
+        for index in indices:
+            candidate = review.candidates[index]
+            entry = visible[index]
+            hint = next(
+                (
+                    h
+                    for h in follow_ups
+                    if h.endpoint == endpoint and candidate.subject == f"query {h.operation}"
+                ),
+                None,
+            )
+            rows.append(
+                (
+                    candidate.subject,
+                    f"{hint.identifier_argument}: {hint.identifier_type}"
+                    if hint
+                    else "See supporting facts",
+                    hint.return_type
+                    if hint
+                    else candidate.related_operation.return_type.render()
+                    if candidate.related_operation
+                    else "See supporting facts",
+                    dict(entry.details).get("Review interest", "Not recorded"),
+                )
+            )
+            details.append(
+                replace(
+                    entry,
+                    title=candidate.subject,
+                    details=tuple(
+                        p for p in entry.details if p[0] not in {"Endpoint", "Review interest"}
+                    ),
+                    paragraphs=tuple(p for p in entry.paragraphs if p not in shared),
+                )
+            )
+        children.append(
+            ReportSection(
+                "Object Lookup Review",
+                endpoint=endpoint,
+                paragraphs=(f"{len(indices)} operations identified for manual review.", *shared),
+                table_headers=("Operation", "Argument", "Return type", "Review interest"),
+                table_rows=tuple(rows),
+                entries=tuple(details),
+            )
+        )
     return ReportSection(
         "GraphQL Security Review" + (f" — Context: {context}" if context else ""),
         paragraphs=(review_wording(SECURITY_REVIEW_NOTICE),)
@@ -507,9 +548,15 @@ def security_review_section(
                 if review.analyzed_endpoints
                 else "Structural review was not performed: no parsed schema.",
             )
+        )
+        + (
+            (showing_notice(MAX_HUMAN_DETAIL_ITEMS, len(entries), "structural review details"),)
+            if len(entries) > MAX_HUMAN_DETAIL_ITEMS
+            else ()
         ),
         rows=(("Structural review candidates", str(len(review.candidates))),),
-        entries=entries
+        children=tuple(children),
+        entries=tuple(entry for index, entry in enumerate(visible) if index not in grouped)
         + tuple(
             ReportEntry(
                 "Limitation",
@@ -521,67 +568,46 @@ def security_review_section(
     )
 
 
-def ai_section(result: AIInterpretationResult) -> ReportSection:
+def ai_section(result: AIInterpretationResult, *, include_operations: bool = True) -> ReportSection:
     """Present an already-produced interpretation without modifying deterministic sections."""
-    from gqlsleuth.ai.sections import operation_metadata, quality_summary_lines, usage_rows
+    from gqlsleuth.ai.sections import interpretation_sections, quality_summary_lines, usage_rows
 
     entries: list[ReportEntry] = []
+    children: list[ReportSection] = []
     interpretation = result.interpretation
     if interpretation is not None:
-        summary = interpretation.summary_interpretation
         entries = [
             ReportEntry(
                 "Execution Summary (deterministic facts)",
                 paragraphs=(result.execution_summary or "Not recorded.",),
             ),
-            ReportEntry(
-                "Interpretive Summary",
-                paragraphs=(summary.text,),
-                details=(
-                    ("References", ", ".join((*summary.operations, *summary.security_facts))),
-                ),
-            ),
-            ReportEntry(
-                "Operation Analysis",
-                paragraphs=(
-                    f"{len(interpretation.operation_interpretations)} supplied operations "
-                    f"interpreted; {result.context_metadata.operations_omitted} omitted "
-                    "from bounded AI context.",
-                ),
-            ),
-            *(
-                ReportEntry(
-                    item.operation,
-                    details=operation_metadata(result, item.operation),
-                    paragraphs=(
-                        "AI interpretation: " + item.interpretation,
-                        "Manual follow-up: " + item.manual_follow_up,
-                    ),
-                )
-                for item in interpretation.operation_interpretations
-            ),
-            ReportEntry("Cross-Operation Review Themes"),
-            *(
-                ReportEntry(
-                    ", ".join((*item.operations, *item.security_facts)),
-                    paragraphs=(item.interpretation, "Manual follow-up: " + item.manual_follow_up),
-                )
-                for item in interpretation.review_insights
-            ),
-            ReportEntry(
-                "Limitations", paragraphs=tuple(item.text for item in interpretation.limitations)
-            ),
         ]
+        children.extend(
+            ReportSection(
+                title,
+                entries=tuple(
+                    ReportEntry(
+                        block.title,
+                        details=block.details,
+                        paragraphs=block.paragraphs,
+                        references=block.references,
+                    )
+                    for block in blocks
+                ),
+            )
+            for title, blocks in interpretation_sections(result)
+            if blocks and (include_operations or title != "Operation Analysis")
+        )
         controls = tuple(
             f
             for f in result.references.security_facts
             if f.control_observed or f.evaluation == "satisfied"
         )
         if controls:
-            entries.append(
-                ReportEntry(
+            children.append(
+                ReportSection(
                     "Scoped Controls (deterministic facts)",
-                    details=tuple(
+                    rows=tuple(
                         (
                             fact.security_fact_ref + " / " + fact.capability.value,
                             str(
@@ -612,7 +638,22 @@ def ai_section(result: AIInterpretationResult) -> ReportSection:
         )
     if quality_lines := quality_summary_lines(result):
         entries.insert(0, ReportEntry("AI Quality Summary", paragraphs=quality_lines))
-    entries.append(ReportEntry("AI Generation Metadata", details=usage_rows(result)))
+    children.append(
+        ReportSection(
+            "AI Generation Metadata",
+            rows=usage_rows(result)
+            + (
+                ("Security facts supplied", str(result.context_metadata.security_facts_included)),
+                ("Security facts omitted", str(result.context_metadata.security_facts_omitted)),
+                ("Deterministic Findings", str(result.context_metadata.deterministic_findings)),
+                ("Policy violations", str(result.context_metadata.policy_violations)),
+                ("Satisfied policies", str(result.context_metadata.policy_satisfied)),
+                ("Unresolved policies", str(result.context_metadata.policy_unresolved)),
+                ("Context bytes", str(result.context_metadata.serialized_bytes)),
+            ),
+            collapsed=True,
+        )
+    )
     return ReportSection(
         "AI-Assisted Interpretation",
         paragraphs=(AI_NOTICE,) + ((result.error_message,) if result.error_message else ()),
@@ -621,16 +662,10 @@ def ai_section(result: AIInterpretationResult) -> ReportSection:
             ("AI status", result.status.value.upper()),
             ("Operations supplied", str(result.context_metadata.operations_included)),
             ("Operations omitted", str(result.context_metadata.operations_omitted)),
-            ("Security facts supplied", str(result.context_metadata.security_facts_included)),
-            ("Security facts omitted", str(result.context_metadata.security_facts_omitted)),
-            ("Deterministic Findings", str(result.context_metadata.deterministic_findings)),
-            ("Policy violations", str(result.context_metadata.policy_violations)),
-            ("Satisfied policies", str(result.context_metadata.policy_satisfied)),
-            ("Unresolved policies", str(result.context_metadata.policy_unresolved)),
-            ("Context bytes", str(result.context_metadata.serialized_bytes)),
             ("Context truncated", "Yes" if result.context_metadata.context_truncated else "No"),
         ),
         entries=tuple(entries),
+        children=tuple(children),
     )
 
 
@@ -713,6 +748,13 @@ def _execution_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ())
 
 def _mutation_entry(item: OperationReport, evidence: tuple[Evidence, ...] = ()) -> ReportEntry:
     execution = _execution_entry(item, evidence)
+    if execution.response and item.execution and item.execution.response:
+        execution = replace(
+            execution,
+            response=replace(
+                execution.response, body=compact_mutation_body(item.execution.response.body)
+            ),
+        )
     artifact = item.generated
     return ReportEntry(
         f"[{item.candidate_index}] {artifact.operation_name}",

@@ -406,7 +406,7 @@ def test_complete_workflow_evidence_reports_ai_and_execution_boundaries(monkeypa
         text = " ".join(output.getvalue().split())
         assert (
             "PROGRESSIVE" in text
-            and "Recovery method" in text
+            and (("Recovery method" in text) is (renderer is render_pre_active_context))
             and "FAKE_RECOVERY_CANARY" not in text
         )
     context = serialize_context(build_ai_context(result))

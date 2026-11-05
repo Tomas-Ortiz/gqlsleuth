@@ -43,7 +43,8 @@
 <p class="subsection {{ class_name }}"><strong>{{ text }}</strong></p>
 {% endif %}
 {% endmacro %}
-{% macro render_section(section, level=2) %}
+{% macro render_section(section, level=2, ai=false) %}
+{% set ai = ai or section.title in ['AI-Assisted Interpretation', 'Operation Review'] %}
 {% if section.collapsed %}
 <details class="technical">
 <summary>{{ section.title }}</summary>
@@ -76,7 +77,9 @@
 {% endif %}
 {% for entry in section.entries %}
     <article>
+{% if entry.title %}
       {{ heading(entry.title | brief, entry_level) }}
+{% endif %}
 {% if entry.execution %}
       {{ heading('Execution', entry_level + 1, 'subsection') }}
 {% endif %}
@@ -98,8 +101,11 @@
       </details>
 {% endif %}
 {% for paragraph in entry.paragraphs %}
-      <p>{{ paragraph if section.title == 'AI-Assisted Interpretation' else paragraph | brief }}</p>
+      <p>{{ paragraph if ai else paragraph | brief }}</p>
 {% endfor %}
+{% if entry.references %}
+      <details><summary>References</summary><p>{{ entry.references | join(', ') }}</p></details>
+{% endif %}
 {% for language, text in entry.code_blocks %}
       <pre><code class="language-{{ language }}">{{ text }}</code></pre>
 {% endfor %}
@@ -144,7 +150,7 @@
     <p class="empty-state">None recorded.</p>
 {% endif %}
 {% for child in section.children %}
-{{ render_section(child, level + 1) }}
+{{ render_section(child, level + 1, ai) }}
 {% endfor %}
 {% if section.collapsed %}</details>{% else %}</section>{% endif %}
 {% endmacro %}

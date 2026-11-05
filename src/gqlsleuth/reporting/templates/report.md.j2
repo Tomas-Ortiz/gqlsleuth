@@ -3,7 +3,8 @@
 {% macro heading(text, level) -%}
 {{ ('#' * level ~ ' ' ~ text) if level <= 6 else ('**' ~ text ~ '**') }}
 {%- endmacro %}
-{% macro render_section(section, level=2) %}
+{% macro render_section(section, level=2, ai=false) %}
+{% set ai = ai or section.title in ['AI-Assisted Interpretation', 'Operation Review'] %}
 {% if section.title %}
 {{ heading(section.title, level) }}
 
@@ -34,21 +35,28 @@
 
 {% endif %}
 {% for entry in section.entries %}
+{% if entry.title %}
 {{ heading(entry.title | markdown_text, entry_level) }}
 
+{% endif %}
 {% if entry.execution %}
 {{ heading('Execution', entry_level + 1) }}
 
 {% endif %}
-
+{% if entry.details %}
 {% for label, value in entry.details %}
 - **{{ label | markdown_text }}:** {{ value | markdown_text }}
 {% endfor %}
 
+{% endif %}
 {% for paragraph in entry.paragraphs %}
-{{ paragraph | markdown_text(section.title != 'AI-Assisted Interpretation') }}
+{{ paragraph | markdown_text(not ai) }}
 
 {% endfor %}
+{% if entry.references %}
+**References:** {{ entry.references | map('markdown_text') | join(', ') }}
+
+{% endif %}
 {% for language, text in entry.code_blocks %}
 {{ text | fenced(language) }}
 
@@ -99,7 +107,7 @@ No HTTP response was received; no server response body is available.
 
 {% endif %}
 {% for child in section.children %}
-{{ render_section(child, level + 1) }}
+{{ render_section(child, level + 1, ai) }}
 {% endfor %}
 {% endmacro %}
 {% for section in sections %}

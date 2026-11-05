@@ -6,6 +6,28 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- Final human assessments place Operation Review before Query Execution, omit internal missing-detail
+  placeholders and inherit single-endpoint review context from the header. Equivalent Object Lookup
+  reviews share guidance while retaining operation-specific details and traceability. Compact AI
+  metadata distinguishes warning categories from withheld fields without repeated breakdowns;
+  small Mutation previews use a single status line. Display caps, preview eligibility, canonical
+  data and all scanning/consent/AI behavior are unchanged.
+
+- Simplified human summary/schema inventories while preserving exhaustive canonical JSON.
+  Operation Review combines separately attributed deterministic reasons and optional AI prose,
+  with exact endpoint/kind/name association, explicit display caps and concise withholding labels.
+  Default Mutation results now show bounded identifier-only responses or explicit value-omission
+  notices and GraphQL error counts; exact Evidence is unchanged. Offline withholding investigation
+  preserved factual guards, inference limits and scanner behavior.
+
+- Human assessments prioritize Findings before capability details, separate review kind/operation/
+  focus, and avoid zero-only technical counts in compact console output. Full counts remain in
+  verbose output and reports; zero Findings explicitly provides no overall security assurance.
+- AI human output uses operation-oriented prose blocks with compact execution/review-interest
+  metadata, concise withholding labels and subordinate exact references. Markdown/HTML share
+  the layout; generation metadata follows the interpretation and HTML collapses references.
+  Retained prose, canonical JSON schema 2, AI contract 2 and scanner behavior are unchanged.
+
 - AI grounding now handles equivalent conditional word orders and generic schema descriptions
   more consistently while checking independent contradictions after review/conditional clauses.
   Consolidated guidance preserves exact coverage and safety boundaries. Internal content-free

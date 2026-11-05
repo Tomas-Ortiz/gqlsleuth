@@ -7,6 +7,7 @@ from gqlsleuth.presentation.assessment import (
 )
 from gqlsleuth.presentation.endpoints import endpoint_groups
 from gqlsleuth.presentation.limits import MAX_HUMAN_INVENTORY_ITEMS, showing_notice
+from gqlsleuth.reporting.endpoint_context import inherit_review_endpoint
 from gqlsleuth.reporting.models import ReportContext
 from gqlsleuth.reporting.presentation import ReportEntry, ReportSection, technical_sections
 
@@ -15,7 +16,6 @@ TECHNICAL_GROUPS = (
         "Discovery & Schema",
         (
             "Scan Overview",
-            "Executive Scan Summary",
             "GraphQL Discovery and Confirmation",
             "Introspection",
             "Schema Summary",
@@ -24,7 +24,7 @@ TECHNICAL_GROUPS = (
     (
         "Attack Surface",
         (
-            "Operation Review Candidates",
+            "Operation Review",
             "GraphQL Security Review",
             "Sensitive Input Review",
             "Generated Queries",
@@ -101,9 +101,11 @@ def assessment_sections(report: ReportContext) -> tuple[ReportSection, ...]:
             "Assessment Summary",
             rows=(
                 ("Target", summary.target),
+                *(("GraphQL endpoint", endpoint) for endpoint in summary.endpoints),
                 ("Mode", summary.mode),
                 *summary.validation_rows,
             ),
+            paragraphs=(summary.validation_notice,),
         ),
         ReportSection("GraphQL Attack Surface", rows=summary.overview),
     ]
@@ -169,4 +171,11 @@ def assessment_sections(report: ReportContext) -> tuple[ReportSection, ...]:
         ReportSection("Detailed Technical Results", children=grouped_technical_sections(technical))
     )
     sections.extend(s for s in technical if s.title == "Safety Notice")
-    return tuple(sections)
+    represented = (
+        set(summary.endpoints)
+        | {item.endpoint for item in summary.manual_review if item.endpoint}
+        | {item.endpoint for item in report.review_candidates}
+    )
+    represented.update(url for _, url in report.ai_endpoint_urls if report.ai_interpretation)
+    inherited = summary.endpoints[0] if len(summary.endpoints) == len(represented) == 1 else None
+    return tuple(inherit_review_endpoint(section, inherited) for section in sections)

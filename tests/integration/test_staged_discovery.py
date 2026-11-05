@@ -321,7 +321,9 @@ def test_extended_endpoint_continues_safe_pipeline_and_reports_actual_bounded_sc
     for width in (45, 100):
         output = StringIO()
         render_completed_assessment(
-            Console(file=output, width=width, color_system=None, theme=CONSOLE_THEME), result
+            Console(file=output, width=width, color_system=None, theme=CONSOLE_THEME),
+            result,
+            verbose=True,
         )
         text = " ".join(output.getvalue().split())
         assert "Showing 10 of 27 additional discovery candidates" in text

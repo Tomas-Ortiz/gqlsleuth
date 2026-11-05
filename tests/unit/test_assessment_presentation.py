@@ -207,9 +207,7 @@ def test_human_operation_counts_distinguish_unknown_partial_and_zero(phase_ten_s
         expected_absent_roots = "0 (partial coverage)"
     assert overview["Queries"] == expected_queries
     assert overview["Mutations"] == overview["Subscriptions"] == expected_absent_roots
-    executive = next(s for s in technical_sections(report) if s.title == "Executive Scan Summary")
-    assert dict(executive.rows)["Query count"] == expected_queries
-    assert dict(executive.rows)["Mutation count"] == expected_absent_roots
+    assert all(s.title != "Executive Scan Summary" for s in technical_sections(report))
     for format in (ReportFormat.MARKDOWN, ReportFormat.HTML):
         rendered = render_report(report, format)
         assert expected_queries in rendered.replace("\\", "")

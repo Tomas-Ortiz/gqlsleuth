@@ -195,8 +195,9 @@ def test_structured_presentation_and_unchanged_canonical_fields(monkeypatch, dep
         verbose=verbose,
     )
     text = " ".join(output.getvalue().split())
-    assert text.count("Recovery method") == 1
-    assert "Stop reason" in text and "PROGRESSIVE" in text
+    assert text.count("Recovery method") == int(verbose)
+    assert ("Stop reason" in text) is verbose
+    assert "PROGRESSIVE" in text
     assert "\x1b" not in output.getvalue()
     overview = build_assessment(report).overview
     assert not any("Known Queries" in value for _, value in overview)

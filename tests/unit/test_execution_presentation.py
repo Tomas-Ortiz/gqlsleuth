@@ -297,7 +297,8 @@ def test_reports_show_attempted_query_and_mutation_responses_safely(execution_vi
     context = build_report(active, generated_at=STAMP)
     before = render_report(context, ReportFormat.JSON)
     output = render_report(context, format)
-    assert "QUERY_BODY" not in output and "MUTATION_BODY" in output
+    assert "QUERY_BODY" not in output and "MUTATION_BODY" not in output
+    assert "Response values omitted from compact preview" in output
     assert "OBSERVED_ERROR" in output and "PLAIN_BODY" in output
     assert "Binary/unrenderable" in output
     assert "BODY_PREFIX" not in output and "UNSHOWN_TAIL" not in output
@@ -470,12 +471,11 @@ def test_rendered_titles_and_tables_use_structural_styles(execution_views, ai_vi
         "SELECTED MUTATIONS:",
         "MUTATION EXECUTION",
         "AI-ASSISTED INTERPRETATION",
-        "AI GENERATION METADATA",
         "EXECUTION SUMMARY (VALIDATED FACTS)",
         "INTERPRETIVE SUMMARY",
         "OPERATION ANALYSIS",
-        "CROSS-OPERATION REVIEW THEMES",
         "LIMITATIONS",
+        "AI GENERATION METADATA",
     ]
     for table in tables:
         stream = StringIO()
@@ -500,9 +500,11 @@ def test_structural_console_spacing(execution_views, ai_view, width):
         "LIMITATIONS",
     ):
         assert_separated(output, title)
-    assert "Model: qwen3:8b\n\nAI GENERATION METADATA" in output
+    assert "Model: qwen3:8b\nAI status: SUCCESS" in output
     assert "AI status: SUCCESS\n\nEXECUTION SUMMARY" in output
-    assert "OPERATION ANALYSIS\n\n" in output
+    assert "OPERATION ANALYSIS\n" in output
+    assert output.index("LIMITATIONS") < output.index("AI GENERATION METADATA")
+    assert_separated(output, "AI GENERATION METADATA")
     for rendered in (compact, output):
         assert "\n\n\n" not in rendered
         assert max(map(len, rendered.splitlines())) <= width

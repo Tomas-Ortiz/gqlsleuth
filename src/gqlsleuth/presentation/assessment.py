@@ -19,10 +19,9 @@ DEFAULT_MAX_AI_INSIGHTS = 3
 
 PRIORITIZED_REVIEW_TITLE = "Prioritized Review"
 PRIORITIZED_REVIEW_NOTICE = (
-    "This shortlist covers schema patterns and input fields that need review. "
-    "It also counts CRITICAL/HIGH-interest operations not already listed. "
-    "Policy violations and attempted checks with inconclusive results may also appear. "
-    "The same item may appear in more than one detailed review."
+    "Manual-review shortlist, not a list of confirmed vulnerabilities. "
+    "Includes schema/input candidates, unrepresented CRITICAL/HIGH-interest operations, "
+    "policy violations and attempted unresolved checks. Detailed candidate sets may overlap."
 )
 
 CAPABILITY_ORDER = (
@@ -82,6 +81,24 @@ class AssessmentPresentationSummary:
             ("Scoped controls observed", str(self.scoped_controls_observed)),
             ("Unresolved checks", str(self.unresolved_checks)),
             ("Prioritized review items", str(self.review_candidate_count)),
+        )
+
+    @property
+    def compact_validation_rows(self) -> tuple[tuple[str, str], ...]:
+        """Keep the Finding/review totals; zero-only technical counts remain in detail."""
+        return tuple(
+            row
+            for row in self.validation_rows
+            if row[1] != "0" or row[0] in {"Findings", "Prioritized review items"}
+        )
+
+    @property
+    def validation_notice(self) -> str:
+        return (
+            "Findings apply to the recorded evidence and tested cases."
+            if self.findings
+            else "No deterministic Findings were produced by the executed checks; "
+            "this does not establish target security."
         )
 
 

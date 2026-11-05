@@ -241,8 +241,9 @@ def test_twelve_operation_accounting_and_all_output_surfaces(
     assert f"1 warning category; {8 + extra_follow_up} text fields withheld" in lines[0]
     assert "5 retained / 12 supplied; 7 withheld; 7 operations affected" in lines[1]
     assert (
-        f"{int(extra_follow_up)} operation follow-ups; 0 summary; 1 cross-operation; 0 limitations"
-        in lines[2]
+        f"{int(extra_follow_up)} operation "
+        f"{'follow-up' if extra_follow_up else 'follow-ups'}; "
+        "0 summary; 1 cross-operation; 0 limitations" in lines[2]
     )
     # Duplicate paths and presentation text cannot inflate structured accounting.
     duplicate = replace(result, withheld_fields=result.withheld_fields * 2)
@@ -265,7 +266,7 @@ def test_twelve_operation_accounting_and_all_output_surfaces(
             )
             normalized = " ".join(stream.getvalue().split())
             assert "REJECTED_2B_CANARY" not in normalized
-            for line in lines:
+            for line in quality_summary_lines(result, compact=not verbose):
                 assert line in normalized
     report = build_report(scan, ai_interpretation=result)
     canonical = json.loads(render_report(report, ReportFormat.JSON))
@@ -344,8 +345,8 @@ def test_quality_categories_fields_and_affected_operations_are_distinct(prepared
     lines = quality_summary_lines(result)
     assert "2 warning categories; 3 text fields withheld" in lines[0]
     count = len(context.operations)
-    assert f"{count} retained / {count} supplied; 0 withheld; 1 operations affected" in lines[1]
-    assert "1 operation follow-ups; 1 summary; 0 cross-operation; 1 limitations" in lines[2]
+    assert f"{count} retained / {count} supplied; 0 withheld; 1 operation affected" in lines[1]
+    assert "1 operation follow-up; 1 summary; 0 cross-operation; 1 limitation" in lines[2]
 
 
 def test_mixed_claim_field_withheld_while_independent_guidance_remains(prepared, monkeypatch):

@@ -141,6 +141,9 @@ class ReportContext:
     file_upload_security: FileUploadSecurityResult | None = None
     federation_security: FederationSecurityResult | None = None
     subscription_security: SubscriptionSecurityResult | None = None
+    # Human-only join, taken from the same retained analysis order used by AIContext.
+    # Never serialized into canonical JSON or sent to the model.
+    ai_endpoint_urls: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

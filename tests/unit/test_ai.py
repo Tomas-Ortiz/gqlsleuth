@@ -633,7 +633,6 @@ def test_ai_reports_are_additive_escaped_and_exclude_thinking(completed, monkeyp
             assert "Review Focus" not in rendered
             titles = (
                 "Execution Summary (deterministic facts)",
-                "Operation Analysis",
                 "Limitations",
                 "Safety Notice",
             )
@@ -642,7 +641,8 @@ def test_ai_reports_are_additive_escaped_and_exclude_thinking(completed, monkeyp
             ai_section = ai_section.replace("\\(", "(").replace("\\)", ")")
             positions = [ai_section.index(title) for title in titles]
             assert positions == sorted(positions)
-            assert ai_section.count("Operation Analysis") == 1
+            assert rendered.count("Operation Review") == 1
+            assert "Operation Analysis" not in rendered
             assert "<script>" not in rendered
             assert "&lt;script&gt;" in rendered
 

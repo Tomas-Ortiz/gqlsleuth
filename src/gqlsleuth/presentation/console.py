@@ -822,21 +822,19 @@ def _render_execution_response(
             )
 
 
-def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool = False) -> None:
+def render_ai(
+    console: Console,
+    result: AIInterpretationResult,
+    *,
+    verbose: bool = False,
+    include_operations: bool = True,
+) -> None:
     if not verbose:
-        _render_ai_summary(console, result)
+        _render_ai_summary(console, result, operations_in_review=not include_operations)
         return
     _major_section(console, "AI-Assisted Interpretation")
     console.print(AI_NOTICE, markup=False, style="gql.secondary")
-    _render_ai_quality(console, result, verbose=True)
     console.print(f"Model: {result.model}", markup=False)
-    from gqlsleuth.ai.sections import usage_rows
-
-    _section(console, "AI Generation Metadata")
-    usage_table = _table("Metric", "Value")
-    for label, value in usage_rows(result):
-        usage_table.add_row(label, value)
-    _render_table(console, usage_table)
     if result.status is not AIAnalysisStatus.SUCCESS:
         console.print(
             f"AI assistance {result.status.value}: {result.error_message}",
@@ -844,8 +842,10 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
             style="gql.secondary" if result.status is AIAnalysisStatus.NOT_RUN else "gql.warning",
         )
         console.print("Deterministic scan completed normally.")
+        _render_ai_usage(console, result)
         return
     console.print(Text.assemble("AI status: ", _status(result.status.value)))
+    _render_ai_quality(console, result, verbose=True)
     interpretation = result.interpretation
     if interpretation is None:
         return
@@ -898,48 +898,72 @@ def render_ai(console: Console, result: AIInterpretationResult, *, verbose: bool
         _render_table(console, table)
     collections = interpretation_sections(result)
     for title, entries in collections:
-        _section(console, title)
-        if not entries:
-            console.print("  None supplied.", style="gql.secondary")
+        if not entries or (title == "Operation Analysis" and not include_operations):
             continue
-        table = _table("Reference", "Interpretation")
-        for references, prose in entries if verbose else entries[:5]:
-            table.add_row(
-                Text("\n".join(references) or "-", style="gql.metadata"),
-                style_priority_terms(prose),
-            )
-        _render_table(console, table)
-        if not verbose and len(entries) > 5:
-            console.print(
-                "  Additional entries available with --verbose or in reports.",
-                style="gql.secondary",
-            )
+        _section(console, title)
+        for index, entry in enumerate(entries):
+            if index:
+                console.print()
+            if entry.title:
+                console.print(Text(entry.title, style="gql.operation"))
+            block_metadata = dict(entry.details)
+            if "Review interest" in block_metadata:
+                console.print(
+                    Text.assemble(
+                        style_priority_terms(
+                            "Review interest: " + block_metadata.get("Review interest", "Unknown")
+                        ),
+                        " | Execution: ",
+                        _status(block_metadata.get("Execution", "NOT_RECORDED")),
+                    )
+                )
+                if "Categories" in block_metadata:
+                    console.print(
+                        Text("Categories: " + block_metadata["Categories"]), style="gql.secondary"
+                    )
+            else:
+                for label, value in entry.details:
+                    console.print(Text(f"{label}: {value}"), style="gql.secondary")
+            for paragraph in entry.paragraphs:
+                console.print(Text(paragraph))
+            if entry.references:
+                console.print(
+                    Text("References: " + ", ".join(entry.references), style="gql.metadata"),
+                    style="gql.secondary",
+                )
+    _render_ai_usage(console, result)
+
+
+def _render_ai_usage(console: Console, result: AIInterpretationResult) -> None:
+    from gqlsleuth.ai.sections import usage_rows
+
+    _section(console, "AI Generation Metadata")
+    table = _table("Metric", "Value")
+    for label, value in usage_rows(result):
+        table.add_row(label, value)
+    _render_table(console, table)
 
 
 def _render_ai_quality(console: Console, result: AIInterpretationResult, *, verbose: bool) -> None:
     from gqlsleuth.ai.sections import quality_summary_lines, quality_warning_description
 
-    for line in quality_summary_lines(result):
+    for line in quality_summary_lines(result, compact=not verbose):
         console.print(line, markup=False, style="gql.secondary")
-    if not result.quality_warnings:
-        return
-    count = len(result.quality_warnings)
-    issue = "issue" if count == 1 else "issues"
-    console.print(
-        f"AI quality checks flagged {count} potential {issue}. "
-        "These are heuristic quality flags, not deterministic Findings."
-        + ("" if verbose else " Use --verbose or reports for details."),
-        markup=False,
-        style="gql.warning",
-    )
     if verbose:
         for code in result.quality_warnings:
             console.print(quality_warning_description(code), markup=False, style="gql.secondary")
 
 
-def _render_ai_summary(console: Console, result: AIInterpretationResult) -> None:
+def _render_ai_summary(
+    console: Console, result: AIInterpretationResult, *, operations_in_review: bool = False
+) -> None:
+    from gqlsleuth.ai.sections import operation_label, prose_label
     from gqlsleuth.presentation.assessment import DEFAULT_MAX_AI_INSIGHTS
 
+    _major_section(console, "AI-Assisted Interpretation")
+    console.print(
+        Text.assemble(f"Model: {result.model} | AI status: ", _status(result.status.value))
+    )
     if result.status is not AIAnalysisStatus.SUCCESS or result.interpretation is None:
         console.print(
             Text(
@@ -950,26 +974,39 @@ def _render_ai_summary(console: Console, result: AIInterpretationResult) -> None
         )
         return
     interpretation = result.interpretation
-    _major_section(console, "AI-Assisted Interpretation")
-    console.print(AI_NOTICE, markup=False, style="gql.secondary")
+    console.print(
+        "AI-generated interpretation is advisory and requires manual validation; "
+        "it is not a Finding or vulnerability confirmation.",
+        style="gql.secondary",
+    )
     _render_ai_quality(console, result, verbose=False)
+    metadata = result.context_metadata
+    if metadata.context_truncated:
+        console.print(
+            f"AI context truncated: {metadata.operations_omitted} operations and "
+            f"{metadata.security_facts_omitted} security facts omitted.",
+            style="gql.warning",
+        )
     _section(console, "Interpretive Summary")
-    console.print(Text(interpretation.summary_interpretation.text))
+    console.print(Text(prose_label(interpretation.summary_interpretation.text)))
     insights = interpretation.review_insights
     if insights:
         _section(console, "Cross-Operation Review Themes")
-        for insight in insights[:DEFAULT_MAX_AI_INSIGHTS]:
-            console.print(
-                Text(
-                    ", ".join((*insight.operations, *insight.security_facts))
-                    + ": "
-                    + insight.interpretation
-                )
-            )
+        for index, insight in enumerate(insights[:DEFAULT_MAX_AI_INSIGHTS]):
+            if index:
+                console.print()
+            labels = tuple(operation_label(result, ref) for ref in insight.operations)
+            console.print(Text("; ".join((*labels, *insight.security_facts))), style="gql.metadata")
+            console.print(Text(prose_label(insight.interpretation)))
+            console.print(Text("Manual follow-up: " + prose_label(insight.manual_follow_up)))
+    if interpretation.limitations:
+        _section(console, "Limitations")
+        for limitation in interpretation.limitations[:DEFAULT_MAX_AI_INSIGHTS]:
+            console.print(Text(prose_label(limitation.text)))
     hidden = (
         max(0, len(insights) - DEFAULT_MAX_AI_INSIGHTS)
-        + len(interpretation.operation_interpretations)
-        + len(interpretation.limitations)
+        + (0 if operations_in_review else len(interpretation.operation_interpretations))
+        + max(0, len(interpretation.limitations) - DEFAULT_MAX_AI_INSIGHTS)
     )
     if hidden:
         console.print(

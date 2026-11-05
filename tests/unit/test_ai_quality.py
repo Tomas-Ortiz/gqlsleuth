@@ -155,13 +155,22 @@ def test_notice_precedes_any_generated_console_prose(prepared, monkeypatch, verb
         verbose=verbose,
     )
     output = " ".join(stream.getvalue().split())
-    assert output.count(AI_NOTICE) == 1
-    assert (
-        output.index(AI_NOTICE)
-        < output.index("INTERPRETIVE SUMMARY")
-        < output.index(WITHHELD_PROSE)
+    notice = (
+        AI_NOTICE
+        if verbose
+        else (
+            "AI-generated interpretation is advisory and requires manual validation; "
+            "it is not a Finding or vulnerability confirmation."
+        )
     )
-    assert "AI quality checks flagged 1 potential issue." in output
+    assert output.count(notice) == 1
+    assert (
+        output.index(notice)
+        < output.index("INTERPRETIVE SUMMARY")
+        < output.index("Withheld — unsupported by supplied facts")
+    )
+    assert "1 warning category" in output
+    assert "AI quality checks flagged" not in output
     assert "unsupported_security_assurance" not in output
     assert (quality_warning_description("unsupported_security_assurance") in output) is verbose
     assert len(calls) == 1
@@ -182,14 +191,18 @@ def test_reports_warn_before_prose_and_serialize_advisory_separately(prepared, m
         rendered = render_report(report, format)
         normalized = re.sub(r"\\([\W_])", lambda match: match[1], html.unescape(rendered))
         assert normalized.index(AI_NOTICE) < normalized.index("Interpretive Summary")
-        assert normalized.index(AI_NOTICE) < normalized.index(WITHHELD_PROSE)
+        assert normalized.index(AI_NOTICE) < normalized.index(
+            "Withheld — unsupported by supplied facts"
+        )
         assert "Heuristic quality flags, not deterministic Findings" in normalized
         assert normalized.index("AI-Assisted Interpretation") < normalized.index(
             quality_warning_description("unsupported_security_assurance")
         )
         assert "unsupported_security_assurance" not in normalized
         assert rendered.count("Safety Notice") == 1
-        assert normalized.rfind("Safety Notice") > normalized.index(WITHHELD_PROSE)
+        assert normalized.rfind("Safety Notice") > normalized.index(
+            "Withheld — unsupported by supplied facts"
+        )
         assert "\x1b" not in rendered
         if format is ReportFormat.HTML:
             assert "<script>fake</script>" not in rendered
@@ -219,9 +232,8 @@ def test_console_quality_count_grammar(prepared, monkeypatch, count, verbose):
     )
     output = " ".join(stream.getvalue().split())
     if count:
-        noun = "issue" if count == 1 else "issues"
-        assert output.count(f"AI quality checks flagged {count} potential {noun}.") == 1
-        assert "not deterministic Findings" in output
+        noun = "category" if count == 1 else "categories"
+        assert output.count(f"{count} warning {noun}") == 1
     else:
         assert "AI quality checks flagged" not in output
     assert len(calls) == 1

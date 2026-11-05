@@ -644,7 +644,9 @@ def test_final_retrieval_path_survives_evidence_console_and_report_projection(
                     "PROGRESSIVE" if provenance == "Progressive recovery" else provenance
                 ) in text
                 assert (
-                    "Full and reduced" if provenance == "Progressive recovery" else "Full retrieval"
+                    ("Recovery" if renderer is render_completed_assessment else "Full and reduced")
+                    if provenance == "Progressive recovery"
+                    else "Full retrieval"
                 ) in text
             else:
                 assert "fallback" not in text.lower()

@@ -216,6 +216,16 @@ def build_report(
         if isinstance(result, ActiveExecutionScanResult)
         else None,
         ai_interpretation=ai_interpretation,
+        ai_endpoint_urls=tuple(
+            (f"endpoint_{index}", endpoint)
+            for index, endpoint in enumerate(
+                dict.fromkeys(
+                    [item.endpoint for item in analysis.endpoints]
+                    + [item.endpoint for item in schema_scan.schemas]
+                ),
+                1,
+            )
+        ),
         graphql_security_review=safe.query_generation.security_review,
         sensitive_input_review=safe.query_generation.sensitive_input_review or None,
         sensitive_input_validation=result.sensitive_input_validation

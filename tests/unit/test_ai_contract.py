@@ -172,7 +172,7 @@ def test_report_resolves_every_operation_and_safe_usage(phase_ten_scan, format):
             "see JSON for full text"
             not in report.split("Interpretive Summary", 1)[1].split("Operation Analysis", 1)[0]
         )
-        assert "Operation Analysis" in report and "AI Generation Metadata" in report
+        assert "Operation Review" in report and "AI Generation Metadata" in report
         assert "Completion tokens remaining" in report
         assert "1,335" in report and "Review interest" in report
         assert report.count("Safety Notice") == 1

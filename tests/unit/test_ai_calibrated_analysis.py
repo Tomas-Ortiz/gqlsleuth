@@ -347,7 +347,7 @@ def test_incomplete_model_fields_are_not_rendered_as_complete(calibrated, monkey
         == original.review_insights[0].manual_follow_up
     )
     assert result.interpretation.review_insights[0].interpretation == INCOMPLETE_PROSE
-    assert "1 text fields withheld" in " ".join(quality_summary_lines(result))
+    assert "1 text field withheld" in " ".join(quality_summary_lines(result))
     for width in (45, 120):
         stream = StringIO()
         render_ai(
@@ -356,12 +356,15 @@ def test_incomplete_model_fields_are_not_rendered_as_complete(calibrated, monkey
             verbose=True,
         )
         assert fragment not in stream.getvalue()
-        assert "incomplete text" in " ".join(stream.getvalue().split())
+        assert "Withheld — incomplete model text" in " ".join(stream.getvalue().split())
     report = build_report(scan, ai_interpretation=result)
     for format in ReportFormat:
         rendered = render_report(report, format)
         assert fragment not in html.unescape(rendered)
-        assert INCOMPLETE_PROSE in html.unescape(rendered).replace("\\.", ".")
+        marker = (
+            INCOMPLETE_PROSE if format is ReportFormat.JSON else "Withheld — incomplete model text"
+        )
+        assert marker in html.unescape(rendered).replace("\\.", ".")
         if format is ReportFormat.JSON:
             canonical = json.loads(rendered)
             assert canonical["report_schema_version"] == 2

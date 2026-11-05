@@ -123,3 +123,60 @@ def present_response_body(body: bytes) -> HumanResponseBody:
         language,
         TRUNCATION_NOTICE if truncated else (None if text else "Empty response body."),
     )
+
+
+def compact_mutation_body(body: bytes) -> HumanResponseBody:
+    """Show small identifier-only GraphQL results; omit other values as a whole.
+
+    This is a conservative display allowlist, not redaction or a claim that response
+    values are safe. Canonical bytes remain untouched. Do not render error messages,
+    extensions, arbitrary scalar outputs, tokens or personal profile values here.
+    """
+    omission = (
+        "Response values omitted from compact preview; "
+        "exact response remains in canonical JSON evidence."
+    )
+    if not body:
+        return HumanResponseBody("", "text", "Empty response body.")
+    if len(body) > 4096:
+        return HumanResponseBody(
+            "", "text", "Response exceeds the 4 KiB compact preview limit. " + omission
+        )
+    document = response_json_object(body)
+    if document is None:
+        return HumanResponseBody("", "text", "No renderable GraphQL JSON object. " + omission)
+    remaining = 80
+
+    def identifier_only(value: object, depth: int = 0, key: str = "") -> bool:
+        nonlocal remaining
+        remaining -= 1
+        if remaining < 0 or depth > 6:
+            return False
+        if value is None:
+            return True
+        if isinstance(value, dict):
+            return all(identifier_only(v, depth + 1, k) for k, v in value.items())
+        if isinstance(value, list):
+            return all(identifier_only(v, depth + 1, key) for v in value)
+        return (
+            key in {"id", "__typename"} and isinstance(value, (str, int)) and len(str(value)) <= 96
+        )
+
+    errors = document.get("errors")
+    error_count = len(errors) if isinstance(errors, list) else None
+    if set(document) <= {"data"} and "data" in document and identifier_only(document["data"]):
+        text = json.dumps(document, indent=2, ensure_ascii=True, allow_nan=False)
+        if len(text) <= 4096:
+            return HumanResponseBody(
+                text, "json", "Observed response, not generated preview values."
+            )
+    structure = "GraphQL data: " + (
+        "null"
+        if document.get("data") is None and "data" in document
+        else "present"
+        if "data" in document
+        else "absent"
+    )
+    if error_count is not None:
+        structure += f"; GraphQL errors: {error_count} (message values not displayed)"
+    return HumanResponseBody(structure + ".", "text", omission)

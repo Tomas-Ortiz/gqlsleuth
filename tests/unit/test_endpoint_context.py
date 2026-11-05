@@ -54,7 +54,7 @@ def views(phase_ten_scan, monkeypatch):
 @pytest.mark.parametrize(
     "title",
     [
-        "Operation Review Candidates",
+        "Operation Review",
         "GraphQL Security Review",
         "Generated Queries",
         "Safe Query Execution",

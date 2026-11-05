@@ -1,7 +1,6 @@
 """Offline CLI sequencing and AI fallback without altering completed scan behavior."""
 
 import json
-import re
 from contextlib import contextmanager
 from copy import deepcopy
 from io import StringIO
@@ -247,14 +246,11 @@ def test_one_ai_inference_follows_completed_safe_and_active_behavior(
     result = invoke(mode, ai=True, input=selection, verbose=verbose)
     assert result.exit_code == baseline.exit_code == 0
     displayed = result.stdout.replace("Generating AI-assisted interpretation...\n", "")
-    assert (
-        "\n".join(
-            line
-            for line in re.split(r"\n[─-]+\nAI-ASSISTED INTERPRETATION", displayed)[0].split("\n")
-            if not line.startswith("AI attempt ")
-        )
-        == baseline.stdout
-    )
+    # Unified operation blocks now contain optional AI prose. The preceding deterministic
+    # assessment and exact target request sequence must still remain identical.
+    prefix = displayed.split("OPERATION REVIEW", 1)[0]
+    prefix = "\n".join(line for line in prefix.split("\n") if not line.startswith("AI attempt "))
+    assert prefix == baseline.stdout.split("OPERATION REVIEW", 1)[0]
     assert events == (["safe", "active_complete", "ai"] if mode == "active" else ["safe", "ai"])
     assert len(ai_requests) == 1
     assert len(target_requests) == mutation_count * 2

@@ -1032,7 +1032,7 @@ def scan(
             _cancel_scan()
     render_completed_assessment(console, report_result, verbose=verbose, ai_result=ai_result)
     if ai_result is not None:
-        render_ai(console, ai_result, verbose=verbose)
+        render_ai(console, ai_result, verbose=verbose, include_operations=False)
     _finish_reports(report_result, report_formats, output, ai_result)
 
 

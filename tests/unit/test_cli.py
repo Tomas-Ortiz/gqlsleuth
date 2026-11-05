@@ -314,7 +314,7 @@ def test_scan_command_runs_safe_execution_workflow() -> None:
     assert "PRIORITIZED REVIEW" in output and "resetPassword" in output
     assert "HIGH review interest" in output
     assert "query { exportUsers }" not in output
-    assert "Deterministic test terminology" not in output
+    assert "Deterministic test terminology" in output
     assert "QUERY EXECUTION SUCCESS 1" in output
     assert "not vulnerability severity" in output
     assert target in output
@@ -328,8 +328,9 @@ def test_verbose_retains_detailed_technical_output(flag):
     assert result.exit_code == 0
     assert "Query root Query" in output
     assert "Mutation root Mutation" in output
-    assert "Mutation resetPassword" in output
-    assert "Interest score 6" in output
+    assert "Mutation: resetPassword" in output
+    assert "Interest score 6" not in output
+    assert "Review interest HIGH INTEREST" in output
     assert "Deterministic test terminology." in output
     assert "query { exportUsers }" not in output
     assert "exportUsers SUCCESS 404" in output

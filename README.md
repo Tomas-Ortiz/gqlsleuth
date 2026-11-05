@@ -297,6 +297,37 @@ Default single-context output caps long lists and states how many items were omi
 Use `--verbose` for more analyst detail and JSON for exhaustive retained facts. Named-context output remains a
 pairwise Authorization Differential Review.
 
+The compact Security Validation view always shows Findings and prioritized-review totals;
+zero-only policy/control/unresolved counts remain available with `--verbose` and in reports.
+Findings precede capability details. Prioritized Review separates the result kind, operation and
+review focus, preserving the existing order and explicit shortlist limits. Zero Findings is not
+security assurance, and review interest is not severity.
+
+Operation Review precedes the aggregate Query Execution summary in both normal and verbose
+assessments. For a single endpoint, review sections inherit its identity from the assessment
+header; multiple endpoints retain explicit grouping. Equivalent Object Lookup Review candidates
+share guidance and prerequisites in verbose output and human reports, while each operation keeps
+its argument, return type, interest, follow-up commands and Evidence references. Other structural
+review types remain separate, and existing display caps and omission notices still apply.
+
+Human output no longer repeats an Executive Scan Summary of internal counters. GraphQL
+Overview distinguishes discovered operations from execution results; schema details show roots
+and nonzero custom-scalar/interface/union counts rather than the full inventory. Routine discovery
+path explanations and progressive-recovery diagnostics belong to verbose/report detail. Partial
+coverage, failures, operational limitations and redirect-consent warnings remain visible.
+Canonical JSON retains every original counter and technical matching/scoring detail.
+
+Executed Mutations have a compact observed-response preview even without `--verbose`. Small
+previews use the operation name, one status/HTTP/duration line and an observed-response body.
+The existing display policy is unchanged: small
+identifier-only GraphQL results (including null/empty data) can be displayed. Other response
+values, including error messages, are omitted as a whole; the preview shows data presence and
+error counts instead. Previews are capped at 4 KiB, six container levels and 80 visited values;
+oversized/unrenderable bodies are explicitly omitted. This is a conservative display allowlist,
+not general redaction. Even identifiers can be sensitive; canonical JSON remains a potentially
+sensitive artifact containing the exact response. SUCCESS does not establish persisted changes,
+business success or effective authorization. No extra requests are made for previews.
+
 ### Transport failures and process status
 
 Connection failures provide URL/network/proxy/TLS guidance. Malformed or excessively nested
@@ -534,8 +565,9 @@ not factual assurance. Hard `validation_failures` remain separate from final-out
 Verbose console and human reports explain quality flags in plain language; canonical JSON retains
 the original warning identifiers and order.
 The AI quality summary distinguishes warning categories, withheld text fields, affected operations
-and retained/withheld operation interpretations. Follow-ups, summaries, cross-operation themes and
-limitations are accounted for separately. Counts come from structured withholding decisions, not
+and retained/withheld operation interpretations. Compact console output shows coverage and a single
+category/field summary; verbose output and reports keep the separate follow-up, summary, theme and
+limitation breakdowns. Counts come from structured withholding decisions, not
 rendered text; this presentation-only accounting does not add canonical JSON fields.
 Generation guidance starts with supplied facts and a specific review focus, followed by the
 appropriate untested control or manual check. Operation context distinguishes root lists from
@@ -582,6 +614,33 @@ An unavailable service, missing model, timeout or invalid output becomes an AI-o
 The completed deterministic assessment and requested reports remain available. Default output
 shows concise AI highlights; verbose output and human reports show the complete retained
 interpretation. AI is optional and disabled without `--ai`.
+
+Operation Review joins deterministic reasons and optional AI analysis under individual Query/Mutation
+headings using endpoint, root kind and field identity. Review interest, categories and execution
+status appear once; raw score arithmetic stays in JSON. Clearly labeled AI interpretation and
+manual follow-up remain distinct from deterministic reasons. Without AI, deterministic review
+still works; unavailable AI and withheld fields do not erase it. Unmatched entries stay separate,
+and AI-only entries do not display an internal placeholder for absent deterministic explanation.
+An operation omitted from the AI context still has an explicit coverage notice.
+Structural schema candidates remain in GraphQL Security Review. Normal output shows a bounded
+shortlist, verbose/report detail up to 20 operation blocks, with explicit omitted counts and JSON
+access. Multiple endpoints retain their context; exact references remain
+below the prose and in native expandable HTML details. Summaries
+and cross-operation themes use the same readable prose layout without invented theme titles.
+Human views shorten application-owned notices to `Withheld — unsupported by supplied facts` or
+`Withheld — incomplete model text`; retained model prose and canonical JSON markers are unchanged.
+Default AI output combines model/status, keeps a short advisory notice and shows quality accounting,
+context truncation when applicable, concise highlights and important limitations. It omits zero-only
+withholding breakdowns. Generation metadata follows the complete interpretation in verbose output and
+reports (collapsed in HTML). Safety Notice remains the final human-report section. These layout
+changes preserve JSON schema 2, AI contract 2 and every scan/consent/inference boundary.
+
+The offline withholding investigation retained existing validators: calibrated conditional
+hypotheses and correct schema/execution statements passed, while unsupported control absence,
+contradictions and incomplete text were withheld. Historical withholding counts alone cannot
+identify false positives without original output. Existing content-free field indices and
+`rule_codes` support diagnosis; no rejected prose is retained, repaired or replaced with invented
+analysis. Valid sibling follow-ups and deterministic review remain available.
 
 Developers can check the real local model without scanning a target:
 `uv run python scripts/check_ollama.py`. This optional acceptance script uses a mocked SAFE scan

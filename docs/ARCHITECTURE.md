@@ -1901,11 +1901,95 @@ Compact/verbose CLI and Markdown/HTML place the same centralized static AI_NOTIC
 AI-generated prose. It warns of incomplete/inaccurate/unsupported interpretation, requires manual
 validation against deterministic facts/evidence and disclaims Evidence/Findings/vulnerability
 confirmation. Compact output shows quality categories and field/operation accounting; verbose and human reports list safe
-codes as heuristic flags outside deterministic Findings. Safety Notice remains the final human
+descriptions as heuristic flags outside deterministic Findings. Safety Notice remains the final human
 report section. HTML escapes model text. Deterministic sections,
 counts, evidence, recommendations, and Errors and Limitations are unchanged; AI failures stay
 in the separate AI section. Offline tests mock Ollama and capture exact requests to prove secret
 canary exclusion, bounded input, reference validation, execution isolation, and graceful fallback.
+
+### v1.1.0 Phase 3: human interpretation layout
+
+Presentation consumes the already-enforced interpretation; it does not change context, prompts,
+quality rules, withholding decisions, regeneration, token budgets or inference counts.
+`ai.sections` supplies small human-only prose blocks shared by console and report projections.
+Operation Review uses a Query/Mutation name heading, review interest, execution
+classification and non-empty categories, followed by separate interpretation and
+manual-follow-up paragraphs. It no longer squeezes prose beside a Reference column. Multiple
+endpoints retain their opaque endpoint labels; missing projection metadata stays explicitly
+unavailable. Exact references appear below prose in verbose console and Markdown and in collapsed
+native HTML details. Summaries and cross-operation themes are prose sections; themes name only
+the supplied operations and do not acquire invented titles or groupings.
+
+Phase 3B composes deterministic operation-review reasons and optional AI operation prose in
+`reporting.operation_review`. It joins exact endpoint/root-kind/name identities using a transient
+`ReportContext.ai_endpoint_urls` projection derived from retained analysis/schema order (the same
+ordering used by AIContext). This projection is explicitly excluded from canonical JSON and never
+sent to AI. Unmapped references are standalone, not matched by name. Deterministic-only and
+AI-only entries survive; structural candidates remain in their separate schema-review section.
+Default console uses the existing shortlist limit; verbose/human reports cap operation detail at
+20 and disclose omissions with access to complete JSON. Deterministic scoring, priority and
+matching locations remain unchanged in canonical data. Human reasons omit score arithmetic.
+
+Phase 3C omits the internal missing-deterministic-detail placeholder for AI-only entries while
+preserving metadata, AI paragraphs and the distinct missing-AI-context notice. Completed console
+Operation Review precedes the aggregate Query Execution summary in SAFE/ACTIVE, including verbose
+output, without repeating that inventory in technical details. Final Prioritized Review and
+Operation Review may inherit the sole represented endpoint from the assessment header; multiple
+endpoints remain explicit. ACTIVE destination/consent displays are outside this suppression.
+
+GraphQL Security Review groups Object Lookup candidates only when endpoint, deterministic reason
+and manual guidance are identical. Shared guidance and runtime-ID/sequential-discovery prerequisites
+appear once; per-operation arguments/types, return types, interest, commands and Evidence references
+remain available. Other review kinds remain separate. The existing ten-detail cap is applied before
+grouping across the whole section, with an explicit omission notice and exhaustive canonical JSON.
+
+Human Executive Scan Summary counters are removed in favor of existing overview/execution
+sections. Schema Summary shows roots and nonzero custom-scalar/interface/union counts. Normal
+console keeps concise retrieval/coverage status and material limitations; recovery request/shape/
+stop details and routine discovery path explanations remain verbose/report detail. ACTIVE redirect
+notices and consent are unchanged.
+
+Completed default Mutation execution uses `compact_mutation_body` on retained responses. It
+displays only small identifier-only (`id`/`__typename`) data trees, null or empty data; other values,
+error messages and extensions are omitted as a whole, with data-presence/error-count summaries.
+Limits are 4 KiB input/formatted text, six container levels and 80 values. Deep/large/unrenderable
+responses receive explicit omission notices. Human reports use the same Mutation preview; Query
+response handling is unchanged. This is a display allowlist, not redaction, and identifiers may
+still be sensitive. Canonical response bytes, classifications, evidence and request data remain
+unchanged. A transport failure has no fabricated response; SUCCESS implies neither persistence
+nor business/authorization success.
+
+The default console presents each attempted Mutation with its name, a status/HTTP/duration line
+and an observed-response block, without repeated Response/Metadata/Body headings. This layout
+retains the same preview eligibility and whole-value omission notices; verbose request/response
+detail remains available.
+
+The Phase 3B investigation made no prompt, context, inference or validator changes. Offline
+grounding regressions retained calibrated conditional hypotheses and accurate schema/execution
+descriptions, while rejecting unsupported control absence, contradictory outcomes/types and
+incomplete prose. Historical withheld fields cannot be reconstructed from counts. For a live
+diagnosis, use each `result.withheld_fields` section/index/field and `rule_codes`; operation indices
+resolve through `result.interpretation.operation_interpretations[index].operation` to the exact
+reference and `result.references.operations` bounded facts. This exposes rule category and subject
+without retaining original rejected prose or performing a second enforcement pass. No claim is
+made that every historical withholding was unnecessary. Valid sibling text is preserved.
+
+Only the two application-owned withholding markers receive shorter human labels: `Withheld —
+unsupported by supplied facts` and `Withheld — incomplete model text`. Retained model prose is
+not rewritten or clipped. References, original markers and result data remain unchanged in
+canonical JSON. Existing structured quality accounting retains its field/category/operation
+distinctions. Human reports propagate the AI prose exemption from generic text shortening through
+nested sections, escape model text and keep Safety Notice final exactly once.
+
+Default console output combines model/status, a short advisory/no-Finding notice, operation coverage
+and a concise category/withheld-field summary. It omits zero-only breakdowns and the redundant
+warning explanation, while showing context truncation and important limitations. Unknown withholding
+accounting is not converted into retained/withheld ratios. Verbose output preserves full accounting,
+category descriptions, attempts, tokens and budgets without the duplicate explanation.
+Default console output retains the explicit path to full verbose/report detail. Verbose console and human
+reports show complete operation interpretations and follow-ups; technical generation metadata
+follows the prose and is collapsed in HTML. No new flags, dependencies or public result fields
+are introduced. Canonical report schema 2 and AI contract 2 are unchanged.
 
 ## 23. Configuration
 
@@ -2012,9 +2096,18 @@ ACTIVE selection/confirmation interaction. Phase 32 renders the completed result
 renderers still own exact pre-send consent previews; every independent default-NO confirmation
 remains in its original workflow position. Application/domain modules remain independent of Rich.
 
+The v1.1.0 Phase 3 presentation refinement keeps Finding/review totals visible in compact output
+while zero-only policy/control/unresolved counts remain available in verbose output and reports.
+A finding-free assessment explicitly states that it does not establish target security. Finding
+details precede capability results; the prioritized shortlist separates kind, operation and review
+focus without changing membership, priority, ordering or collection limits. Human report overviews
+also retain the discovered endpoint URLs beside the original target. These are presentation-only
+changes; deterministic assessment facts, Findings, Evidence and execution remain authoritative.
+
 Default output presents a compact GraphQL overview, distinct security-result counts, existing
 Findings, capped Prioritized Review, Query outcome aggregates, attempted Mutation statuses and relevant
-limitations. Response bodies and detailed capability sections move to grouped verbose output.
+limitations. Detailed capability sections remain grouped in verbose output; Phase 3B also shows
+bounded Mutation response previews and a limited unified operation review in default output.
 Default AI shows Interpretive Summary and at most three global insights; verbose and reports
 retain all validated AI sections. Report paths remain grouped by format. The Phase 32 roadmap
 entry defines the caps, ordering and human-report hierarchy. No scan, evidence, safety, AI-context,
@@ -2022,7 +2115,8 @@ request or canonical JSON semantics change with verbosity.
 
 Phase 13.1 groups candidate and selected-batch endpoints in first-seen order while preserving
 candidate indices and within-endpoint order. Post-Mutation detail retains runtime counts and
-observed responses; Phase 32 moves this detail into the completed verbose assessment.
+observed responses; Phase 3B adds compact, value-restricted Mutation previews to the completed
+default assessment.
 `presentation/priorities.py` centralizes CRITICAL magenta, HIGH red, MEDIUM yellow, LOW green,
 and INFORMATIONAL bright blue for tables, verbose labels, previews, and selected batches. It also
 styles standalone priority words/phrases in AI console text without substring replacement or
