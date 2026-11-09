@@ -325,11 +325,11 @@ class AIOperationInterpretation(AIModel):
             strict=True,
             min_length=1,
             max_length=300,
-            description="One to three concise complete sentences grounding the review role in "
-            "supplied facts and distinguishing untested controls, not a metadata recap. "
-            "Conditional unauthorized effects are not established facts. "
-            "Interest is not risk/severity; "
-            "schema roles are not runtime observations.",
+            description="One to three concise complete sentences explaining the supplied "
+            "observation, its relevance and what remains unknown, not follow-up instructions. "
+            "Prefer exactly attributed review candidates over generic categories; a neutral "
+            "ordinary-operation role is valid. Interest is not risk/severity; "
+            "schema roles and conditional effects are not runtime observations.",
         ),
     ]
     manual_follow_up: Annotated[
@@ -338,8 +338,10 @@ class AIOperationInterpretation(AIModel):
             strict=True,
             min_length=1,
             max_length=220,
-            description="One short, specific non-destructive manual-review direction. "
-            "Finish naturally.",
+            description="One short, specific authorized non-destructive manual-review direction, "
+            "preferably 'Verify whether ...'. Do not repeat the interpretation, assert missing "
+            "controls or imply validation was performed. A neutral limited follow-up is valid "
+            "when no targeted issue is supported. Finish naturally.",
         ),
     ]
 
@@ -359,9 +361,11 @@ class AIInterpretiveLimitation(AIReferences):
             strict=True,
             min_length=1,
             max_length=500,
-            description="One distinct interpretive scope limitation, normally 150-300 characters; "
+            description="One material supported coverage limitation, normally 150-300 characters; "
             "finish naturally with punctuation well below the ceiling. "
-            "No ellipsis or guessed cause.",
+            "Zero discovered Mutations is not unexecuted discovered Mutations; bounded AI "
+            "context/input paths are not incomplete schema discovery. Categories do not "
+            "establish runtime sensitivity. No ellipsis or guessed cause.",
         ),
     ]
 

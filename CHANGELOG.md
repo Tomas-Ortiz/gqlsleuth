@@ -6,6 +6,17 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- Clarified AI priority for attributed review facts, separate interpretation/follow-up roles and
+  material coverage limitations. Closed narrow grounding gaps for unauthorized-access verb forms
+  and runtime result-size control-absence claims, preserving calibrated prose and valid siblings.
+
+- Refined AI grounding for standalone manual-review recommendations and generic GraphQL
+  descriptions while preserving checks on independent assertions, exact names and operation scope.
+  Unsupported ownership-effectiveness, IDOR/BOLA and runtime-sensitivity claims are withheld.
+  Guidance distinguishes authorization from input validation. Verbose output now includes bounded,
+  content-free field withholding diagnostics; compact output, canonical contracts, inference limits
+  and deterministic scanning remain unchanged.
+
 - Final human assessments place Operation Review before Query Execution, omit internal missing-detail
   placeholders and inherit single-endpoint review context from the header. Equivalent Object Lookup
   reviews share guidance while retaining operation-specific details and traceability. Compact AI

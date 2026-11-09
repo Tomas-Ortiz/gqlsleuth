@@ -16,9 +16,11 @@ def prose_clauses(text: str) -> tuple[str, ...]:
     return tuple(
         re.split(
             r"[!?](?=\s|$)|[;\n]|\.(?!\w)|\b(?:but|however|yet)\b|"
-            r",?\s+and\s+(?=(?:(?:(?:the|this|that|these|those)\s+\w+|it|they)\s+)?"
+            r",?\s+and\s+(?=(?:note\s+that\b|"
+            r"(?:(?:(?:the|this|that|these|those)\s+\w+|"
+            r"[_A-Za-z]\w*(?:\s+(?:validation|controls?|checks?))?)\s+)?"
             r"(?:actually\s+)?(?:returns?|retrieves?|accepts?|has|have|lacks?|"
-            r"was|were|is|are|does|do|executed|succeeded)\b)",
+            r"allows?|permits?|prevents?|was|were|is|are|does|do|executed|succeeded)\b))",
             text,
             flags=re.I,
         )

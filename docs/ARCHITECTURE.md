@@ -1695,6 +1695,14 @@ Three accepted aliases or accepted depth five cannot prove unlimited support; on
 cannot prove universal protection. SUCCESS does not establish business success or persisted state.
 AI context omissions are distinct from partial schema retrieval. Total/included/omitted counters
 remain authoritative and unchanged; timeout overrides do not expand the bounded context.
+Narrow checks also cover positive Mutation-attempt nouns against recorded attempts, claims that
+retrieved schemas were "not fully expanded", and returned-instance/nested-response or actual
+sensitive-data-access assertions unsupported by the projection. Declared types and SUCCESS are
+not response-content evidence. Explicit attribution of an endpoint-only recursive review candidate
+to a named root requires a matching root fact; nested lists may independently motivate complexity
+questions. These are bounded assertion checks, not general semantic verification: indirect scope
+drift and arbitrary paraphrases remain possible. Qualified schema roles, local negation, review
+questions and supported scoped probe observations retain their existing treatment.
 Prompt and field guidance prefer one to three concise sentences connecting supplied structure to
 a specific review focus and untested runtime controls, with a separate actionable follow-up.
 Neither operation names nor illustrative examples authorize inventing input fields or business
@@ -1739,6 +1747,41 @@ Narrow qualified user/account schema roles can be supported by operation/type na
 asserting actual response contents or successful state changes. These bounded heuristics do not
 parse arbitrary English or establish general factual accuracy.
 
+The targeted precision refinement recognizes bounded standalone control recommendations,
+including imperative "Ensure authorization is enforced" and purpose clauses such as "Review
+input validation to prevent injection". These are not assertions of observed effectiveness.
+Coordinated finite assertions and "and note that" continuations are checked separately; a review
+question cannot exempt them. Unquoted built-in scalar descriptions are case-insensitive, and a
+small set of descriptive modifiers before generic records/objects is not treated as an exact
+type name. Quoted names, explicit input paths, root shape and operation/endpoint scope remain
+checked; unavailable or truncated structure remains unknown.
+
+Existing assertion guards also cover ownership-control effectiveness, IDOR/BOLA vulnerability
+wording, unauthorized data creation/modification and sensitive/non-sensitive response claims,
+including "all returning" formulations. Review categories and SUCCESS do not establish returned
+content or its sensitivity. Explicit uncertainty remains valid. Scoped controls and the existing
+exact object-probe Finding form retain their supplied-fact support; unrelated facts cannot lend
+support. Prompt guidance distinguishes authorization/business policy from input validation and
+SAFE schema-level Mutation review from execution. The existing assertion guards also recognize
+"accesses/accessed unauthorized objects" and "no runtime result-size controls", preserving review
+questions, locally negated inferences, conditional hypotheses and exact scoped Finding support.
+No context fields, contracts, inference budgets,
+deterministic classifications or keyword rules change. These remain narrow lexical guards, not
+general NLP verification; valid sibling fields survive and unsupported fields are never repaired.
+
+Prompt and field-description guidance prioritizes scoped Findings/execution observations, exactly
+attributed review candidates, schema structure, then secondary interest categories.
+`list_bounding_review` signals no obvious schema quantity bound, not absent runtime limits;
+`object_lookup_review` concerns intended access policy without assuming ownership/IDOR;
+`ownership_control` uses supplied ownership inputs without claiming missing checks;
+`recursive_graph_review` remains endpoint-scoped unless attribution is explicitly supplied.
+Interpretation explains observations, relevance and unknowns; manual follow-up directs authorized
+validation without repeating the interpretation or claiming it occurred. Neutral ordinary-operation
+roles and limited follow-ups are valid. Limitations cover material assessment gaps: zero discovered
+Mutations is distinct from discovered but unexecuted Mutations, and bounded AI operations/input
+paths do not imply incomplete schema retrieval. Categories do not establish runtime sensitivity.
+Offline prompt/guard regressions do not demonstrate improved real-model interpretation quality.
+
 For an authorized developer test, inspect the already-returned application result, without another
 inference or retaining rejected text:
 
@@ -1751,10 +1794,14 @@ for decision in result.withheld_fields or ():
 ```
 
 This exposes only field identity, the existing opaque operation reference and rule categories;
-no rejected prose, credentials or response bodies are recorded in diagnostics. Summary/theme/
-limitation references are available on their corresponding retained section item. The current CLI
-does not expose these per-field codes; a future opt-in developer formatter of this same metadata
-would be the smallest live-CLI addition, and is not implemented here. Whole-field withholding may
+no rejected prose, credentials or response bodies are recorded in diagnostics. Verbose CLI now
+renders these existing decisions in **AI Withholding Diagnostics**, capped at the shared 20-item
+human inventory limit with an explicit omission notice. Zero-based section/index, exact supplied
+operation or summary/theme/limitation references, field and allowlisted rule codes retain their
+original scope. Empty references remain context-wide; unavailable references are not guessed.
+Default compact output and canonical JSON are unchanged. The categories are heuristic, not proof
+of a specific model error. No persistent rejection log or new inference is introduced.
+Whole-field withholding may
 discard valid sentences, operation entries still cannot cite extra security facts, and omitted
 context and unrecognized paraphrases continue to require analyst judgment.
 
@@ -1897,9 +1944,9 @@ as factual. It is separate from deterministic pytest/CI.
 Reports receive the already-produced result and perform no inference themselves. Optional JSON
 `ai_interpretation` remains optional, absent without `--ai`. Its new version-2 generated contract
 and application-owned references are explicitly identified by report schema version 2.
-Compact/verbose CLI and Markdown/HTML place the same centralized static AI_NOTICE before any
-AI-generated prose. It warns of incomplete/inaccurate/unsupported interpretation, requires manual
-validation against deterministic facts/evidence and disclaims Evidence/Findings/vulnerability
+Compact and unified operation-review output use concise AI advisory notices; the detailed AI
+section uses the centralized static AI_NOTICE. The notices identify advisory prose, require manual
+validation against deterministic facts/evidence and disclaim Evidence/Findings/vulnerability
 confirmation. Compact output shows quality categories and field/operation accounting; verbose and human reports list safe
 descriptions as heuristic flags outside deterministic Findings. Safety Notice remains the final human
 report section. HTML escapes model text. Deterministic sections,

@@ -171,7 +171,8 @@ def test_notice_precedes_any_generated_console_prose(prepared, monkeypatch, verb
     )
     assert "1 warning category" in output
     assert "AI quality checks flagged" not in output
-    assert "unsupported_security_assurance" not in output
+    # Static field codes are opt-in verbose diagnostics, never compact prose.
+    assert ("unsupported_security_assurance" in "".join(output.split())) is verbose
     assert (quality_warning_description("unsupported_security_assurance") in output) is verbose
     assert len(calls) == 1
 

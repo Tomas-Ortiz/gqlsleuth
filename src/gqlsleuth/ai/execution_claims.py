@@ -23,7 +23,8 @@ _ASSERTION = re.compile(
     r"|\b(?P<not_run>not_run|unexecuted)\b"
     r"|\b(?P<success>success(?:ful(?:ly)?)?|succeeded|accepted|"
     r"completed\s+without\s+(?:a\s+)?(?:classified\s+)?(?:execution|graphql)\s+error)\b"
-    r"|\b(?P<attempted>attempted|execute[sd]?|ran|run|sent)\b"
+    r"|\b(?P<attempted>attempted|execute[sd]?|ran|run|sent|"
+    r"(?<=mutation )attempts|(?<=mutation execution )attempts)\b"
     r"|\b(?P<failure>failed|failure|errored)\b"
     r"|\b(?P<skipped>skipped)\b"
     r"|\b(?P<blocked>blocked|denied|rejected)\b"
@@ -213,7 +214,11 @@ def validate_execution_claims(interpretation: AIInterpretation, context: AIConte
                     explicit = scoped
             if explicit:
                 scope, kind = explicit, None
-            elif kinds and (not scope or kinds[-1][0].casefold() in {"queries", "mutations"}):
+            elif kinds and (
+                not scope
+                or kinds[-1][0].casefold() in {"queries", "mutations"}
+                or any(a[0].casefold() == "attempts" for a in assertions)
+            ):
                 kind = "query" if kinds[-1][0].casefold() in {"query", "queries"} else "mutation"
                 scope = ()
             if not scope and not kind:
@@ -231,6 +236,17 @@ def validate_execution_claims(interpretation: AIInterpretation, context: AIConte
                 state = assertion.lastgroup
                 assert state is not None
                 lower = clause.casefold()
+                if assertion[0].casefold() == "attempts" and (
+                    re.search(
+                        r"\b(?:planned|hypothetical|proposed)\s+(?:limited\s+)?"
+                        r"mutation(?:\s+execution)?\s*$",
+                        prefix,
+                        re.I,
+                    )
+                    or re.match(r"\s+(?:would|could)\b", clause[assertion.end() :], re.I)
+                ):
+                    # A plan/conditional noun phrase does not assert an observed attempt.
+                    continue
                 # Bounded probe acceptance/rejection is checked against cited security
                 # facts by the scope guard, not borrowed from ordinary Query execution.
                 if assertion[0].casefold() in {"accepted", "rejected"} and re.search(
@@ -256,7 +272,7 @@ def validate_execution_claims(interpretation: AIInterpretation, context: AIConte
                     state = "success"
                 negated = bool(
                     re.search(
-                        r"\b(?:not|never|neither)\b|n't\b|\bno\s+(?:ordinary\s+)?"
+                        r"\b(?:not|never|neither)\b|n't\b|\bno\s+(?:(?:ordinary|limited)\s+)?"
                         r"(?:queries|query|mutations?|operations?|requests?)\b",
                         prefix,
                         re.I,

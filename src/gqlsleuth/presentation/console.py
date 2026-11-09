@@ -952,6 +952,31 @@ def _render_ai_quality(console: Console, result: AIInterpretationResult, *, verb
     if verbose:
         for code in result.quality_warnings:
             console.print(quality_warning_description(code), markup=False, style="gql.secondary")
+        from gqlsleuth.ai.sections import withholding_diagnostic_rows
+
+        rows = withholding_diagnostic_rows(result)
+        if rows:
+            _section(console, "AI Withholding Diagnostics")
+            console.print(
+                "Heuristic validation categories, not proof of a specific model error. "
+                "Entry indices are zero-based.",
+                style="gql.secondary",
+            )
+            table = _table("Section / index", "Reference", "Field", "Rule codes")
+            for row in rows[:MAX_HUMAN_INVENTORY_ITEMS]:
+                if console.width < 80:
+                    console.print(Text(f"{row[0]} / {row[2]}", style="gql.metadata"))
+                    console.print(Text("Reference: " + row[1]))
+                    console.print(Text("Rule codes: " + row[3]))
+                else:
+                    table.add_row(*(Text(value, overflow="fold") for value in row))
+            if console.width >= 80:
+                _render_table(console, table)
+            if len(rows) > MAX_HUMAN_INVENTORY_ITEMS:
+                console.print(
+                    f"Showing {MAX_HUMAN_INVENTORY_ITEMS} of {len(rows)} field decisions. "
+                    "Remaining diagnostics omitted from console output."
+                )
 
 
 def _render_ai_summary(

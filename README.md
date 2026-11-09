@@ -552,7 +552,8 @@ only when token counts are known; it is separate from output headroom. Missing c
 unknown. Output-limit termination triggers the same bounded regeneration with conciseness
 guidance; the token limit never increases automatically. No prompt, rejected prose or reasoning
 is retained in this metadata. AI prose is best-effort and may be incomplete or inaccurate.
-A shared static notice appears before AI prose in compact/verbose console and human reports.
+AI prose carries an advisory notice: compact and unified review output use concise notices;
+the detailed AI section uses the full static notice.
 Narrow prose/execution checks withhold affected fields that contradict supplied facts or assert
 unsupported controls/security conclusions. A static `AI text withheld` notice replaces that field;
 valid sibling fields and exact references remain available. Rejected prose is not retained in
@@ -596,10 +597,23 @@ business success nor persisted changes. Review questions remain valid without es
 to Findings. The checks are heuristic, not general factual verification or automatic repair.
 Equivalent leading, trailing and comma-delimited conditional hypotheses are supported where the
 supplied structure is relevant. Qualification does not exempt independent factual assertions.
-Generic descriptions such as "identifier argument" or "list of objects" are distinguished from
-explicit schema names; qualified apparent roles are not runtime evidence. Internal field decisions
-associate each withheld field with its triggering rule categories, without retaining rejected
-text or adding report fields. Developer inspection is documented in the
+Generic descriptions such as "string argument" or "list of geographical records" are distinguished
+from explicit schema names; quoted identifiers and root-list shape remain checked. Narrow standalone
+recommendations such as "Ensure authorization is enforced" do not assert existing enforcement;
+independent factual clauses still need support. Ownership-control effectiveness, confirmed IDOR/BOLA
+and sensitive/non-sensitive runtime-content assertions require evidence, not names or review labels.
+Guidance distinguishes authorization/business policy from input validation and SAFE schema-level
+Mutation review from execution. Exactly attributed review candidates take priority over generic
+interest categories: interpretation explains observations and unknowns, follow-up directs authorized
+validation, and limitations describe actual coverage. Zero discovered Mutations differs from
+discovered but unexecuted Mutations. Unsupported unauthorized-access verb forms and runtime
+result-size control-absence claims are withheld. These remain bounded lexical checks, not general
+fact verification or a guarantee of model quality.
+With `--verbose`, **AI Withholding Diagnostics** shows up to 20 recorded field decisions with
+zero-based section/index, supplied references, field name and static rule codes. Any omitted row
+count is explicit. These heuristic categories do not prove a specific model error. No rejected
+prose, prompt or private request material is shown, persisted or added to canonical JSON.
+Developer inspection is documented in the
 [AI architecture](docs/ARCHITECTURE.md#22-optional-ai-assistance); no new CLI flag is required.
 AI coverage uses existing total/included/omitted counters: 12 supplied out of 32 means 20 remain
 outside interpretation. Increasing `--ai-timeout` does not expand context. Partial schema

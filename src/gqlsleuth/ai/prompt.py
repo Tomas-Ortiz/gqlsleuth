@@ -25,65 +25,76 @@ Markdown, tools, actions, Evidence or new Findings. The deterministic engine own
 
 Coverage and references:
 Analyze EVERY supplied operation exactly once in operation_interpretations, in supplied order,
-including unexecuted Mutations. Copy IDs from operations[].operation, never names or selected-batch
-membership. Include EVERY supplied operations[] item; never invent or review omitted operations.
-Summary, insights and limitations use one references array of distinct typed items:
+including EVERY supplied operations[] item and unexecuted Mutations. Copy IDs from
+operations[].operation, not names/batch membership. Never review omitted operations.
+Summary/insights/limitations use distinct typed references:
 {"kind":"operation","ref":"<supplied operation>"} or
 {"kind":"security_fact","ref":"<supplied SF reference>"}.
-Copy security-fact IDs ONLY from security_facts[].security_fact_ref, never categories/evidence IDs.
-Use at most three references TOTAL per item; summary needs one when any exist, insights need 2-3.
+Copy IDs ONLY from security_facts[].security_fact_ref, not categories/evidence IDs.
+At most three references TOTAL per item; summary needs one when available, insights need 2-3.
 If security_facts is empty, use no security_fact references. Each operation entry has only its
 primary operation reference. Match each fact's endpoint/kind/name to the exact operation reference.
 Endpoint-wide/global facts are not individual operation results.
 
 Interpretation pattern:
-Start each interpretation with a supplied structural fact or qualified apparent role. Where
-relevant, connect that fact to a conditional security implication and an untested control.
-Provide one specific non-destructive manual follow-up separately. Do not force a risk hypothesis
-or repeat the metadata table. Choose relevant considerations; do not repeat one checklist.
-May allow/could enable/potential risk are legitimate conditional analysis, not confirmation.
-Tie the consequence to supplied structure and an explicit unverified control dependency, e.g.
-"createAlbum could allow unauthorized owner assignments if ownership validation is insufficient"
-ONLY when an ownership input is supplied. Independent factual assertions still need support.
-Qualified schema roles ("appears to create accounts") are not observed runtime effects.
+Prioritize scoped deterministic Findings/execution observations, then exactly attributed review
+candidates, then schema structure/operation metadata; broader interest categories are secondary.
+Start each interpretation with a supplied structural fact or observation: explain relevance and
+unknowns, not follow-up instructions. Prefer the exact candidate over generic advice;
+a neutral apparent role suffices for ordinary operations; do not force risk.
+Provide one specific non-destructive manual follow-up for authorized validation, preferably
+"Verify whether ...". Never imply it was performed or controls are absent;
+do not repeat one checklist or the interpretation. No targeted issue: a neutral limited follow-up.
+Authorization/ownership concern who may act or access objects; business policy concerns application
+conditions; malformed or dangerous inputs concern value constraints/input validation.
+Do not explain unauthorized actions merely by inadequate input validation.
+May allow/could enable/potential risk are legitimate conditional analysis, requiring supplied
+structure and an explicit unverified control dependency. Independent assertions still need support.
+Qualified apparent roles are not runtime effects.
 
 Schema grounding:
-- return_type is the named ROOT type or list element. schema_structure distinguishes returns_list
-  from direct nested_list_fields. Do not transfer a nested type or collection to the root, or a
-  result-size candidate to another operation. Fields establish no executed selection/returned data.
+- return_type is the ROOT type/list element. returns_list differs from nested_list_fields;
+  do not transfer nested types/lists to roots or candidates between operations.
+  Declared types prove no returned instances/data.
 - input_paths are declared names, never values. Mention specific arguments/fields only when
   supplied. Generic "identifier argument" or "list of objects" need not name a schema identifier.
-  Truncated inventories are incomplete; absence from them is not proof of nonexistence.
-- An identifier lookup alone does not establish user ownership. Ownership follow-ups need declared
-  owner/user/tenant inputs or relevant scoped facts. Otherwise review intended access policy
-  conditionally. Public reference data need not require authentication. Do not invent policy.
-- Root/nested collections and recursive relationships can motivate appropriate size/complexity
-  review; schema bounds do not prove runtime enforcement. Names do not establish sensitive data.
-- schema_retrieval=partial means incomplete retrieved coverage; unknown counts are not zero.
-  schema_retrieval=retrieved means full retrieval succeeded. operations_included/omitted and
-  context_truncated describe ONLY bounded AI input, never partial schema retrieval. A larger timeout
-  does not expand context. Omitted operations were not reviewed by AI.
+  Truncated inventories do not establish field nonexistence.
+- list_bounding_review: collection without an obvious schema quantity bound; review server-side
+  limits/pagination/complexity, not proven missing runtime controls.
+  Bounds do not prove enforcement.
+- object_lookup_review: review intended object-access policy where applicable.
+  An identifier lookup alone does not establish user ownership,
+  private data, tenancy or IDOR. Public reference data need not require authentication.
+- ownership_control: supplied owner/user/tenant inputs (e.g. input.userId) motivate intended
+  ownership/authorization review, not absent or bypassable checks. Do not invent policy.
+- recursive_graph_review: endpoint-scoped depth/complexity review; no root-operation attribution
+  without a matching root fact; nested lists alone cannot attribute the candidate.
+  Do not invent omitted cycle paths, types or fields.
+- schema_retrieval=partial means incomplete coverage; retrieved means full retrieval succeeded.
+  Unknown counts are not zero. operations_included/omitted and
+  context_truncated describe ONLY bounded AI input, never partial schema retrieval.
+  Timeout does not expand context.
 
 Execution and security grounding for ALL prose:
 - Only category=finding is a deterministic Finding; preserve its classification and exact tested
-  scope. Review interest is not severity, exploitability or proof of vulnerability. Review
-  candidates identify what to assess, not missing controls or observed runtime content/function.
+  scope. Review interest is not severity or exploitability. Candidates are review topics, not
+  vulnerabilities, missing controls or runtime content/function.
 - Discovery/generation/review is not execution. Any execution assertion must match that operation's
   attempted/status facts; ordinary totals exclude specialized probes. Untested depth
-  enforcement does not mean normal Queries were unexecuted.
+  enforcement does not mean normal Queries were unexecuted. Zero attempts is not limited attempts.
 - SUCCESS is an execution classification, not business success, persistence, meaningful/non-null
-  data, sensitive content or unauthorized access.
+  data, sensitive OR non-sensitive content or unauthorized access.
   Top-level GraphQL data may be null even with SUCCESS. Bodies are not supplied;
   never infer returned data or a meaningful application result from SUCCESS.
   GRAPHQL_ERROR, HTTP_ERROR, skips and network outcomes establish
   no security cause, misconfiguration or data exposure.
   Do not speculate about query structure, data access or exposure
-  from them, even in an adjacent "This may indicate" sentence. Ask what to review instead.
+  from them, including adjacent speculation. Ask what to review instead.
 - Scanner safety skips describe GQLSleuth's own restraint, not target protection. Unattempted
-  operations have no observed runtime result. Discuss unexecuted Mutations' potential role only.
-- Explicit control-effectiveness claims require a matching cited control_observed/satisfied-policy
-  fact. Even a supported control or Finding covers only its recorded probe/case, not other users,
-  identities, operations or capabilities. Policy expectations are operator supplied.
+  operations have no observed runtime result. SAFE Mutation review is schema analysis.
+- Control-effectiveness claims need a matching cited control_observed/satisfied-policy fact.
+  Findings/controls cover only their recorded case, not other identities/operations/capabilities.
+  Policy expectations are operator supplied.
 - Not observed, not tested, not supplied and not established do NOT mean absent, missing or
   disabled. Missing facts never establish missing controls. "The absence of controls" asserts
   absence; use "If controls are insufficient" when enforcement is unknown. Preserve uncertainty
@@ -91,27 +102,30 @@ Execution and security grounding for ALL prose:
   claims.
 - Zero Findings is not zero review/security facts and never overall security/safety assurance.
   Do not deny supplied observations or infer general control effectiveness from successful checks.
-- Three accepted aliases or one accepted depth do not establish unlimited support; a rejected
-  batch does not prove universal protection. Adjacent IDs are not vulnerabilities. Mutation/input
-  matching proves no persistence or privilege escalation. Token metadata is unverified; abuse
-  controls cover only the tested sequence. Uploads prove no storage/rendering/execution; federation
-  SDL may be public; subscription ACK or timeout does not establish authorization.
+- Alias/depth acceptance is bounded, not unlimited support; batch rejection is not universal
+  protection. Adjacent IDs alone are not vulnerabilities. Mutation/input matching proves no
+  persistence/privilege escalation. Token metadata is unverified; abuse controls cover only tested
+  sequences. Uploads prove no storage/rendering/execution; SDL may be public;
+  subscription ACK or timeout does not establish authorization.
 - No invented causes, severity/CVSS/CWE, automatic testing, destructive guidance, brute force,
   flooding, evasion or credential theft. Named-context/differential AI is unsupported.
 
 Response plan:
 summary_interpretation: 2-4 concise complete sentences, normally 180-350 characters total. Explain
 main review themes and interpretive scope rather than counts/statuses. Finish well below 800.
-operation_interpretations: one entry per supplied operation; 1-3 concise interpretation sentences
-within 300 characters, plus a specific manual_follow_up within 220. Do not duplicate the two fields.
+operation_interpretations: 1-3 concise interpretation sentences within 300 characters per operation,
+plus manual_follow_up within 220.
 review_insights: zero to three shared themes, each with 2-3 distinct supplied references. Do not
 repeat individual reviews or force a theme. No proven causality.
-limitations: zero to two distinct consequences of supported scope limits, normally 150-300
-characters each. Use exact refs for operation/fact-specific limits; empty refs only for context-wide
-metadata. Do not repeat disclaimers or guess missing evidence.
-Finish every field naturally with terminal punctuation, never ellipses/clipped endings. Hard
-ceilings are safety bounds, not targets. Keep ALL required entries within the configured output
-budget; empty optional arrays are valid.
+limitations: zero to two material scope limits, normally 150-300 characters each. Exact refs for
+operation/fact-specific limits; empty refs only for context-wide metadata.
+Zero discovered Mutations is not unexecuted discovered
+Mutations; only the latter may limit SAFE assessment. Context/input-path truncation is not missing
+schema discovery. Categories do not establish runtime sensitivity. Do not repeat disclaimers or
+guess missing evidence.
+End fields naturally with terminal punctuation, never ellipses/clipped endings. Hard ceilings are
+safety bounds, not targets. Fit ALL required entries within the output budget;
+optional arrays may be empty.
 """
 
 
@@ -262,7 +276,7 @@ _NEGATED_INFERENCE = re.compile(
     r"(?:establish|mean|prove|show|imply|demonstrate|guarantee|suggest|indicate|confirm|"
     r"conclude|assume|infer|claim|provide|offer)\b"
     r"(?:\s+(?:that|the|a|an|any|evidence|of|for))*\s*"
-    r"(?:(?:operation|query|mutation|target|server|api)\s+"
+    r"(?:(?:operations?|query|queries|mutations?|target|server|api)\s+"
     r"(?:(?:may|might|could)\s+)?)?$"
 )
 
@@ -379,11 +393,15 @@ _CONTROL_TOPICS = {
     "rate limiting": frozenset({"abuse_controls"}),
     "abuse prevention": frozenset({"abuse_controls"}),
     "input validation": frozenset({"sensitive_input_validation", "file_upload"}),
+    "ownership validation": frozenset(
+        {"object_authorization", "authorization_policy", "idor_bola", "mutation_authorization"}
+    ),
     "depth protection": frozenset({"query_depth"}),
 }
 _CONTROL_TOPIC = re.compile(
     r"\b(?:authorization|authentication|rate[- ]limit(?:ing)?|abuse\s+prevention|"
     r"abuse\s+controls?|access\s+controls?|"
+    r"ownership\s+(?:validation|checks?|controls?)|"
     r"input\s+validation|depth\s+(?:protection|limit(?:ing)?|control))\b"
 )
 _CONTROL_ASSERTION = re.compile(
@@ -412,7 +430,8 @@ _CONTROL_ABSENCE = re.compile(
 _ABSENCE_CONTROL = (
     r"(?:server[- ]side\s+)?(?:authentication|authorization|rate[- ]limit(?:ing|s)?|"
     r"(?:input|file|ownership)\s+validation|"
-    r"(?:(?:query[- ])?(?:depth|complexity)|result[- ]size|list|access|runtime|security)\s+"
+    r"(?:(?:query[- ])?(?:depth|complexity)|(?:runtime\s+)?result[- ]size|"
+    r"list|access|runtime|security)\s+"
     r"(?:controls?|limits?|protections?)|"
     r"protections?)"
 )
@@ -446,17 +465,20 @@ _NO_CONTROL_EVIDENCE = re.compile(
 _REVIEW_CONCLUSION = re.compile(
     r"\b(?:is|are|be|suggest\w*|indicat\w*|prov\w*|confirm\w*|reveal\w*)\s+"
     r"(?:(?:a|an|potential|possible|confirmed)\s+)*"
-    r"(?:vulnerable|vulnerabilit(?:y|ies)|(?:high|low)[- ]risk\s+operation)\b"
+    r"(?:vulnerable|(?:(?:idor(?:/bola)?|bola|authorization|access[- ]control)\s+)?"
+    r"vulnerabilit(?:y|ies)|(?:high|low)[- ]risk\s+operation)\b"
 )
 
 # Review labels/name/type metadata never establishes these reproduced assertions.
 # Predicates and objects are bounded; this is not a general prose truth checker.
 _REVIEW_RISK = re.compile(
     r"\b(?P<object_access>unauthorized\s+object\s+access)\b|"
+    r"(?<!not )(?<!never )\baccess(?:es|ed)\s+unauthorized\s+objects\b|"
     r"\b(?:potential\s+for\s+data\s+exposure|data[- ]exposure\s+risk)\b|"
     r"\b(?:allow(?:s|ed)?|permit(?:s|ted)?|enable[sd]?|cause[sd]?)\s+(?:the\s+)?"
-    r"(?:unauthori[sz]ed\s+(?:access|data\s+storage|modifications?|deletions?|edits?|"
-    r"(?:content|account)\s+creation|ownership\s+changes)|"
+    r"(?:unauthori[sz]ed\s+(?:access|data\s+(?:storage|creation|modifications?)|"
+    r"modifications?|deletions?|edits?|"
+    r"(?:content|account)\s+creation|ownership\s+(?:changes|assignments))|"
     r"(?:account|content)\s+creation\s+without\s+authorization|"
     r"any\s+caller\s+to\s+create\s+arbitrary\s+accounts|"
     r"(?:users|callers|attackers)\s+to\s+(?:create|modify|delete|edit)\s+"
@@ -466,24 +488,45 @@ _REVIEW_RISK = re.compile(
     r"(?:records\s+belonging\s+to\s+other\s+accounts|other\s+users?'\s+records)\b|"
     r"\b(?:bypasses?|bypassed)\s+(?:authorization|authentication)\b|"
     r"\b(?:authorization|authentication|access\s+control)\s+"
-    r"(?:is|are|may\s+be|might\s+be|could\s+be)\s+weak\b"
+    r"(?:is|are|may\s+be|might\s+be|could\s+be)\s+weak\b|"
+    r"\b(?:has|have|demonstrates?|confirms?)\s+(?:an?\s+)?"
+    r"(?:confirmed\s+)?(?:authorization|access[- ]control)\s+failure\b"
 )
 _REVIEW_CONTENT = re.compile(
-    r"\b(?:handles?|returns?|returned|successfully\s+retrieves?|exposes?|exposed|"
+    r"\b(?:handles?|returns?|returning|returned|successfully\s+retrieve[sd]?|exposes?|exposed|"
+    r"access(?:es|ed)?|"
     r"stores?|stored|contains?|contained)\s+"
-    r"(?P<content>(?:(?:sensitive|excessive|personal|private|internal|debugging|reporting|search|"
+    r"(?P<content>(?:(?:non[- ]sensitive|sensitive|excessive|personal|private|internal|"
+    r"debugging|reporting|search|"
     r"user|user\s+management|uploaded|business|authentication|session|security)\s+){0,2}"
     r"(?:data|information|records|tokens|files|secrets|credentials)|"
     + "|".join(re.escape(category.value) for category in OperationCategory)
     + r"|sdl)\b|"
+    # Declared types and SUCCESS cannot supply instances or nested response contents.
+    r"\b(?P<runtime_data>(?:scan|assessment)\s+executed\s+(?:\w+\s+){0,4}queries"
+    r"(?:\s+against\s+\w+)?\s*,\s*(?:retrieving|returning)\s+"
+    r"(?:\w+(?:,\s*|\s+)){1,6}(?:data|records))\b|"
+    r"\b(?:returned|returning)\s+(?:an?\s+)?\w+\s+"
+    r"(?:(?:type\s+)?instance|type\s+with\s+nested\s+data)\b|"
+    r"\b(?:contained\s+nested|exposed\s+the\s+returned)\s+\w+\s+(?:data|details)\b|"
+    r"\bresponse\s+includes?\s+a\s+nested\s+list\b|"
+    r"\b(?:sensitive|personal|private)\s+(?:data|information)\s+was\s+returned\b|"
     r"\b(?:creates?|created)\s+(?:users|accounts)\b|"
-    r"\blarge\s+amounts\s+of\s+data\s+(?:(?:may|might|could)\s+be\s+)?returned\b"
+    r"\blarge\s+amounts\s+of\s+data\s+(?:(?:may|might|could)\s+be\s+)?returned\b|"
+    r"\b(?:returned\s+(?:data|information)|responses?)\s+(?:is|are|was|were)\s+"
+    r"(?:(?:all|categorically|entirely)\s+)?(?:non[- ]sensitive|sensitive)\b"
 )
 _REVIEW_QUESTION = re.compile(
     r"\s*(?:(?:manual\s+review|manual\s+validation)\s+(?:should|must)\s+)?"
     r"(?:(?:manually\s+)?(?:review|verify|inspect|assess|check|validate|determine))\s+"
     r"(?:whether|if)\s+(?:(?:this|the)\s+)?"
     r"(?:operation|query|mutation|response|it)\s*$"
+)
+_UNKNOWN_SENSITIVITY = re.compile(
+    r"\s*(?:the\s+)?supplied\s+facts\s+do\s+not\s+establish\s+whether\s+"
+    r"(?:the\s+)?(?:returned\s+data|responses?)\s+"
+    r"(?:contains?\s+(?:sensitive|non[- ]sensitive)\s+information|"
+    r"(?:is|are)\s+(?:sensitive|non[- ]sensitive))\s*"
 )
 
 
@@ -516,10 +559,29 @@ def _validate_review_assertions(
     Only explicitly cited, matching typed facts support the two scoped factual forms
     below. An unrelated Finding or a review candidate is never a blanket exemption.
     """
+    if _UNKNOWN_SENSITIVITY.fullmatch(clause):
+        return
     for pattern in (_REVIEW_RISK, _REVIEW_CONTENT):
         for match in pattern.finditer(clause):
             prefix = clause[: match.start()]
             if _NEGATED_INFERENCE.search(prefix) or _REVIEW_QUESTION.fullmatch(prefix):
+                continue
+            if pattern is _REVIEW_CONTENT and (
+                re.search(r"\b(?:does\s+not|did\s+not|never)\s+$", prefix)
+                or (
+                    (match.group("runtime_data") or match[0].startswith("response"))
+                    and re.fullmatch(r"\s*if\s+(?:the\s+)?", prefix)
+                )
+                or re.fullmatch(
+                    r"\s*if\s+(?:the\s+)?(?:query|operation|request|response)\s+", prefix
+                )
+                or (
+                    match[0].startswith("access")
+                    and re.search(r"\b(?:may|might|could)\s+$", prefix)
+                    and re.search(r"\bdepending\s+on\s+runtime\s+behavior\b", clause[match.end() :])
+                )
+            ):
+                # Local modality/negation qualifies this predicate, not a later assertion.
                 continue
             if pattern is _REVIEW_CONTENT and _qualified_schema_role(prefix, match[0], operations):
                 continue
@@ -565,10 +627,28 @@ def _supported_control(topic: str, facts: tuple[AISecurityFact, ...]) -> bool:
         topic = "authorization"
     elif topic.startswith("abuse"):
         topic = "abuse prevention"
+    elif topic.startswith("ownership"):
+        topic = "ownership validation"
     return any(
         fact.capability.value in _CONTROL_TOPICS[topic]
         and (fact.control_observed or fact.evaluation == "satisfied")
         for fact in facts
+    )
+
+
+def _control_recommendation(clause: str) -> bool:
+    """Recognize a complete imperative, never exempt arbitrary trailing assertions."""
+    return bool(
+        re.fullmatch(
+            r"\s*(?:manually\s+)?(?:review|verify|check|assess|inspect|ensure)\s+"
+            r"(?:(?:that|the)\s+)?(?:server[- ]side\s+)?"
+            r"(?:authorization|authentication|input\s+validation|ownership\s+"
+            r"(?:validation|checks?|controls?)|access[- ]controls?)"
+            r"(?:\s+(?:is|are)\s+(?:(?:correctly|properly)\s+)?"
+            r"(?:enforced|implemented|effective|enabled)|"
+            r"\s+to\s+prevent\s+(?:injection|unauthorized\s+access))?\s*",
+            clause,
+        )
     )
 
 
@@ -724,6 +804,8 @@ def _validate_grounding(interpretation: AIInterpretation, context: AIContext) ->
         _validate_outcome_attribution(normalized, supplied)
         clauses = prose_clauses(normalized)
         for index, clause in enumerate(clauses):
+            if _control_recommendation(clause):
+                continue
             if _CONTROL_UNCERTAINTY.fullmatch(clause) or _NO_CONTROL_EVIDENCE.fullmatch(clause):
                 continue
             if _conditional_review(clause, subjects, supplied, clauses[index - 1] if index else ""):
@@ -820,13 +902,43 @@ def _fact_operation(fact: AISecurityFact) -> str | None:
 def _validate_fact_association(interpretation: AIInterpretation, context: AIContext) -> None:
     """Flag mixed subjects in an entry's structured references; never infer from adjacency."""
     facts = {fact.security_fact_ref: fact for fact in context.security_facts}
-    for _, operations, refs in prose_entries(interpretation):
-        if not operations:
-            continue
+    for text, operations, refs in prose_entries(interpretation):
         for ref in refs:
             fact = facts[ref]
-            if fact.name and _fact_operation(fact) not in operations:
+            if operations and fact.name and _fact_operation(fact) not in operations:
                 raise AIValidationError("facts", "unsupported_review_conclusion")
+        for clause in prose_clauses(text.casefold()):
+            if re.match(r"\s*(?:review|verify|check|assess)\s+whether\b", clause):
+                continue
+            for operation in context.operations:
+                # Exact candidate attribution only: nested lists can independently justify
+                # complexity questions, but cannot attach an endpoint fact to a root.
+                name = r"[`\"']?" + re.escape(operation.name.casefold()) + r"[`\"']?"
+                match = re.search(
+                    rf"\b{name}\s+query\s+contains\s+the\s+identified\s+recursive\s+relationship\b|"
+                    rf"\brecursive\s+(?:graph\s+)?review\s+candidate\s+"
+                    rf"(?:was\s+identified\s+)?for\s+(?:the\s+)?{name}\s+(?:query|endpoint)\b",
+                    clause,
+                )
+                if not match or _NEGATED_INFERENCE.search(clause[: match.start()]):
+                    continue
+                if operations and operation.operation not in operations:
+                    continue
+                # Operation entries can cite only their own operation. A supplied fact
+                # explicitly attributed to that root is usable without inventing a ref.
+                candidates = (
+                    tuple(facts[ref] for ref in refs)
+                    if refs
+                    else context.security_facts
+                    if operations == (operation.operation,)
+                    else ()
+                )
+                if not any(
+                    fact.candidate_type == "recursive_graph_review"
+                    and _fact_operation(fact) == operation.operation
+                    for fact in candidates
+                ):
+                    raise AIValidationError("facts", "unsupported_review_conclusion")
 
 
 def _schema_subjects(
@@ -877,9 +989,10 @@ def _schema_subjects(
 
 _ROOT_RETURN = re.compile(
     r"\b(?:returns?|retrieves?)\s+(?:"
-    r"(?P<collection>(?:a\s+)?(?:lists?|collections?))(?:\s+of\s+(?P<quoted>`?)(?P<element>[_A-Za-z][_0-9A-Za-z]*)(?P=quoted))?|"
+    r"(?P<collection>(?:a\s+)?(?:lists?|collections?))(?:\s+of\s+(?P<quoted>[`\"']?)(?P<element>[_A-Za-z][_0-9A-Za-z]*)(?P=quoted))?|"
     r"(?P<wrapped>\[[_0-9A-Za-z!\[\]]+\]!?)|"
-    r"(?:an?\s+(?:individual\s+)?)(?P<single>[_A-Za-z][_0-9A-Za-z]*)\s+objects?)(?=$|[\s.,;!?])",
+    r"(?:an?\s+(?:individual\s+)?)(?P<single_quoted>[`\"']?)"
+    r"(?P<single>[_A-Za-z][_0-9A-Za-z]*)(?P=single_quoted)\s+objects?)(?=$|[\s.,;!?])",
     re.I,
 )
 
@@ -893,8 +1006,9 @@ def _validate_root_returns(text: str, references: tuple[str, ...], context: AICo
                 continue
             subjects = _schema_subjects(prefix, references, context)
             named = match["element"] or match["single"]
+            quoted = match["quoted"] or match["single_quoted"]
             if (
-                not match["quoted"]
+                not quoted
                 and named
                 and named.casefold()
                 in {"object", "objects", "record", "records", "collection", "list"}
@@ -902,6 +1016,14 @@ def _validate_root_returns(text: str, references: tuple[str, ...], context: AICo
                 named = None
             if match["wrapped"]:
                 named = match["wrapped"].strip("[]!")
+            # A small descriptive modifier before a generic noun is not a named
+            # GraphQL type. Quoting/capitalization and root list shape stay strict.
+            if (
+                not quoted
+                and named in {"geographical", "geographic", "reference", "application", "business"}
+                and re.match(r"\s+(?:records|objects)\b", sentence[match.end() :], re.I)
+            ):
+                named = None
             is_list = bool(match["collection"] or match["wrapped"])
             for operation in subjects:
                 structure = operation.schema_structure
@@ -917,7 +1039,7 @@ def _validate_root_returns(text: str, references: tuple[str, ...], context: AICo
 def _validate_declared_inputs(text: str, references: tuple[str, ...], context: AIContext) -> None:
     for sentence in prose_clauses(text):
         for match in re.finditer(
-            r"\baccepts?\s+(?:(?:a|an|the)\s+)?(?P<quoted>`?)(?P<path>[_A-Za-z][_0-9A-Za-z]*(?:\.[_A-Za-z][_0-9A-Za-z]*)*)(?P=quoted)\s+(?:input|field|argument)\b",
+            r"\baccepts?\s+(?:(?:a|an|the)\s+)?(?P<quoted>[`\"']?)(?P<path>[_A-Za-z][_0-9A-Za-z]*(?:\.[_A-Za-z][_0-9A-Za-z]*)*)(?P=quoted)\s+(?:input|field|argument)\b",
             sentence,
             re.I,
         ):
@@ -927,8 +1049,8 @@ def _validate_declared_inputs(text: str, references: tuple[str, ...], context: A
             # The context contains field names, not scalar types. Generic descriptors
             # and builtin type names cannot be disproved by comparing those names.
             if not match["quoted"] and (
-                match["path"].casefold() == "identifier"
-                or match["path"] in {"ID", "String", "Int", "Float", "Boolean"}
+                match["path"].casefold() in {"identifier", "string", "int", "float", "boolean"}
+                or match["path"] == "ID"
             ):
                 continue
             for operation in _schema_subjects(prefix.strip(), references, context):
@@ -1042,7 +1164,8 @@ def _validate_depth_testing(interpretation: AIInterpretation, context: AIContext
 
 _PARTIAL_SCHEMA_CLAIM = re.compile(
     r"\b(?:schema(?:\s+(?:retrieval|coverage|data))?\s+(?:is|was|remains)\s+"
-    r"(?:only\s+)?(?:partial|incomplete)|only\s+part\s+of\s+the\s+schema\s+"
+    r"(?:only\s+)?(?:partial|incomplete|not\s+fully\s+(?:expanded|retrieved))|"
+    r"only\s+part\s+of\s+the\s+schema\s+"
     r"was\s+retrieved|introspection\s+returned\s+(?:partial|incomplete)\s+schema(?:\s+data)?)\b"
 )
 
@@ -1057,6 +1180,8 @@ def _validate_schema_coverage(interpretation: AIInterpretation, context: AIConte
         if not schemas or any(s.schema_retrieval == "partial" for s in schemas):
             continue
         for clause in prose_clauses(text.casefold()):
+            if re.match(r"\s*(?:review|verify|check|assess)\s+whether\b", clause):
+                continue
             for match in _PARTIAL_SCHEMA_CLAIM.finditer(clause):
                 if not _NEGATED_INFERENCE.search(clause[: match.start()]):
                     raise AIValidationError("facts", "unsupported_review_conclusion")
@@ -1080,6 +1205,14 @@ def _validate_scope_claims(interpretation: AIInterpretation, context: AIContext)
             if not operations or _fact_operation(facts[ref]) in operations
         )
         for clause in prose_clauses(text.casefold()):
+            if _UNKNOWN_SENSITIVITY.fullmatch(clause):
+                continue
+            if re.fullmatch(
+                r"\s*(?:the\s+)?(?:actual\s+)?returned\s+object\s+contents\s+"
+                r"are\s+not\s+established\s+by\s+the\s+supplied\s+ai\s+context\s*",
+                clause,
+            ):
+                continue
             if re.match(
                 r"\s*(?:(?:manually\s+)?(?:review|verify|inspect|assess|check|validate|determine)"
                 r"\s+(?:whether|if)|consider\s+testing)\b",

@@ -38,6 +38,47 @@ def quality_warning_description(code: str) -> str:
     )
 
 
+def withholding_diagnostic_rows(
+    result: AIInterpretationResult,
+) -> tuple[tuple[str, str, str, str], ...]:
+    """Resolve recorded field identities only; never inspect or replay rejected prose."""
+    interpretation = result.interpretation
+    if interpretation is None:
+        return ()
+    rows = []
+    for decision in dict.fromkeys(result.withheld_fields or ()):
+        references: tuple[str, ...] | None = None
+        if decision.section == "operation_interpretations":
+            operations = interpretation.operation_interpretations
+            if 0 <= decision.index < len(operations):
+                references = (operations[decision.index].operation,)
+        else:
+            entries = (
+                (interpretation.summary_interpretation,)
+                if decision.section == "summary_interpretation"
+                else interpretation.review_insights
+                if decision.section == "review_insights"
+                else interpretation.limitations
+            )
+            if 0 <= decision.index < len(entries):
+                entry = entries[decision.index]
+                references = (*entry.operations, *entry.security_facts)
+        codes = tuple(code for code in decision.rule_codes if code in QUALITY_WARNING_DESCRIPTIONS)
+        rows.append(
+            (
+                f"{decision.section}[{decision.index}]",
+                ", ".join(references)
+                if references
+                else "Context-wide"
+                if references is not None
+                else "Reference unavailable",
+                decision.field,
+                ", ".join(codes) or "Validation category unavailable",
+            )
+        )
+    return tuple(rows)
+
+
 def quality_summary_lines(
     result: AIInterpretationResult, *, compact: bool = False
 ) -> tuple[str, ...]:
