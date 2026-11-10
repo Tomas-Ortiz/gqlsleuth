@@ -352,8 +352,9 @@ gqlsleuth scan https://authorized.example/graphql -H "Cookie: session=TEST_SESSI
 gqlsleuth scan https://authorized.example/graphql -H "X-API-Key: TEST_KEY" -H "X-Tenant-ID: TEST_TENANT"
 ```
 
-Bearer, Cookie, API-key and proprietary header values are supported. Names are case-insensitive
-and duplicate names use the last supplied value. Transport-controlled headers such as Host,
+Bearer, Cookie, API-key and proprietary header values are supported. Names are case-insensitive,
+and repeated names are preserved in supplied order rather than replaced by the final value.
+Transport-controlled headers such as Host,
 Content-Length and Proxy-Authorization are rejected. GraphQL JSON requests use the scanner's
 JSON Content-Type.
 
