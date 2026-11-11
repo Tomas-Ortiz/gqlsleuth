@@ -451,9 +451,10 @@ gqlsleuth scan https://authorized.example/graphql --mode active
 ACTIVE explicitly enters active functionality for an authorized target. It first performs the
 ordinary SAFE workflow. **ACTIVE does not mean “run all tests.”**
 
-Query-shape, Query-depth and generic Mutation candidates are previewed in ordinary ACTIVE
-interaction; you explicitly select indices or press Enter for none. Other capabilities require
-their opt-in flags and exact cases. Each active capability has its **own default-NO confirmation**;
+Generic Mutation, Query-Shape and Query-Depth candidates are previewed in that order during
+ordinary ACTIVE interaction; you explicitly select indices or press Enter for none. Other
+capabilities require their opt-in flags and exact cases. Each active capability has its **own
+default-NO confirmation**;
 one confirmation never authorizes another capability. Non-interactive stdin executes no active
 probes or Mutations. There is no automatic-confirmation or execute-all switch.
 

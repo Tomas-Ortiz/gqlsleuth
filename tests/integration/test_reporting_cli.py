@@ -44,7 +44,7 @@ def report_cli(phase_ten_scan, monkeypatch, tmp_path):
 
 def invoke(*options, input=""):
     return CliRunner().invoke(
-        cli.app, ["scan", "https://example.com", *options], input="\n" + input
+        cli.app, ["scan", "https://example.com", *options], input=input + "\n"
     )
 
 
@@ -126,7 +126,10 @@ def test_active_selected_confirmation_and_http_behavior_are_unchanged(report_cli
     assert result.stdout.split("\nREPORTS\n")[0] == baseline.stdout
     assert result.stdout.count("Execute these 1 selected Mutations?") == 1
     confirmation = result.stdout.split("Execute these 1 selected Mutations?", 1)[1]
-    assert ": y\n\nGQLSLEUTH ASSESSMENT\n" in confirmation
+    assert ": y\n\nACTIVE QUERY-SHAPE CANDIDATES\n" in confirmation
+    assert confirmation.index("ACTIVE QUERY-SHAPE CANDIDATES") < confirmation.index(
+        "GQLSLEUTH ASSESSMENT"
+    )
     assert "\nMUTATION EXECUTION\n" in confirmation
     assert report_cli[1] == before + before
     report = json.loads(

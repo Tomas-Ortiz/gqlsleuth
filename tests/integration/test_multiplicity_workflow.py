@@ -118,11 +118,11 @@ def probe_cli(phase_ten_scan, monkeypatch):
     "input,count",
     [
         ("\n\n", 0),
-        ("1\nn\n\n", 0),
-        ("1\n\n\n", 0),
-        ("1\ny\n\n", 1),
-        ("2\ny\n\n", 1),
-        ("2,1,2\ny\n\n", 2),
+        ("\n1\nn\n", 0),
+        ("\n1\n\n", 0),
+        ("\n1\ny\n", 1),
+        ("\n2\ny\n", 1),
+        ("\n2,1,2\ny\n", 2),
     ],
 )
 def test_cli_explicit_selection_and_baseline_requests(probe_cli, input, count):
@@ -137,8 +137,8 @@ def test_cli_explicit_selection_and_baseline_requests(probe_cli, input, count):
     assert len(requests) == count == len(results[0].evidence)
     assert baselines[0] == baselines[1]
     assert active.output.count("selected active Query-Shape checks?") <= 1
-    assert active.output.index("ACTIVE QUERY-SHAPE CANDIDATES") < active.output.index(
-        "ACTIVE MUTATION CANDIDATES"
+    assert active.output.index("ACTIVE MUTATION CANDIDATES") < active.output.index(
+        "ACTIVE QUERY-SHAPE CANDIDATES"
     )
     if count:
         assert "SELECTED QUERY-SHAPE CHECKS" in active.output
@@ -147,7 +147,9 @@ def test_cli_explicit_selection_and_baseline_requests(probe_cli, input, count):
 @pytest.mark.parametrize("invalid", ["all", "*", "1-2", "0", "9", "1,3", "-1"])
 def test_cli_retries_invalid_selection(probe_cli, invalid):
     result = CliRunner().invoke(
-        cli.app, ["scan", "https://example.com", "--mode", "active"], input=invalid + "\n\n\n"
+        cli.app,
+        ["scan", "https://example.com", "--mode", "active"],
+        input="\n" + invalid + "\n\n",
     )
     assert result.exit_code == 0
     assert "Choose individual comma-separated" in result.output
@@ -170,7 +172,9 @@ def test_cli_rejects_more_than_two_and_enter_clears_selection(
     safe = multi_endpoint(phase_ten_scan(SDL)[0])
     monkeypatch.setattr(cli, "run_safe_execution_scan", lambda *args, **kwargs: safe)
     result = CliRunner().invoke(
-        cli.app, ["scan", "https://example.com", "--mode", "active"], input="1,2,3\n\n\n"
+        cli.app,
+        ["scan", "https://example.com", "--mode", "active"],
+        input="\n1,2,3\n\n\n",
     )
     assert result.exit_code == 0
     assert "Select at most 2 Query-Shape checks" in result.output
@@ -179,13 +183,13 @@ def test_cli_rejects_more_than_two_and_enter_clears_selection(
 
 def test_mutation_and_probe_confirmations_are_independent(probe_cli):
     result = CliRunner().invoke(
-        cli.app, ["scan", "https://example.com", "--mode", "active"], input="1,2\ny\n1\ny\n"
+        cli.app, ["scan", "https://example.com", "--mode", "active"], input="1\ny\n1,2\ny\n"
     )
     assert result.exit_code == 0, result.exception
     assert len(probe_cli[0]) == 3
     assert result.output.count("selected active Query-Shape checks?") == 1
     assert result.output.count("selected Mutations?") == 1
-    assert probe_cli[0][-1]["query"].startswith("mutation")
+    assert probe_cli[0][0]["query"].startswith("mutation")
 
 
 @pytest.mark.parametrize("selected,confirmed", [((), False), ((1,), False), ((1, 2), True)])

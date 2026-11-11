@@ -65,7 +65,7 @@ def test_ctrl_c_stops_sensitive_confirmation(controlled, run_interrupted_cli):
         ["scan", TARGET, *OPTIONS],
         controlled,
         "Execute sensitive input",
-        "\n",
+        "\n\n",
     )
 
 
@@ -79,7 +79,7 @@ def test_default_sensitive_request_and_warning_before_consent(controlled, consen
             "-H",
             "Authorization: " + SECRET,
         ],
-        input="\ny\n\n",
+        input="\n\ny\n",
     )
     assert result.exit_code == 0, result.exception
     confirmation = consent_trace.confirmation("Execute sensitive input")
@@ -226,9 +226,9 @@ def test_active_consents_are_independent(controlled, monkeypatch, phase_ten_scan
     )
     assert result.exit_code == 0, (result.exception, result.output)
     assert calls == [
+        "Execute these 1 selected Mutations?",
         "Execute mutation authorization validation?",
         "Execute sensitive input validation?",
-        "Execute these 1 selected Mutations?",
     ]
     requests = [r[3] for r in controlled if r[3] and r[3]["query"].startswith("mutation")]
     assert len(requests) == 1 and requests[0]["variables"] == {

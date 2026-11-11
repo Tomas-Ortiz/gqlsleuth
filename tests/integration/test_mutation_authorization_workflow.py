@@ -60,7 +60,7 @@ def test_ctrl_c_stops_mutation_authorization_confirmation(controlled, run_interr
         ["scan", TARGET, *OPTIONS],
         controlled,
         "Execute mutation authorization",
-        "\n",
+        "\n\n",
     )
 
 
@@ -74,7 +74,7 @@ def test_default_mutation_policy_request_and_warning_before_consent(controlled, 
             "-H",
             "Authorization: " + SECRET,
         ],
-        input="\ny\n\n",
+        input="\n\ny\n",
     )
     assert result.exit_code == 0, result.exception
     confirmation = consent_trace.confirmation("Execute mutation authorization")
@@ -211,9 +211,9 @@ def test_three_active_consents_and_budgets_are_independent(controlled, monkeypat
     )
     assert result.exit_code == 0, (result.exception, result.output)
     assert calls == [
+        "Execute these 1 selected Mutations?",
         "Execute bounded sequential object discovery?",
         "Execute mutation authorization validation?",
-        "Execute these 1 selected Mutations?",
     ]
     mutations = [
         item[3] for item in controlled if item[3] and item[3]["query"].startswith("mutation")

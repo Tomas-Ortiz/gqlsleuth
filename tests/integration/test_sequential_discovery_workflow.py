@@ -64,7 +64,7 @@ def test_ctrl_c_stops_sequential_confirmation(controlled, run_interrupted_cli):
         ["scan", TARGET, *OPTIONS],
         controlled,
         "Execute bounded sequential",
-        "\n",
+        "\n\n",
     )
 
 
@@ -78,7 +78,7 @@ def test_default_sequential_all_conditional_requests_before_consent(controlled, 
             "-H",
             "Cookie: session=" + SECRET,
         ],
-        input="\ny\n\n",
+        input="\n\ny\n",
     )
     assert result.exit_code == 0, result.exception
     confirmation = consent_trace.confirmation("Execute bounded sequential")
@@ -117,9 +117,9 @@ def test_invalid_cli_precedes_network(monkeypatch, options):
     "interactive,input_text,count",
     [
         (False, "", 0),
-        (True, "\nn\n\n", 0),
+        (True, "\n\nn\n", 0),
         (True, "\n\n\n", 0),
-        (True, "\ny\n\n", 3),
+        (True, "\n\ny\n", 3),
     ],
 )
 def test_cli_confirmation_reports_and_prior_request_invariance(
@@ -184,7 +184,7 @@ def test_cli_confirmation_reports_and_prior_request_invariance(
 
 def test_decline_does_not_cancel_mutation_and_confirmation_is_separate(controlled, monkeypatch):
     monkeypatch.setattr(cli, "_interactive_stdin", lambda: True)
-    result = CliRunner().invoke(cli.app, ["scan", TARGET, *OPTIONS], input="\nn\n1\ny\n")
+    result = CliRunner().invoke(cli.app, ["scan", TARGET, *OPTIONS], input="1\ny\n\nn\n")
     assert result.exit_code == 0, (result.exception, result.output)
     payloads = [json.loads(item[3]) for item in controlled if item[0] == "POST"]
     assert sum(item["query"].startswith("mutation") for item in payloads) == 1
@@ -318,6 +318,6 @@ def test_cli_ai_call_count_unchanged(controlled, monkeypatch):
     monkeypatch.setattr(cli, "render_ai", lambda *args, **kwargs: None)
     monkeypatch.setattr(cli, "_interactive_stdin", lambda: True)
     before = CliRunner().invoke(cli.app, ["scan", TARGET, "--mode", "active", "--ai"], input="\n\n")
-    after = CliRunner().invoke(cli.app, ["scan", TARGET, *OPTIONS, "--ai"], input="\ny\n\n")
+    after = CliRunner().invoke(cli.app, ["scan", TARGET, *OPTIONS, "--ai"], input="\n\ny\n")
     assert before.exit_code == after.exit_code == 0, (before.exception, after.exception)
     assert len(calls) == 2 and calls[0].operations == calls[1].operations

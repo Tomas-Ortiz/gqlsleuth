@@ -920,13 +920,14 @@ def scan(
         _finish_reports(report_result, report_formats, output)
         return
     if mode is ScanMode.ACTIVE:
+        report_result = _run_active_stage(result, http_settings=http_settings)
+        multiplicity = _run_multiplicity_stage(result, http_settings=http_settings, verbose=verbose)
+        query_depth = _run_depth_stage(result, http_settings=http_settings, verbose=verbose)
         authentication = (
             _run_authentication_stage(result, http_settings=http_settings, verbose=verbose)
             if auth_security_review
             else None
         )
-        multiplicity = _run_multiplicity_stage(result, http_settings=http_settings, verbose=verbose)
-        query_depth = _run_depth_stage(result, http_settings=http_settings, verbose=verbose)
         sequential = (
             _run_sequential_stage(
                 result, seeds=discovery_seeds, http_settings=http_settings, verbose=verbose
@@ -954,7 +955,7 @@ def scan(
             else None
         )
         report_result = replace(
-            _run_active_stage(result, http_settings=http_settings),
+            report_result,
             multiplicity=multiplicity,
             query_depth=query_depth,
             sequential_object_discovery=sequential,

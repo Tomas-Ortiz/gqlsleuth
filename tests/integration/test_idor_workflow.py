@@ -64,7 +64,7 @@ def test_ctrl_c_stops_idor_confirmation(controlled, run_interrupted_cli, named):
     options = ["scan", TARGET, *OPTIONS]
     if named:
         options += ["--auth-context", "tester=Authorization: Bearer " + SECRET]
-    run_interrupted_cli(options, controlled, "Execute IDOR / BOLA", "" if named else "\n")
+    run_interrupted_cli(options, controlled, "Execute IDOR / BOLA", "" if named else "\n\n")
 
 
 @pytest.mark.parametrize("named", [False, True])
@@ -72,7 +72,7 @@ def test_default_idor_all_conditional_requests_before_consent(controlled, consen
     options = ["scan", TARGET, *OPTIONS]
     if named:
         options += ["--auth-context", "tester=Authorization: Bearer " + SECRET]
-    result = CliRunner().invoke(cli.app, options, input="y\n" if named else "\ny\n\n")
+    result = CliRunner().invoke(cli.app, options, input="y\n" if named else "\n\ny\n")
     assert result.exit_code == 0, result.exception
     confirmation = consent_trace.confirmation("Execute IDOR / BOLA")
     preview = confirmation.output.split("IDOR / BOLA DETECTION", 1)[1]
@@ -135,7 +135,7 @@ def test_cli_consent_reports_isolated_named_path(
             monkeypatch.setattr(
                 cli, name, lambda *args, **kwargs: pytest.fail("Unrelated named ACTIVE stage")
             )
-    input_text = consent + "\n" if named else "\n" + consent + "\n\n"
+    input_text = consent + "\n" if named else "\n\n" + consent + "\n"
     result = CliRunner().invoke(cli.app, options, input=input_text)
     assert result.exit_code == 0, (result.exception, result.output)
     assert result.output.count("PRE-ACTIVE CONTEXT") == 1

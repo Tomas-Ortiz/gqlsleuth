@@ -44,7 +44,7 @@ def test_pre_active_context_uses_existing_surface_facts_without_work(
     text = plain_cli_output(stream.getvalue(), normalize_whitespace=True)
     assert "GraphQL endpoint:" in text
     assert "Queries 1" in text and "Mutations 1" in text and "Subscriptions 1" in text
-    assert "Query-Shape, Query-Depth, Mutations" in text
+    assert "Mutations, Query-Shape, Query-Depth" in text
     assert "ACTIVE validation has not run" in text
     assert "GQLSLEUTH ASSESSMENT" not in text
     assert len(stream.getvalue().splitlines()) < 23

@@ -230,15 +230,15 @@ Minimal query generation
     ↓
 Safe execution
     ↓
+ACTIVE only: Mutation generation → validation → safety classification → preview
+    ↓
+ACTIVE only: explicit batch selection → one final confirmation → sequential execution
+    ↓
 ACTIVE only: Query-Shape preview → explicit selection → default-NO confirmation → bounded probes
     ↓
 ACTIVE only: Query-Depth preview → explicit selection → separate confirmation → bounded probe
     ↓
 Optional ACTIVE Phase 22: supplied seeds → local preview → separate confirmation → baseline/adjacent probes
-    ↓
-ACTIVE only: Mutation generation → validation → safety classification → preview
-    ↓
-ACTIVE only: explicit batch selection → one final confirmation → sequential execution
     ↓
 Evidence collection
     ↓
@@ -4390,7 +4390,8 @@ After the SAFE workflow and before any ACTIVE preview or prompt, a compact **Pre
 shows the target, ACTIVE mode, confirmed/probable endpoints, separate introspection/retrieval
 states, and per-endpoint schema operation counts. Missing schema counts remain unavailable.
 Surface-supported groups use retained Query attempts, recursive-graph candidates and Mutation
-counts; explicitly requested optional groups are labeled separately. These are context, not
+counts, and list Mutations before Query-Shape and Query-Depth to match the interactive order;
+explicitly requested optional groups are labeled separately. These are context, not
 eligibility guarantees or Findings/control conclusions: existing previews still validate requests
 and require the same selections/confirmations. No probe is prepared by this view, and the final
 assessment remains after ACTIVE execution. SAFE mode receives no additional summary.

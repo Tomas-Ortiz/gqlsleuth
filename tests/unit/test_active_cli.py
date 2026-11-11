@@ -46,7 +46,7 @@ def active_cli(phase_ten_scan, monkeypatch):
 
 def _invoke(input="", mode="active"):
     return CliRunner().invoke(
-        cli.app, ["scan", "https://example.com", "--mode", mode], input="\n" + input
+        cli.app, ["scan", "https://example.com", "--mode", mode], input=input + "\n\n"
     )
 
 
@@ -90,16 +90,20 @@ def test_pre_active_context_precedes_previews_and_every_prompt(active_cli, monke
     options = ["scan", "https://example.com", "--mode", "active"]
     if verbose:
         options.append("--verbose")
-    result = CliRunner().invoke(cli.app, options, input="\n1\ny\n")
+    result = CliRunner().invoke(cli.app, options, input="1\ny\n\n")
     assert result.exit_code == 0, result.exception
-    assert prompt_calls and "Query-Shape" in prompt_calls[0]
+    assert prompt_calls and "Select Mutations" in prompt_calls[0]
     assert len(active_cli[0]) == 1
     text = plain_cli_output(stream.getvalue())
     assert text.count("PRE-ACTIVE CONTEXT") == 1
-    assert text.index("PRE-ACTIVE CONTEXT") < text.index("ACTIVE QUERY-SHAPE CANDIDATES")
-    assert text.index("ACTIVE MUTATION CANDIDATES") < text.index("GQLSLEUTH ASSESSMENT")
-    context = text.split("PRE-ACTIVE CONTEXT", 1)[1].split("ACTIVE QUERY-SHAPE CANDIDATES", 1)[0]
-    assert "Query-Shape, Mutations" in context
+    assert (
+        text.index("PRE-ACTIVE CONTEXT")
+        < text.index("ACTIVE MUTATION CANDIDATES")
+        < text.index("ACTIVE QUERY-SHAPE CANDIDATES")
+        < text.index("GQLSLEUTH ASSESSMENT")
+    )
+    context = text.split("PRE-ACTIVE CONTEXT", 1)[1].split("ACTIVE MUTATION CANDIDATES", 1)[0]
+    assert "Mutations, Query-Shape" in context
     assert "FINDINGS" not in context and "SECURITY VALIDATION" not in context
 
 

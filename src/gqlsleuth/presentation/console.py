@@ -373,6 +373,8 @@ def render_pre_active_context(
         console.print("Operation counts require a parsed schema.", style="gql.secondary")
     groups = []
     if include_standard_stages:
+        if any(summary.mutation_field_count for summary in summaries):
+            groups.append("Mutations")
         if any(item.attempted for item in result.executions):
             groups.append("Query-Shape")
         if generation.security_review and any(
@@ -380,8 +382,6 @@ def render_pre_active_context(
             for item in generation.security_review.candidates
         ):
             groups.append("Query-Depth")
-        if any(summary.mutation_field_count for summary in summaries):
-            groups.append("Mutations")
     if groups:
         console.print("Surface-supported ACTIVE groups: " + ", ".join(groups), markup=False)
     if requested_groups:

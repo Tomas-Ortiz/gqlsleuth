@@ -6,6 +6,10 @@ User-visible changes are recorded here. A prepared release entry does not imply 
 
 ### Changed
 
+- Interactive ACTIVE scans now present generic Mutation selection first, followed by Query-Shape
+  and Query-Depth selection. Each capability retains its independent default-NO confirmation,
+  request budget and existing safety controls.
+
 - Clarified AI priority for attributed review facts, separate interpretation/follow-up roles and
   material coverage limitations. Closed narrow grounding gaps for unauthorized-access verb forms
   and runtime result-size control-absence claims, preserving calibrated prose and valid siblings.

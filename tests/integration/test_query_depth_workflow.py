@@ -149,7 +149,7 @@ def depth_cli(phase_ten_scan, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "input,count", [("\n\n\n", 0), ("\n1\nn\n\n", 0), ("\n1\n\n\n", 0), ("\n1\ny\n\n", 1)]
+    "input,count", [("\n\n\n", 0), ("\n\n1\nn\n", 0), ("\n\n1\n\n", 0), ("\n\n1\ny\n", 1)]
 )
 def test_independent_cli_selection_and_unchanged_safe_sequence(depth_cli, input, count):
     safe = CliRunner().invoke(cli.app, ["scan", "https://example.com"])
@@ -161,9 +161,9 @@ def test_independent_cli_selection_and_unchanged_safe_sequence(depth_cli, input,
     assert len(depth_cli[0]) == count == len(depth_cli[1][0].evidence)
     assert depth_cli[2][0] == depth_cli[2][1]
     assert (
-        active.output.index("ACTIVE QUERY-SHAPE CANDIDATES")
+        active.output.index("ACTIVE MUTATION CANDIDATES")
+        < active.output.index("ACTIVE QUERY-SHAPE CANDIDATES")
         < active.output.index("ACTIVE QUERY-DEPTH CANDIDATES")
-        < active.output.index("ACTIVE MUTATION CANDIDATES")
     )
     assert active.output.count("selected active Query-Depth check?") <= 1
 
@@ -173,7 +173,7 @@ def test_cli_invalid_selection_can_be_cleared(depth_cli, invalid):
     result = CliRunner().invoke(
         cli.app,
         ["scan", "https://example.com", "--mode", "active"],
-        input="\n" + invalid + "\n\n\n",
+        input="\n\n" + invalid + "\n\n",
     )
     assert result.exit_code == 0 and "Choose an individual Query-Depth" in result.output
     assert not depth_cli[0]
@@ -183,13 +183,13 @@ def test_cli_invalid_selection_can_be_cleared(depth_cli, invalid):
 @pytest.mark.parametrize(
     "prompt_hint,input_text,prior_requests",
     [
-        ("Select active Query-Shape", "", 0),
-        ("selected active Query-Shape", "1\n", 0),
-        ("Select active Query-Depth", "\n", 0),
-        ("selected active Query-Depth", "\n1\n", 0),
-        ("Select Mutations", "\n\n", 0),
-        ("selected Mutations?", "\n\n1\n", 0),
-        ("Select active Query-Depth", "1\ny\n", 1),
+        ("Select Mutations", "", 0),
+        ("selected Mutations?", "1\n", 0),
+        ("Select active Query-Shape", "\n", 0),
+        ("selected active Query-Shape", "\n1\n", 0),
+        ("Select active Query-Depth", "\n\n", 0),
+        ("selected active Query-Depth", "\n\n1\n", 0),
+        ("Select active Query-Depth", "1\ny\n\n", 1),
     ],
 )
 def test_ctrl_c_stops_active_pipeline(
@@ -209,7 +209,7 @@ def test_cli_maximum_selection(depth_cli, phase_ten_scan, monkeypatch):
     safe = second_endpoint(phase_ten_scan(SDL)[0])
     monkeypatch.setattr(cli, "run_safe_execution_scan", lambda *args, **kwargs: safe)
     result = CliRunner().invoke(
-        cli.app, ["scan", "https://example.com", "--mode", "active"], input="\n1,2\n\n\n"
+        cli.app, ["scan", "https://example.com", "--mode", "active"], input="\n\n1,2\n\n"
     )
     assert result.exit_code == 0 and "Select at most 1 Query-Depth" in result.output
     assert not depth_cli[0] and not depth_cli[1][0].selected_indices
@@ -227,15 +227,17 @@ def test_noninteractive_never_confirms(depth_cli, monkeypatch):
 
 def test_all_three_confirmations_and_budgets_are_independent(depth_cli):
     result = CliRunner().invoke(
-        cli.app, ["scan", "https://example.com", "--mode", "active"], input="1,2\ny\n1\ny\n1\ny\n"
+        cli.app,
+        ["scan", "https://example.com", "--mode", "active"],
+        input="1\ny\n1,2\ny\n1\ny\n",
     )
     assert result.exit_code == 0, result.exception
     requests = depth_cli[0]
     assert len(requests) == 4
-    assert "gqlsleuthAlias" in requests[0]["query"]
-    assert isinstance(requests[1], list) and len(requests[1]) == 2
-    assert is_depth_probe(requests[2])
-    assert requests[3]["query"].startswith("mutation")
+    assert requests[0]["query"].startswith("mutation")
+    assert "gqlsleuthAlias" in requests[1]["query"]
+    assert isinstance(requests[2], list) and len(requests[2]) == 2
+    assert is_depth_probe(requests[3])
     for prompt in (
         "selected active Query-Shape checks?",
         "selected active Query-Depth check?",
@@ -262,7 +264,7 @@ def test_default_active_exact_previews_precede_selection_consent_and_requests(
             "-H",
             "X-API-Key: UX006_API_KEY_SECRET",
         ],
-        input="2,1\ny\n1\ny\n1\ny\n",
+        input="1\ny\n2,1\ny\n1\ny\n",
     )
     assert result.exit_code == 0, (result.exception, result.output)
     assert len(depth_cli[0]) == 4
@@ -290,12 +292,51 @@ def test_default_active_exact_previews_precede_selection_consent_and_requests(
     assert "Aliases requested: 3" in shape
     assert "Batch entries: 2 identical Query/variables request objects." in shape
     assert shape.index("Alias Multiplicity") < shape.index("HTTP Batching")
-    assert depth_cli[0][1][0] == depth_cli[0][1][1]
+    assert depth_cli[0][2][0] == depth_cli[0][2][1]
     mutation = consent_trace.confirmation("selected Mutations?").output
     assert "WARNING: These operations may modify application state." in mutation
+    confirmation_text = [item.text for item in consent_trace.confirmations]
+    assert (
+        confirmation_text.index("Execute these 1 selected Mutations?")
+        < confirmation_text.index("Execute these 2 selected active Query-Shape checks?")
+        < confirmation_text.index("Execute this selected active Query-Depth check?")
+    )
     consent_trace.assert_private(secret, "UX006_COOKIE_SECRET", "UX006_API_KEY_SECRET")
     final = consent_trace.output.split("GQLSLEUTH ASSESSMENT", 1)[1]
     assert "Variables:" not in final and "query (" not in final and "mutation (" not in final
+
+
+@pytest.mark.parametrize("mutation_input", ["\n", "1\nn\n"])
+def test_skipped_or_declined_mutation_continues_to_query_stages(depth_cli, mutation_input):
+    result = CliRunner().invoke(
+        cli.app,
+        ["scan", "https://example.com", "--mode", "active"],
+        input=mutation_input + "1\ny\n1\ny\n",
+    )
+    assert result.exit_code == 0, result.exception
+    assert len(depth_cli[0]) == 2
+    assert "gqlsleuthAlias" in depth_cli[0][0]["query"]
+    assert is_depth_probe(depth_cli[0][1])
+    assert not any(
+        isinstance(payload, dict) and payload["query"].startswith("mutation")
+        for payload in depth_cli[0]
+    )
+
+
+def test_no_mutations_still_runs_query_shape_and_depth(depth_cli, phase_ten_scan, monkeypatch):
+    query_only_sdl = SDL.replace("type Mutation { createAlbum(name: String!): Album }", "")
+    safe = phase_ten_scan(query_only_sdl)[0]
+    monkeypatch.setattr(cli, "run_safe_execution_scan", lambda *args, **kwargs: safe)
+    result = CliRunner().invoke(
+        cli.app,
+        ["scan", "https://example.com", "--mode", "active"],
+        input="1\ny\n1\ny\n",
+    )
+    assert result.exit_code == 0, result.exception
+    assert "No Mutation candidates." in result.output
+    assert len(depth_cli[0]) == 2
+    assert "gqlsleuthAlias" in depth_cli[0][0]["query"]
+    assert is_depth_probe(depth_cli[0][1])
 
 
 @pytest.mark.parametrize("selected,confirmed", [((), False), ((1,), False), ((1,), True)])
